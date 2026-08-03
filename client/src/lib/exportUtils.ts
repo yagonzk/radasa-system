@@ -3,8 +3,20 @@ import type { Fechamento, Motorista, Local } from "./store";
 /**
  * Format currency in BRL
  */
-export function formatBRL(value: number): string {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+export function formatBRL(value: number | string | null | undefined): string {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value.replace(",", "."))
+        : Number.NaN;
+
+  const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+
+  return safeValue.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
 /**
