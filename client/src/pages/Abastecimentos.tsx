@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import {
   Fuel,
+  Banknote,
   Gauge,
   Pencil,
   Plus,
@@ -68,7 +69,7 @@ function formatLitros(value: number) {
   })} L`;
 }
 
-function formatHodometro(value: number) {
+function formatOdometro(value: number) {
   return `${value.toLocaleString("pt-BR", {
     maximumFractionDigits: 1,
   })} km`;
@@ -148,7 +149,7 @@ function AbastecimentoForm({
     }
     const hodometro = parseNumber(form.hodometro);
     if (hodometro < 0 || !form.hodometro.trim()) {
-      toast.error("Informe o hodômetro.");
+      toast.error("Informe o odômetro.");
       return;
     }
 
@@ -282,7 +283,7 @@ function AbastecimentoForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Hodômetro *</Label>
+            <Label>Odômetro *</Label>
             <Input
               type="number"
               min="0"
@@ -422,6 +423,32 @@ export default function Abastecimentos() {
   const averageUnit =
     totals.litros > 0 ? totals.valor / totals.litros : 0;
 
+  const averageKmPerLiter = useMemo(() => {
+    let totalKm = 0;
+    let totalLitros = 0;
+
+    for (const current of filteredItems) {
+      const previous = items
+        .filter(
+          (candidate) =>
+            candidate.veiculoId === current.veiculoId &&
+            candidate.id !== current.id &&
+            candidate.hodometro < current.hodometro
+        )
+        .sort((a, b) => b.hodometro - a.hodometro)[0];
+
+      if (!previous || current.quantidadeLitros <= 0) continue;
+
+      const distancia = current.hodometro - previous.hodometro;
+      if (distancia <= 0) continue;
+
+      totalKm += distancia;
+      totalLitros += current.quantidadeLitros;
+    }
+
+    return totalLitros > 0 ? totalKm / totalLitros : 0;
+  }, [filteredItems, items]);
+
   const openCreate = () => {
     if (clientes.length === 0) {
       toast.error("Cadastre pelo menos um cliente antes do abastecimento.");
@@ -457,7 +484,7 @@ export default function Abastecimentos() {
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Cadastre notas fiscais de abastecimento e acompanhe litros,
-              valores e hodômetros.
+              valores e odômetros.
             </p>
           </div>
           <Button onClick={openCreate}>
@@ -466,7 +493,7 @@ export default function Abastecimentos() {
           </Button>
         </div>
 
-        <div className="mb-6 grid gap-4 md:grid-cols-3">
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Fuel className="h-4 w-4" />
@@ -481,7 +508,7 @@ export default function Abastecimentos() {
 
           <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Gauge className="h-4 w-4" />
+              <Banknote className="h-4 w-4" />
               <span className="text-xs font-semibold uppercase tracking-wide">
                 Valor total
               </span>
@@ -495,11 +522,26 @@ export default function Abastecimentos() {
             <div className="flex items-center gap-2 text-muted-foreground">
               <Fuel className="h-4 w-4" />
               <span className="text-xs font-semibold uppercase tracking-wide">
-                Média por litro
+                Média de R$/L
               </span>
             </div>
             <p className="mt-2 text-2xl font-bold text-card-foreground">
               {formatBRL(averageUnit)}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Gauge className="h-4 w-4" />
+              <span className="text-xs font-semibold uppercase tracking-wide">
+                Média de KM/L
+              </span>
+            </div>
+            <p className="mt-2 text-2xl font-bold text-card-foreground">
+              {averageKmPerLiter.toLocaleString("pt-BR", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })} km/L
             </p>
           </div>
         </div>
@@ -517,7 +559,7 @@ export default function Abastecimentos() {
                     { key: "valorUnitario", label: "Valor unitário", placeholder: "Ex.: 6,35", align: "right" },
                     { key: "valorTotal", label: "Valor total", placeholder: "Ex.: 1.466,85", align: "right" },
                     { key: "placa", label: "Placa", placeholder: "Pesquisar placa" },
-                    { key: "hodometro", label: "Hodômetro", placeholder: "Ex.: 487.000", align: "right" },
+                    { key: "hodometro", label: "Odômetro", placeholder: "Ex.: 487.000", align: "right" },
                   ].map((column) => {
                     const key = column.key as keyof typeof filters;
                     const isActive = Boolean(filters[key]);
@@ -670,7 +712,7 @@ export default function Abastecimentos() {
                           {veiculo?.placa || "—"}
                         </td>
                         <td className="px-4 py-3 text-right text-muted-foreground">
-                          {formatHodometro(item.hodometro)}
+                          {formatOdometro(item.hodometro)}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-center gap-1">
