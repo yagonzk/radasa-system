@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -29,7 +30,7 @@ import {
   Gauge,
   Pencil,
   Plus,
-  Search,
+  ChevronDown,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -333,23 +334,77 @@ export default function Abastecimentos() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Abastecimento | null>(null);
-  const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [filters, setFilters] = useState({
+    cliente: "",
+    emissao: "",
+    produto: "",
+    litros: "",
+    valorUnitario: "",
+    valorTotal: "",
+    placa: "",
+    hodometro: "",
+  });
 
   const filteredItems = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase("pt-BR");
-    if (!query) return items;
+    const normalize = (value: unknown) =>
+      String(value ?? "").trim().toLocaleLowerCase("pt-BR");
 
-    return items.filter((item) => {
-      const cliente = clientes.find((entry) => entry.id === item.clienteId);
-      const veiculo = veiculos.find((entry) => entry.id === item.veiculoId);
-      return [
-        item.produto,
-        cliente?.nomeFantasia,
-        cliente?.codigoInterno,
-        veiculo?.placa,
-      ].some((value) => value?.toLocaleLowerCase("pt-BR").includes(query));
-    });
-  }, [clientes, items, search, veiculos]);
+    return items
+      .filter((item) => {
+        const cliente = clientes.find((entry) => entry.id === item.clienteId);
+        const veiculo = veiculos.find((entry) => entry.id === item.veiculoId);
+
+        if (filters.cliente) {
+          const query = normalize(filters.cliente);
+          const matchesCliente = [
+            cliente?.nomeFantasia,
+            cliente?.codigoInterno,
+            cliente?.email,
+          ].some((value) => normalize(value).includes(query));
+          if (!matchesCliente) return false;
+        }
+
+        if (filters.emissao && item.dataEmissao !== filters.emissao) return false;
+        if (filters.produto && !normalize(item.produto).includes(normalize(filters.produto))) return false;
+
+        if (filters.litros) {
+          const displayed = item.quantidadeLitros.toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 3,
+          });
+          if (!normalize(displayed).includes(normalize(filters.litros))) return false;
+        }
+
+        if (filters.valorUnitario) {
+          const displayed = item.valorUnitario.toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+          if (!normalize(displayed).includes(normalize(filters.valorUnitario))) return false;
+        }
+
+        if (filters.valorTotal) {
+          const displayed = item.valorTotal.toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+          if (!normalize(displayed).includes(normalize(filters.valorTotal))) return false;
+        }
+
+        if (filters.placa && !normalize(veiculo?.placa).includes(normalize(filters.placa))) return false;
+
+        if (filters.hodometro) {
+          const displayed = item.hodometro.toLocaleString("pt-BR", {
+            maximumFractionDigits: 1,
+          });
+          if (!normalize(displayed).includes(normalize(filters.hodometro))) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => b.hodometro - a.hodometro);
+  }, [clientes, filters, items, veiculos]);
 
   const totals = useMemo(
     () =>
@@ -449,45 +504,116 @@ export default function Abastecimentos() {
           </div>
         </div>
 
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-border bg-card p-3">
-          <Search className="ml-1 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Pesquisar cliente, código, produto ou placa"
-            className="border-0 bg-transparent shadow-none focus-visible:ring-0"
-          />
-        </div>
-
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                    Cliente
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                    Emissão
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                    Produto
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
-                    Litros
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
-                    Valor unitário
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
-                    Valor total
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                    Placa
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
-                    Hodômetro
-                  </th>
+                  {[
+                    { key: "cliente", label: "Cliente", placeholder: "Nome, código ou e-mail" },
+                    { key: "emissao", label: "Emissão", type: "date" },
+                    { key: "produto", label: "Produto", placeholder: "Pesquisar produto" },
+                    { key: "litros", label: "Litros", placeholder: "Ex.: 231,00", align: "right" },
+                    { key: "valorUnitario", label: "Valor unitário", placeholder: "Ex.: 6,35", align: "right" },
+                    { key: "valorTotal", label: "Valor total", placeholder: "Ex.: 1.466,85", align: "right" },
+                    { key: "placa", label: "Placa", placeholder: "Pesquisar placa" },
+                    { key: "hodometro", label: "Hodômetro", placeholder: "Ex.: 487.000", align: "right" },
+                  ].map((column) => {
+                    const key = column.key as keyof typeof filters;
+                    const isActive = Boolean(filters[key]);
+                    return (
+                      <th
+                        key={column.key}
+                        className={`px-4 py-3 font-semibold text-muted-foreground ${
+                          column.align === "right" ? "text-right" : "text-left"
+                        }`}
+                      >
+                        <div className={`flex items-center gap-1.5 ${
+                          column.align === "right" ? "justify-end" : "justify-start"
+                        }`}>
+                          <span>{column.label}</span>
+                          <Popover
+                            open={activeFilter === column.key}
+                            onOpenChange={(open) =>
+                              setActiveFilter(open ? column.key : null)
+                            }
+                          >
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className={`flex h-5 w-5 items-center justify-center rounded transition-colors hover:bg-muted hover:text-foreground ${
+                                  isActive ? "text-primary" : "text-muted-foreground"
+                                }`}
+                                title={`Filtrar por ${column.label}`}
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              align={column.align === "right" ? "end" : "start"}
+                              side="bottom"
+                              sideOffset={4}
+                              className="w-[300px] p-0"
+                            >
+                              <div className="p-3 pb-2">
+                                <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                                  Filtrar por {column.label.toLocaleLowerCase("pt-BR")}
+                                </p>
+                                {column.type === "date" ? (
+                                  <DatePicker
+                                    value={filters.emissao}
+                                    onChange={(value) =>
+                                      setFilters((current) => ({
+                                        ...current,
+                                        emissao: value,
+                                      }))
+                                    }
+                                    placeholder="Selecione uma data"
+                                  />
+                                ) : (
+                                  <Input
+                                    value={filters[key]}
+                                    onChange={(event) =>
+                                      setFilters((current) => ({
+                                        ...current,
+                                        [key]: event.target.value,
+                                      }))
+                                    }
+                                    placeholder={column.placeholder}
+                                    autoFocus
+                                  />
+                                )}
+                              </div>
+                              <div className="flex gap-2 px-3 pb-3">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="flex-1"
+                                  onClick={() =>
+                                    setFilters((current) => ({
+                                      ...current,
+                                      [key]: "",
+                                    }))
+                                  }
+                                >
+                                  Limpar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="flex-1"
+                                  onClick={() => setActiveFilter(null)}
+                                >
+                                  OK
+                                </Button>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      </th>
+                    );
+                  })}
                   <th className="px-4 py-3 text-center font-semibold text-muted-foreground">
                     Ações
                   </th>

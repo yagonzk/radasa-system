@@ -40,7 +40,7 @@ function buildData(input: any) {
 
 export const abastecimentosService = {
   async list() {
-    return (await prisma.abastecimento.findMany({ orderBy: [{ dataEmissao: "desc" }, { createdAt: "desc" }] })).map(serialize);
+    return (await prisma.abastecimento.findMany({ orderBy: [{ hodometro: "desc" }, { dataEmissao: "desc" }, { createdAt: "desc" }] })).map(serialize);
   },
   async get(id: string) {
     const item = await prisma.abastecimento.findUnique({ where: { id } });
