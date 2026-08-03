@@ -1105,11 +1105,11 @@ export default function Manifestos() {
                 <div className="rounded-lg bg-muted/50 p-4 space-y-3">
                   <InfoRow
                     label="Cliente"
-                    value={`${clientes.find((c) => c.id === viewingManifesto.clienteId)?.nomeFantasia || "—"}`}
-                  />
-                  <InfoRow
-                    label="Código do Cliente"
-                    value={clientes.find((c) => c.id === viewingManifesto.clienteId)?.codigoInterno || "—"}
+                    value={(() => {
+                      const cliente = clientes.find((c) => c.id === viewingManifesto.clienteId);
+                      if (!cliente) return "—";
+                      return `${cliente.nomeFantasia || "—"}${cliente.codigoInterno ? ` - ${cliente.codigoInterno}` : ""}`;
+                    })()}
                   />
                   
                   <div className="border-t border-border pt-3 mt-3">
@@ -1127,7 +1127,11 @@ export default function Manifestos() {
                         return (
                           <div key={idx} className="text-sm bg-background p-2 rounded border border-border">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="font-medium">{prod?.nome || "—"}</p>
+                              <p className="font-medium">
+                                {prod
+                                  ? `${prod.nome || "—"}${prod.codigoInterno ? ` - ${prod.codigoInterno}` : ""}`
+                                  : "—"}
+                              </p>
                               <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${colors[produtoTipo]}`}>
                                 {produtoTipo}
                               </span>
