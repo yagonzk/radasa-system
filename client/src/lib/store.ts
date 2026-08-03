@@ -9,7 +9,7 @@ export interface Produto { id: string; nome: string; codigoInterno: string; crea
 export interface Local { id: string; cidade: string; valorComissao: number; createdAt: string; }
 export interface ViagemFechamento { localId: string; quantidade: number; }
 export interface Fechamento { id: string; motoristaId: string; dataInicio: string; dataFim: string; viagens: ViagemFechamento[]; valorTotal: number; createdAt: string; }
-export interface Veiculo { id: string; placa: string; modelo?: string; createdAt: string; }
+export interface Veiculo { id: string; placa: string; modelo?: string; quantidadePneus?: number; quantidadeEstepes?: number; createdAt: string; }
 export interface Viagem { id: string; placa: string; motoristaId: string; valorFrete: number; dataManifesto: string; cidadeEntrega: string; distanciaKm: number; valorPedagio: number; valorDiaria: number; valorAbastecimento: number; valorChapa: number; createdAt: string; }
 export type TipoManifesto = "Bonificação - Lebrinha" | "Acertar c/ Lebrinha" | "Receber c/ Cliente";
 export interface ManifestoProduto { produtoId: string; quantidade: number; valorUnitario: number; valorTotal: number; tipoManifesto?: TipoManifesto; }
