@@ -15,6 +15,7 @@ import { manifestosRoutes } from "./manifestos.routes";
 import { logsRoutes } from "./logs.routes";
 import { abastecimentosRoutes } from "./abastecimentos.routes";
 import { pneusRoutes } from "./pneus.routes";
+import { estoqueRoutes } from "./estoque.routes";
 import { auditMutations } from "../middlewares/audit-log";
 
 export const apiRoutes = Router();
@@ -37,3 +38,4 @@ apiRoutes.use("/manifestos", manifestosRoutes);
 apiRoutes.use("/abastecimentos", abastecimentosRoutes);
 
 apiRoutes.use("/pneus", pneusRoutes);
+apiRoutes.use("/estoque", estoqueRoutes);

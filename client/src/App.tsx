@@ -15,6 +15,7 @@ import ChangePassword from "./pages/ChangePassword";
 import Logs from "./pages/Logs";
 import Abastecimentos from "./pages/Abastecimentos";
 import Pneus from "./pages/Pneus";
+import Estoque from "./pages/Estoque";
 import { LoaderCircle } from "lucide-react";
 
 function Router() {
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/fechamentos" component={Fechamentos} />
       <Route path="/abastecimentos" component={Abastecimentos} />
       <Route path="/pneus" component={Pneus} />
+      <Route path="/estoque" component={Estoque} />
       <Route path="/alterar-senha" component={ChangePassword} />
       <Route path="/logs" component={Logs} />
       <Route path="/404" component={NotFound} />

@@ -1,6 +1,6 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode } from "react";
@@ -49,6 +49,12 @@ const navItems: NavItem[] = [
     href: "/abastecimentos",
     icon: <Fuel className="h-[18px] w-[18px]" />,
     matchPaths: ["/abastecimentos"],
+  },
+  {
+    label: "Estoque",
+    href: "/estoque",
+    icon: <Boxes className="h-[18px] w-[18px]" />,
+    matchPaths: ["/estoque"],
   },
   {
     label: "Pneus",

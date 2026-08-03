@@ -5,7 +5,11 @@ export type StatusMotorista = "ATIVO" | "DEMITIDO";
 export interface Motorista { id: string; nome: string; cpf: string; salarioBase: number; status: StatusMotorista; createdAt: string; }
 export interface Chapa { id: string; nome: string; valorFixo: number; createdAt: string; }
 export interface Cliente { id: string; nomeFantasia: string; codigoInterno: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
-export interface Produto { id: string; nome: string; codigoInterno: string; createdAt: string; }
+export type CategoriaEstoque = "PISCINA" | "PECA" | "FERRAMENTA";
+export interface Produto { id: string; nome: string; codigoInterno: string; categoriaEstoque: CategoriaEstoque; createdAt: string; }
+export type TipoMovimentacaoEstoque = "ENTRADA" | "SAIDA";
+export interface EstoqueMovimentacao { id:string; produtoId:string; tipo:TipoMovimentacaoEstoque; quantidade:number; valorUnitario:number; valorTotal:number; data:string; observacoes?:string|null; produto:Produto; createdAt:string; }
+export interface EstoqueResumo { produto:Produto; entradas:number; saidas:number; estoque:number; valorSaidas:number; }
 export interface Local { id: string; cidade: string; valorComissao: number; createdAt: string; }
 export interface ViagemFechamento { localId: string; quantidade: number; }
 export interface Fechamento { id: string; motoristaId: string; dataInicio: string; dataFim: string; viagens: ViagemFechamento[]; valorTotal: number; createdAt: string; }
@@ -135,6 +139,19 @@ export function useManifestos() {
   return { ...crud, create, update };
 }
 
+
+export function useEstoque() {
+  const [movimentacoes, setMovimentacoes] = useState<EstoqueMovimentacao[]>([]);
+  const [resumo, setResumo] = useState<EstoqueResumo[]>([]);
+  const refresh = useCallback(async () => {
+    const [movimentosResponse, resumoResponse] = await Promise.all([api.get<EstoqueMovimentacao[]>("/estoque"), api.get<EstoqueResumo[]>("/estoque/resumo")]);
+    setMovimentacoes(movimentosResponse.data); setResumo(resumoResponse.data);
+  }, []);
+  useEffect(() => { void refresh(); }, [refresh]);
+  const create = useCallback(async (data: Omit<EstoqueMovimentacao,"id"|"produto"|"valorTotal"|"createdAt">) => { const item=(await api.post<EstoqueMovimentacao>("/estoque",data)).data; await refresh(); return item; },[refresh]);
+  const remove = useCallback(async (id:string)=>{ await api.delete(`/estoque/${id}`); await refresh(); },[refresh]);
+  return { movimentacoes, resumo, create, remove, refresh };
+}
 
 export function usePneuOperacoes() {
   const [instalacoes, setInstalacoes] = useState<PneuInstalacao[]>([]);

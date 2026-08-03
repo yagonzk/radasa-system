@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useProdutos, type Produto } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -17,11 +18,13 @@ import { toast } from "sonner";
 interface FormState {
   nome: string;
   codigoInterno: string;
+  categoriaEstoque: "PISCINA" | "PECA" | "FERRAMENTA";
 }
 
 const emptyForm: FormState = {
   nome: "",
   codigoInterno: "",
+  categoriaEstoque: "PISCINA",
 };
 
 export default function ProdutoTab() {
@@ -40,6 +43,7 @@ export default function ProdutoTab() {
     setForm({
       nome: item.nome,
       codigoInterno: item.codigoInterno,
+      categoriaEstoque: item.categoriaEstoque || "PISCINA",
     });
     setEditingId(item.id);
     setOpen(true);
@@ -72,6 +76,7 @@ export default function ProdutoTab() {
       ),
     },
     { key: "codigoInterno", label: "Código Interno" },
+    { key: "categoriaEstoque", label: "Categoria", render: (item: Produto) => ({ PISCINA: "Produtos de piscina", PECA: "Peças", FERRAMENTA: "Ferramentas" }[item.categoriaEstoque] || "Produtos de piscina") },
   ];
 
   return (
@@ -115,6 +120,16 @@ export default function ProdutoTab() {
                 onChange={(e) => setForm({ ...form, codigoInterno: e.target.value })}
                 placeholder="Ex: 2001"
               />
+            </FormField>
+            <FormField label="Categoria no estoque">
+              <Select value={form.categoriaEstoque} onValueChange={(value: FormState["categoriaEstoque"]) => setForm({ ...form, categoriaEstoque: value })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PISCINA">Produtos de piscina</SelectItem>
+                  <SelectItem value="PECA">Peças</SelectItem>
+                  <SelectItem value="FERRAMENTA">Ferramentas</SelectItem>
+                </SelectContent>
+              </Select>
             </FormField>
             <DialogFooter>
               <Button type="submit">

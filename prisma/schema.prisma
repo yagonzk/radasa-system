@@ -27,6 +27,17 @@ enum StatusMotorista {
   DEMITIDO
 }
 
+enum CategoriaEstoque {
+  PISCINA
+  PECA
+  FERRAMENTA
+}
+
+enum TipoMovimentacaoEstoque {
+  ENTRADA
+  SAIDA
+}
+
 model User {
   id           String     @id @default(cuid())
   name         String
@@ -86,13 +97,15 @@ model Cliente {
 }
 
 model Produto {
-  id             String                 @id @default(cuid())
-  nome           String
-  codigoInterno  String
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
-  manifestos     ManifestoProduto[]
-  abastecimentos AbastecimentoProduto[]
+  id                   String                 @id @default(cuid())
+  nome                 String
+  codigoInterno        String
+  categoriaEstoque     CategoriaEstoque       @default(PISCINA)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  manifestos           ManifestoProduto[]
+  abastecimentos       AbastecimentoProduto[]
+  movimentacoesEstoque EstoqueMovimentacao[]
 
   @@index([nome])
   @@index([codigoInterno])
@@ -282,6 +295,25 @@ enum TipoEventoPneu {
   RECAPAGEM
   CONSERTO
   INSPECAO
+}
+
+model EstoqueMovimentacao {
+  id            String                  @id @default(cuid())
+  produtoId     String
+  tipo          TipoMovimentacaoEstoque
+  quantidade    Decimal                 @db.Decimal(14, 3)
+  valorUnitario Decimal                 @default(0) @db.Decimal(14, 2)
+  valorTotal    Decimal                 @default(0) @db.Decimal(14, 2)
+  data          DateTime                @db.Date
+  observacoes   String?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  produto       Produto                 @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+
+  @@index([produtoId])
+  @@index([tipo])
+  @@index([data])
+  @@map("estoque_movimentacoes")
 }
 
 model Pneu {

@@ -23,7 +23,17 @@ export const clienteBody = z.object({
   id: id.optional(), nomeFantasia: text(), codigoInterno: text(100), email: z.string().trim().max(255), telefone: z.string().trim().max(100), enderecoFiscal: z.string().trim().max(1000), createdAt: z.string().optional(),
 });
 export const produtoBody = z.object({
-  id: id.optional(), nome: text(), codigoInterno: text(100), createdAt: z.string().optional(),
+  id: id.optional(), nome: text(), codigoInterno: text(100),
+  categoriaEstoque: z.enum(["PISCINA", "PECA", "FERRAMENTA"]).default("PISCINA"),
+  createdAt: z.string().optional(),
+});
+
+export const estoqueMovimentacaoBody = z.object({
+  id: id.optional(), produtoId: id, tipo: z.enum(["ENTRADA", "SAIDA"]),
+  quantidade: z.coerce.number().finite().positive(),
+  valorUnitario: z.coerce.number().finite().min(0).optional().default(0),
+  data: dateOnly, observacoes: z.string().trim().max(2000).optional().or(z.literal("")),
+  createdAt: z.string().optional(),
 });
 export const localBody = z.object({
   id: id.optional(), cidade: text(), valorComissao: money, createdAt: z.string().optional(),
