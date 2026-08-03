@@ -31,8 +31,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Plus, Trash2, Edit3, Eye, FileText, Package, Building2, Calculator, Download, Upload, X, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Edit3, Eye, FileText, Package, Building2, Calculator, Download, Upload, X, ChevronDown, Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 
 interface FormField {
@@ -111,6 +112,7 @@ export default function Manifestos() {
   const [tipoManifesto, setTipoManifesto] = useState<TipoManifesto>("Bonificação - Lebrinha");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [existingPdfUrl, setExistingPdfUrl] = useState<string | null>(null);
+  const [clienteSelectOpen, setClienteSelectOpen] = useState(false);
 
   // Current product being added
   const [currentProdutoId, setCurrentProdutoId] = useState("");
@@ -147,6 +149,7 @@ export default function Manifestos() {
     setCurrentValorUnitario("");
     setCurrentProdutoTipo("");
     setEditingManifesto(null);
+    setClienteSelectOpen(false);
     setFormOpen(true);
   };
 
@@ -162,6 +165,7 @@ export default function Manifestos() {
     setCurrentValorUnitario("");
     setCurrentProdutoTipo("");
     setEditingManifesto(manifesto);
+    setClienteSelectOpen(false);
     setFormOpen(true);
   };
 
@@ -795,24 +799,66 @@ export default function Manifestos() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField label="Cliente *">
-                  <Select value={clienteId} onValueChange={setClienteId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clientes.length === 0 ? (
-                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                          Nenhum cliente cadastrado
-                        </div>
-                      ) : (
-                        clientes.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.nomeFantasia || "Sem nome"} {c.codigoInterno ? `(Cód: ${c.codigoInterno})` : ""}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={clienteSelectOpen} onOpenChange={setClienteSelectOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={clienteSelectOpen}
+                        className="w-full justify-between font-normal"
+                      >
+                        <span className="truncate text-left">
+                          {clienteId
+                            ? (() => {
+                                const clienteSelecionado = clientes.find((c) => c.id === clienteId);
+                                if (!clienteSelecionado) return "Selecione o cliente";
+                                return `${clienteSelecionado.nomeFantasia || "Sem nome"}${
+                                  clienteSelecionado.codigoInterno
+                                    ? ` (Cód: ${clienteSelecionado.codigoInterno})`
+                                    : ""
+                                }`;
+                              })()
+                            : "Selecione o cliente"}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="start"
+                      className="w-[var(--radix-popover-trigger-width)] p-0"
+                    >
+                      <Command>
+                        <CommandInput placeholder="Pesquisar por nome, código ou e-mail..." />
+                        <CommandList>
+                          <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {clientes.map((c) => (
+                              <CommandItem
+                                key={c.id}
+                                value={`${c.nomeFantasia || ""} ${c.codigoInterno || ""} ${c.email || ""}`}
+                                onSelect={() => {
+                                  setClienteId(c.id);
+                                  setClienteSelectOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={`h-4 w-4 ${clienteId === c.id ? "opacity-100" : "opacity-0"}`}
+                                />
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium">{c.nomeFantasia || "Sem nome"}</p>
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    Cód: {c.codigoInterno || "—"}
+                                    {c.email ? ` • ${c.email}` : ""}
+                                  </p>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </FormField>
 
                 <FormField label="Data do manifesto *">
