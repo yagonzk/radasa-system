@@ -74,6 +74,7 @@ model Cliente {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   manifestos      Manifesto[]
+  abastecimentos Abastecimento[]
 
   @@index([nomeFantasia])
   @@index([codigoInterno])
@@ -111,6 +112,7 @@ model Veiculo {
   modelo    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  abastecimentos Abastecimento[]
 
   @@index([placa])
   @@map("veiculos")
@@ -199,6 +201,29 @@ model ManifestoProduto {
   @@map("manifesto_produtos")
 }
 
+
+
+model Abastecimento {
+  id               String   @id @default(cuid())
+  clienteId        String
+  veiculoId        String
+  dataEmissao      DateTime @db.Date
+  produto          String
+  quantidadeLitros Decimal  @db.Decimal(14, 3)
+  valorUnitario    Decimal  @db.Decimal(14, 4)
+  valorTotal       Decimal  @db.Decimal(14, 2)
+  hodometro        Decimal  @db.Decimal(14, 1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  cliente          Cliente  @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  veiculo          Veiculo  @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
+
+  @@index([clienteId])
+  @@index([veiculoId])
+  @@index([dataEmissao])
+  @@index([produto])
+  @@map("abastecimentos")
+}
 
 model AuditLog {
   id        String   @id @default(cuid())

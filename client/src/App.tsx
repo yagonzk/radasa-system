@@ -13,6 +13,7 @@ import Manifestos from "./pages/Manifestos";
 import Auth from "./pages/Auth";
 import ChangePassword from "./pages/ChangePassword";
 import Logs from "./pages/Logs";
+import Abastecimentos from "./pages/Abastecimentos";
 import { LoaderCircle } from "lucide-react";
 
 function Router() {
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/viagens" component={Viagens} />
       <Route path="/manifestos" component={Manifestos} />
       <Route path="/fechamentos" component={Fechamentos} />
+      <Route path="/abastecimentos" component={Abastecimentos} />
       <Route path="/alterar-senha" component={ChangePassword} />
       <Route path="/logs" component={Logs} />
       <Route path="/404" component={NotFound} />
