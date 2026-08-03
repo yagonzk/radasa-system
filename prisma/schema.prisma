@@ -1,0 +1,210 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum TipoManifesto {
+  BONIFICACAO_LEBRINHA
+  ACERTAR_LEBRINHA
+  RECEBER_CLIENTE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(USER)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model Motorista {
+  id          String       @id @default(cuid())
+  nome        String
+  cpf         String
+  salarioBase Decimal      @db.Decimal(14, 2)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  viagens     Viagem[]
+  fechamentos Fechamento[]
+
+  @@index([nome])
+  @@map("motoristas")
+}
+
+model Chapa {
+  id        String   @id @default(cuid())
+  nome      String
+  valorFixo Decimal  @db.Decimal(14, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nome])
+  @@map("chapas")
+}
+
+model Cliente {
+  id             String      @id @default(cuid())
+  nomeFantasia   String
+  codigoInterno  String
+  email           String
+  telefone        String
+  enderecoFiscal String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  manifestos      Manifesto[]
+
+  @@index([nomeFantasia])
+  @@index([codigoInterno])
+  @@map("clientes")
+}
+
+model Produto {
+  id            String              @id @default(cuid())
+  nome          String
+  codigoInterno String
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  manifestos    ManifestoProduto[]
+
+  @@index([nome])
+  @@index([codigoInterno])
+  @@map("produtos")
+}
+
+model Local {
+  id            String              @id @default(cuid())
+  cidade        String
+  valorComissao Decimal             @db.Decimal(14, 2)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  fechamentos   FechamentoViagem[]
+
+  @@index([cidade])
+  @@map("locais")
+}
+
+model Veiculo {
+  id        String   @id @default(cuid())
+  placa     String
+  modelo    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([placa])
+  @@map("veiculos")
+}
+
+model Viagem {
+  id                 String     @id @default(cuid())
+  placa              String
+  motoristaId        String
+  valorFrete         Decimal    @db.Decimal(14, 2)
+  dataManifesto      DateTime   @db.Date
+  cidadeEntrega      String
+  distanciaKm        Decimal    @db.Decimal(14, 2)
+  valorPedagio       Decimal    @db.Decimal(14, 2)
+  valorDiaria        Decimal    @db.Decimal(14, 2)
+  valorAbastecimento Decimal    @db.Decimal(14, 2)
+  valorChapa         Decimal    @db.Decimal(14, 2)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  motorista          Motorista @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
+
+  @@index([motoristaId])
+  @@index([placa])
+  @@index([dataManifesto])
+  @@map("viagens")
+}
+
+model Fechamento {
+  id           String              @id @default(cuid())
+  motoristaId String
+  dataInicio   DateTime            @db.Date
+  dataFim      DateTime            @db.Date
+  valorTotal   Decimal             @db.Decimal(14, 2)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  motorista    Motorista           @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
+  viagens      FechamentoViagem[]
+
+  @@index([motoristaId])
+  @@index([dataInicio, dataFim])
+  @@map("fechamentos")
+}
+
+model FechamentoViagem {
+  id           String     @id @default(cuid())
+  fechamentoId String
+  localId      String
+  quantidade   Int
+  fechamento   Fechamento @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+  local        Local      @relation(fields: [localId], references: [id], onDelete: Restrict)
+
+  @@index([fechamentoId])
+  @@index([localId])
+  @@map("fechamento_viagens")
+}
+
+model Manifesto {
+  id             String              @id @default(cuid())
+  clienteId      String
+  dataManifesto  DateTime            @db.Date
+  tipoManifesto  TipoManifesto
+  pdfUrl          String?             @db.Text
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  cliente         Cliente             @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  produtos        ManifestoProduto[]
+
+  @@index([clienteId])
+  @@index([dataManifesto])
+  @@map("manifestos")
+}
+
+model ManifestoProduto {
+  id             String         @id @default(cuid())
+  manifestoId    String
+  produtoId      String
+  quantidade     Decimal        @db.Decimal(14, 3)
+  valorUnitario  Decimal        @db.Decimal(14, 2)
+  valorTotal     Decimal        @db.Decimal(14, 2)
+  tipoManifesto  TipoManifesto?
+  manifesto      Manifesto      @relation(fields: [manifestoId], references: [id], onDelete: Cascade)
+  produto        Produto        @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+
+  @@index([manifestoId])
+  @@index([produtoId])
+  @@map("manifesto_produtos")
+}
+
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  method    String
+  path      String
+  entityId  String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
