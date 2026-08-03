@@ -20,8 +20,21 @@ export type StatusPneu = "ESTOQUE" | "INSTALADO" | "MANUTENCAO" | "RECAPAGEM" | 
 export type TipoPneu = "DIRECIONAL" | "TRACAO" | "LIVRE";
 export type CondicaoPneu = "NOVO" | "USADO" | "RECAPADO" | "AGUARDANDO_RECAPAGEM";
 export interface PneuFoto { id: string; url: string; legenda?: string | null; createdAt: string; }
-export interface PneuEvento { id: string; tipo: "COMPRA" | "ALTERACAO" | "STATUS" | "FOTO"; data: string; quilometragem?: number | null; responsavel?: string | null; observacoes?: string | null; dados?: unknown; createdAt: string; }
-export interface Pneu { id: string; numeroFogo: string; codigoBarras?: string | null; qrCode?: string | null; marca: string; modelo: string; medida: string; dot: string; numeroSerie?: string | null; tipo: TipoPneu; valorCompra: number; fornecedor: string; dataCompra: string; maxRecapagens: number; recapagensRealizadas: number; status: StatusPneu; condicao: CondicaoPneu; sulcoInicial?: number | null; sulcoAtual?: number | null; kmAtual: number; proximoRodizioKm?: number | null; observacoes?: string | null; fotos: PneuFoto[]; eventos: PneuEvento[]; createdAt: string; }
+export interface PneuEvento { id: string; tipo: "COMPRA" | "ALTERACAO" | "STATUS" | "FOTO" | "INSTALACAO" | "RETIRADA" | "RODIZIO" | "SULCO" | "CALIBRAGEM" | "RECAPAGEM" | "CONSERTO" | "INSPECAO"; data: string; quilometragem?: number | null; responsavel?: string | null; observacoes?: string | null; dados?: unknown; createdAt: string; }
+export interface PneuInstalacao { id: string; pneuId: string; veiculoId: string; carretaId?: string | null; eixo: string; posicao: string; dataInstalacao: string; kmInstalacao: number; responsavel: string; dataRetirada?: string | null; kmRetirada?: number | null; motivoRetirada?: string | null; statusDestino?: StatusPneu | null; ativo: boolean; pneu: Pneu; veiculo: Veiculo; carreta?: Veiculo | null; createdAt: string; }
+export interface PneuRodizioMovimento { id: string; pneuId: string; eixoOrigem: string; posicaoOrigem: string; eixoDestino: string; posicaoDestino: string; pneu: Pneu; }
+export interface PneuRodizio { id: string; veiculoId: string; carretaId?: string | null; data: string; quilometragem: number; responsavel: string; motivo: string; veiculo: Veiculo; carreta?: Veiculo | null; movimentos: PneuRodizioMovimento[]; createdAt: string; }
+
+export interface PneuMedicaoSulco { id:string; pneuId:string; data:string; quilometragem?:number|null; sulcoInterno:number; sulcoCentral:number; sulcoExterno:number; mediaSulco:number; percentualDesgaste:number; vidaUtilRestante:number; responsavel:string; observacoes?:string|null; createdAt:string; }
+export interface PneuCalibragem { id:string; pneuId:string; data:string; pressaoRecomendada:number; pressaoEncontrada:number; pressaoAjustada:number; responsavel:string; observacoes?:string|null; createdAt:string; }
+export interface PneuRecapagem { id:string; pneuId:string; empresaRecapadora:string; dataEnvio:string; dataRetorno?:string|null; valor:number; garantiaMeses:number; tipoRecapagem:string; numeroRecapagem:number; observacoes?:string|null; createdAt:string; }
+export interface PneuConserto { id:string; pneuId:string; tipo:string; data:string; valor:number; responsavel:string; observacoes?:string|null; fotosAntes?:string[]; fotosDepois?:string[]; createdAt:string; }
+export interface PneuInspecao { id:string; pneuId:string; data:string; responsavel:string; pressaoOk:boolean; sulcoOk:boolean; cortes:boolean; bolhas:boolean; trincas:boolean; desgasteIrregular:boolean; lonaAparente:boolean; observacoes?:string|null; fotos?:string[]; createdAt:string; }
+export interface PneuManutencao { medicoesSulco:PneuMedicaoSulco[]; calibragens:PneuCalibragem[]; recapagens:PneuRecapagem[]; consertos:PneuConserto[]; inspecoes:PneuInspecao[]; }
+
+export type PneuAlerta = { id:string; severity:"CRITICO"|"ATENCAO"; type:string; title:string; detail:string; pneuId:string };
+export type PneuRelatorios = { period:{from:string|null;to:string|null}; summary:{pneus:number;investment:number;averageLifeKm:number}; history:Array<{pneu:string;marca:string;evento:string;data:string;responsavel:string;quilometragem:number|null;observacoes:string}>; costsByVehicle:Array<{vehicle:string;count:number;cost:number}>; rankingBrands:Array<{brand:string;count:number;cost:number;km:number}>; rankingRecappers:Array<{name:string;count:number;cost:number}>; wear:Array<{numeroFogo:string;marca:string;sulcoAtual:number|null;desgaste:number;km:number}>; nearReplacement:Array<{numeroFogo:string;marca:string;sulcoAtual:number|null;desgaste:number;km:number}> };
+export interface Pneu { id: string; numeroFogo: string; codigoBarras?: string | null; qrCode?: string | null; marca: string; modelo: string; medida: string; dot: string; numeroSerie?: string | null; tipo: TipoPneu; valorCompra: number; fornecedor: string; dataCompra: string; maxRecapagens: number; recapagensRealizadas: number; status: StatusPneu; condicao: CondicaoPneu; sulcoInicial?: number | null; sulcoAtual?: number | null; kmAtual: number; proximoRodizioKm?: number | null; observacoes?: string | null; fotos: PneuFoto[]; eventos: PneuEvento[]; recapagens?: PneuRecapagem[]; consertos?: PneuConserto[]; medicoesSulco?: PneuMedicaoSulco[]; calibragens?: PneuCalibragem[]; inspecoes?: PneuInspecao[]; createdAt: string; }
 
 type Entity = { id: string; createdAt: string };
 const eventName = (resource: string) => `radasa-api-change:${resource}`;
@@ -120,4 +133,54 @@ export function useManifestos() {
   const create = useCallback((clienteId: string, dataManifesto: string, produtos: ManifestoProduto[], tipoManifesto: TipoManifesto, pdfUrl?: string) => crud.create({ clienteId, dataManifesto, produtos, tipoManifesto, pdfUrl }), [crud.create]);
   const update = useCallback((id: string, clienteId: string, dataManifesto: string, produtos: ManifestoProduto[], tipoManifesto: TipoManifesto, pdfUrl?: string) => crud.update(id, { clienteId, dataManifesto, produtos, tipoManifesto, pdfUrl }), [crud.update]);
   return { ...crud, create, update };
+}
+
+
+export function usePneuOperacoes() {
+  const [instalacoes, setInstalacoes] = useState<PneuInstalacao[]>([]);
+  const [rodizios, setRodizios] = useState<PneuRodizio[]>([]);
+  const refresh = useCallback(async () => {
+    const [instalacoesResponse, rodiziosResponse] = await Promise.all([
+      api.get<PneuInstalacao[]>("/pneus/instalacoes"),
+      api.get<PneuRodizio[]>("/pneus/rodizios"),
+    ]);
+    setInstalacoes(instalacoesResponse.data);
+    setRodizios(rodiziosResponse.data);
+  }, []);
+  useEffect(() => { void refresh(); }, [refresh]);
+  const instalar = useCallback(async (pneuId: string, data: Omit<PneuInstalacao, "id" | "pneuId" | "pneu" | "veiculo" | "carreta" | "ativo" | "createdAt">) => {
+    const item = (await api.post<PneuInstalacao>(`/pneus/${pneuId}/instalar`, data)).data;
+    await refresh();
+    window.dispatchEvent(new Event(eventName("pneus")));
+    return item;
+  }, [refresh]);
+  const retirar = useCallback(async (pneuId: string, data: { dataRetirada: string; kmRetirada: number; motivoRetirada: string; statusDestino: "ESTOQUE" | "MANUTENCAO" | "RECAPAGEM" }) => {
+    const item = (await api.post<PneuInstalacao>(`/pneus/${pneuId}/retirar`, data)).data;
+    await refresh();
+    window.dispatchEvent(new Event(eventName("pneus")));
+    return item;
+  }, [refresh]);
+  const rodiziar = useCallback(async (data: Omit<PneuRodizio, "id" | "veiculo" | "carreta" | "createdAt" | "movimentos"> & { movimentos: Array<Omit<PneuRodizioMovimento, "id" | "pneu">> }) => {
+    const item = (await api.post<PneuRodizio>("/pneus/rodizios", data)).data;
+    await refresh();
+    window.dispatchEvent(new Event(eventName("pneus")));
+    return item;
+  }, [refresh]);
+  return { instalacoes, rodizios, instalar, retirar, rodiziar, refresh };
+}
+
+
+export function usePneuManutencao(pneuId?: string) {
+  const [data, setData] = useState<PneuManutencao | null>(null);
+  const refresh = useCallback(async () => { if (!pneuId) { setData(null); return; } setData((await api.get<PneuManutencao>(`/pneus/${pneuId}/manutencao`)).data); }, [pneuId]);
+  useEffect(() => { void refresh(); }, [refresh]);
+  const post = useCallback(async (path:string, body:unknown) => { if(!pneuId) throw new Error("Selecione um pneu."); await api.post(`/pneus/${pneuId}/${path}`, body); await refresh(); window.dispatchEvent(new Event(eventName("pneus"))); }, [pneuId, refresh]);
+  return { data, refresh, addSulco:(body:unknown)=>post("sulcos",body), addCalibragem:(body:unknown)=>post("calibragens",body), addRecapagem:(body:unknown)=>post("recapagens",body), addConserto:(body:unknown)=>post("consertos",body), addInspecao:(body:unknown)=>post("inspecoes",body) };
+}
+
+export function usePneuGestao(){
+  const [alerts,setAlerts]=useState<PneuAlerta[]>([]); const [reports,setReports]=useState<PneuRelatorios|null>(null); const [loading,setLoading]=useState(false);
+  const loadAlerts=useCallback(async()=>setAlerts((await api.get<PneuAlerta[]>("/pneus/gestao/alertas")).data),[]);
+  const loadReports=useCallback(async(from?:string,to?:string)=>{setLoading(true);try{setReports((await api.get<PneuRelatorios>("/pneus/gestao/relatorios",{params:{from:from||undefined,to:to||undefined}})).data)}finally{setLoading(false)}},[]);
+  return {alerts,reports,loading,loadAlerts,loadReports};
 }

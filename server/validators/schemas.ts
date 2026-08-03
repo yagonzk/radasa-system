@@ -85,8 +85,67 @@ const password = z.string().min(8, "A senha deve ter pelo menos 8 caracteres").m
 export const loginSchema = bodySchema(z.object({ identifier: z.string().trim().min(3).max(255), password }));
 export const registerSchema = bodySchema(z.object({ name: text(120), username, email: z.string().trim().email().transform(v => v.toLowerCase()), password }));
 export const changePasswordSchema = bodySchema(z.object({ currentPassword: password, newPassword: password }));
-export const createUserSchema = bodySchema(z.object({ name: text(), username, email: z.string().email().transform(v => v.toLowerCase()), password, role: z.enum(["ADMIN", "USER"]).default("USER") }));
+export const createUserSchema = bodySchema(z.object({ name: text(), username, email: z.string().email().transform(v => v.toLowerCase()), password, role: z.enum(["ADMIN", "GERENTE", "BORRACHARIA", "MANUTENCAO", "VISUALIZACAO", "USER"]).default("VISUALIZACAO") }));
 
 export const migrationSchema = bodySchema(z.object({
   motoristas: z.array(motoristaBody).default([]), chapas: z.array(chapaBody).default([]), clientes: z.array(clienteBody).default([]), produtos: z.array(produtoBody).default([]), locais: z.array(localBody).default([]), veiculos: z.array(veiculoBody).default([]), viagens: z.array(viagemBody).default([]), fechamentos: z.array(fechamentoBody).default([]), manifestos: z.array(manifestoBody).default([]),
 }));
+
+export const pneuInstalacaoBody = z.object({
+  veiculoId: id,
+  carretaId: id.optional().nullable().or(z.literal("")),
+  eixo: text(80),
+  posicao: text(80),
+  dataInstalacao: dateOnly,
+  kmInstalacao: z.coerce.number().finite().min(0),
+  responsavel: text(160),
+});
+
+export const pneuRetiradaBody = z.object({
+  dataRetirada: dateOnly,
+  kmRetirada: z.coerce.number().finite().min(0),
+  motivoRetirada: text(1000),
+  statusDestino: z.enum(["ESTOQUE", "MANUTENCAO", "RECAPAGEM"]).default("ESTOQUE"),
+});
+
+export const pneuRodizioBody = z.object({
+  veiculoId: id,
+  carretaId: id.optional().nullable().or(z.literal("")),
+  data: dateOnly,
+  quilometragem: z.coerce.number().finite().min(0),
+  responsavel: text(160),
+  motivo: text(1000),
+  movimentos: z.array(z.object({
+    pneuId: id,
+    eixoOrigem: text(80),
+    posicaoOrigem: text(80),
+    eixoDestino: text(80),
+    posicaoDestino: text(80),
+  })).min(2, "Selecione ao menos duas posições para o rodízio."),
+});
+
+
+export const pneuSulcoBody = z.object({
+  data: dateOnly, quilometragem: z.coerce.number().finite().min(0).optional().nullable(),
+  sulcoInterno: z.coerce.number().finite().min(0).max(100), sulcoCentral: z.coerce.number().finite().min(0).max(100),
+  sulcoExterno: z.coerce.number().finite().min(0).max(100), responsavel: text(160), observacoes: optionalText(2000),
+});
+export const pneuCalibragemBody = z.object({
+  data: dateOnly, pressaoRecomendada: z.coerce.number().finite().positive(), pressaoEncontrada: z.coerce.number().finite().min(0),
+  pressaoAjustada: z.coerce.number().finite().min(0), responsavel: text(160), observacoes: optionalText(2000),
+});
+export const pneuRecapagemBody = z.object({
+  empresaRecapadora: text(180), dataEnvio: dateOnly, dataRetorno: dateOnly.optional().nullable().or(z.literal("")),
+  valor: money, garantiaMeses: z.coerce.number().int().min(0).max(120).default(0), tipoRecapagem: text(120),
+  numeroRecapagem: z.coerce.number().int().min(1).max(20), observacoes: optionalText(2000),
+});
+export const pneuConsertoBody = z.object({
+  tipo: z.enum(["FURO", "REMENDO", "VULCANIZACAO", "CORTE_LATERAL", "OUTRO"]), data: dateOnly, valor: money,
+  responsavel: text(160), observacoes: optionalText(2000), fotosAntes: z.array(z.string().max(20_000_000)).max(10).optional(),
+  fotosDepois: z.array(z.string().max(20_000_000)).max(10).optional(),
+});
+export const pneuInspecaoBody = z.object({
+  data: dateOnly, responsavel: text(160), pressaoOk: z.boolean(), sulcoOk: z.boolean(), cortes: z.boolean().default(false),
+  bolhas: z.boolean().default(false), trincas: z.boolean().default(false), desgasteIrregular: z.boolean().default(false),
+  lonaAparente: z.boolean().default(false), observacoes: optionalText(2000), fotos: z.array(z.string().max(20_000_000)).max(10).optional(),
+});

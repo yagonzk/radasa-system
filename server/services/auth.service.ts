@@ -9,7 +9,7 @@ function publicUser(user: {
   name: string;
   username: string;
   email: string;
-  role: "ADMIN" | "USER";
+  role: "ADMIN" | "GERENTE" | "BORRACHARIA" | "MANUTENCAO" | "VISUALIZACAO" | "USER";
 }) {
   return {
     id: user.id,
@@ -20,7 +20,7 @@ function publicUser(user: {
   };
 }
 
-function signToken(user: { id: string; email: string; role: "ADMIN" | "USER" }) {
+function signToken(user: { id: string; email: string; role: "ADMIN" | "GERENTE" | "BORRACHARIA" | "MANUTENCAO" | "VISUALIZACAO" | "USER" }) {
   return jwt.sign(
     { email: user.email, role: user.role },
     env.JWT_SECRET,

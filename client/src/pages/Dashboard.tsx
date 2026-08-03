@@ -1,7 +1,8 @@
 import Layout from "@/components/Layout";
-import { useMotoristas, useChapas, useClientes, useLocais, useProdutos, useManifestos } from "@/lib/store";
+import { useMotoristas, useChapas, useClientes, useLocais, useProdutos, useManifestos, usePneuGestao } from "@/lib/store";
 import { Link } from "wouter";
-import { Truck, Users, Building2, MapPin, ArrowRight, FileText, Package, ClipboardList } from "lucide-react";
+import { Truck, Users, Building2, MapPin, ArrowRight, FileText, Package, ClipboardList, AlertTriangle } from "lucide-react";
+import { useEffect } from "react";
 
 export default function Dashboard() {
   const { items: motoristas } = useMotoristas();
@@ -10,6 +11,8 @@ export default function Dashboard() {
   const { items: locais } = useLocais();
   const { items: produtos } = useProdutos();
   const { items: manifestos } = useManifestos();
+  const { alerts, loadAlerts } = usePneuGestao();
+  useEffect(() => { void loadAlerts(); }, [loadAlerts]);
 
   const metrics = [
     {
@@ -134,6 +137,8 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+
+        {alerts.length > 0 && <div className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5"><div className="flex items-center justify-between gap-4"><div className="flex items-center gap-3"><AlertTriangle className="h-5 w-5 text-amber-500"/><div><h2 className="font-semibold">Alertas de pneus</h2><p className="text-sm text-muted-foreground">{alerts.length} alerta(s) precisam de atenção.</p></div></div><Link href="/pneus" className="text-sm font-semibold text-primary">Ver alertas</Link></div><div className="mt-3 grid gap-2 md:grid-cols-2">{alerts.slice(0,4).map(a=><div key={a.id} className="rounded-lg border bg-card p-3"><p className="text-sm font-medium">{a.title}</p><p className="text-xs text-muted-foreground">{a.detail}</p></div>)}</div></div>}
 
         {/* Fechamentos section */}
         <div className="mt-6 rounded-2xl border border-dashed border-border bg-card p-8">

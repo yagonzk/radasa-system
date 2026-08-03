@@ -3,7 +3,7 @@ import { AppError } from "../utils/app-error";
 import { parseDateOnly } from "../utils/date";
 import { created, dateOnly, number } from "../utils/serialize";
 
-const include = { fotos: true, eventos: { orderBy: { data: "desc" as const } } } as const;
+const include = { fotos: true, eventos: { orderBy: { data: "desc" as const } }, recapagens: { orderBy: { numeroRecapagem: "desc" as const } }, consertos: { orderBy: { data: "desc" as const } }, medicoesSulco: { orderBy: { data: "desc" as const }, take: 12 }, calibragens: { orderBy: { data: "desc" as const }, take: 1 }, inspecoes: { orderBy: { data: "desc" as const }, take: 1 } } as const;
 const serialize = (p: any) => ({
   ...p,
   valorCompra: number(p.valorCompra), sulcoInicial: p.sulcoInicial == null ? null : number(p.sulcoInicial),
@@ -12,6 +12,11 @@ const serialize = (p: any) => ({
   dataCompra: dateOnly(p.dataCompra), createdAt: created(p.createdAt),
   eventos: (p.eventos ?? []).map((e: any) => ({ ...e, quilometragem: e.quilometragem == null ? null : number(e.quilometragem), data: created(e.data), createdAt: created(e.createdAt) })),
   fotos: (p.fotos ?? []).map((f: any) => ({ ...f, createdAt: created(f.createdAt) })),
+  recapagens: (p.recapagens ?? []).map((x:any)=>({...x, valor:number(x.valor), dataEnvio:dateOnly(x.dataEnvio), dataRetorno:x.dataRetorno?dateOnly(x.dataRetorno):null, createdAt:created(x.createdAt)})),
+  consertos: (p.consertos ?? []).map((x:any)=>({...x, valor:number(x.valor), data:dateOnly(x.data), createdAt:created(x.createdAt)})),
+  medicoesSulco: (p.medicoesSulco ?? []).map((x:any)=>({...x, data:dateOnly(x.data), mediaSulco:number(x.mediaSulco), percentualDesgaste:number(x.percentualDesgaste), vidaUtilRestante:number(x.vidaUtilRestante), createdAt:created(x.createdAt)})),
+  calibragens: (p.calibragens ?? []).map((x:any)=>({...x, data:dateOnly(x.data), pressaoRecomendada:number(x.pressaoRecomendada), pressaoEncontrada:number(x.pressaoEncontrada), pressaoAjustada:number(x.pressaoAjustada), createdAt:created(x.createdAt)})),
+  inspecoes: (p.inspecoes ?? []).map((x:any)=>({...x, data:dateOnly(x.data), createdAt:created(x.createdAt)})),
 });
 
 function data(input: any) {

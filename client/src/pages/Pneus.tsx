@@ -13,6 +13,9 @@ import { usePneus, type Pneu, type StatusPneu, type TipoPneu, type CondicaoPneu 
 import { CircleDollarSign, History, ImagePlus, Package, Pencil, Plus, RefreshCcw, Search, ShieldAlert, Trash2, Truck, Wrench, Recycle, Gauge, CircleOff, CircleDotDashed } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { PneuInstalacoes, PneuRodizios } from "@/components/pneus/PneuOperacoes";
+import { PneuManutencao } from "@/components/pneus/PneuManutencao";
+import { PneuGestao } from "@/components/pneus/PneuGestao";
 
 const statusLabels: Record<StatusPneu, string> = { ESTOQUE: "Estoque", INSTALADO: "Instalado", MANUTENCAO: "Em manutenção", RECAPAGEM: "Em recapagem", DESCARTADO: "Descartado" };
 const tipoLabels: Record<TipoPneu, string> = { DIRECIONAL: "Direcional", TRACAO: "Tração", LIVRE: "Livre" };
@@ -42,8 +45,8 @@ export default function Pneus() {
     const ativos = items.filter(p => p.status !== "DESCARTADO");
     const proximosRodizio = items.filter(p => p.proximoRodizioKm != null && p.proximoRodizioKm - p.kmAtual <= 1000 && p.status === "INSTALADO").length;
     const criticos = items.filter(p => p.sulcoAtual != null && p.sulcoAtual <= 2).length;
-    const custo = items.reduce((sum, p) => sum + p.valorCompra, 0);
-    const economia = 0; // será calculada com valores reais quando o módulo de recapagens for ativado
+    const custo = items.reduce((sum, p) => sum + p.valorCompra + (p.recapagens ?? []).reduce((a, r) => a + r.valor, 0) + (p.consertos ?? []).reduce((a, c) => a + c.valor, 0), 0);
+    const economia = items.reduce((sum, p) => sum + (p.recapagens ?? []).reduce((a, r) => a + Math.max(0, p.valorCompra - r.valor), 0), 0);
     return { ativos: ativos.length, estoque: items.filter(p => p.status === "ESTOQUE").length, instalados: items.filter(p => p.status === "INSTALADO").length, recapagem: items.filter(p => p.status === "RECAPAGEM").length, descartados: items.filter(p => p.status === "DESCARTADO").length, proximosRodizio, criticos, custo, economia };
   }, [items]);
 
@@ -116,12 +119,15 @@ export default function Pneus() {
       </div>
 
       <Tabs defaultValue="cadastro">
-        <TabsList><TabsTrigger value="cadastro">Cadastro</TabsTrigger><TabsTrigger value="estoque">Estoque</TabsTrigger><TabsTrigger value="historico">Histórico</TabsTrigger></TabsList>
+        <TabsList className="flex h-auto flex-wrap"><TabsTrigger value="cadastro">Cadastro</TabsTrigger><TabsTrigger value="estoque">Estoque</TabsTrigger><TabsTrigger value="instalacoes">Instalações</TabsTrigger><TabsTrigger value="rodizios">Rodízios</TabsTrigger><TabsTrigger value="manutencao">Manutenção</TabsTrigger><TabsTrigger value="historico">Histórico</TabsTrigger><TabsTrigger value="gestao">Gestão e relatórios</TabsTrigger></TabsList>
         <TabsContent value="cadastro" className="mt-4 space-y-4">
           <Card><CardContent className="p-4"><div className="flex flex-col gap-3 md:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Pesquisar número de fogo, marca, modelo, medida ou fornecedor" value={search} onChange={e => setSearch(e.target.value)}/></div><Select value={status} onValueChange={v => setStatus(v as any)}><SelectTrigger className="md:w-56"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="TODOS">Todos os status</SelectItem>{Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></div></CardContent></Card>
           <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Nº de fogo</TableHead><TableHead>Marca / Modelo</TableHead><TableHead>Medida</TableHead><TableHead>Tipo</TableHead><TableHead>Status</TableHead><TableHead>Sulco atual</TableHead><TableHead>Compra</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{filtered.map(p => <TableRow key={p.id}><TableCell className="font-semibold"><button className="text-primary hover:underline" onClick={() => setDetails(p)}>{p.numeroFogo}</button></TableCell><TableCell>{p.marca} - {p.modelo}</TableCell><TableCell>{p.medida}</TableCell><TableCell>{tipoLabels[p.tipo]}</TableCell><TableCell><Badge variant={p.status === "DESCARTADO" ? "destructive" : p.status === "INSTALADO" ? "default" : "secondary"}>{statusLabels[p.status]}</Badge></TableCell><TableCell>{p.sulcoAtual == null ? "—" : `${p.sulcoAtual.toFixed(1)} mm`}</TableCell><TableCell>{date(p.dataCompra)}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" onClick={() => setDetails(p)}><History className="h-4 w-4"/></Button><Button variant="ghost" size="icon" onClick={() => openEdit(p)}><Pencil className="h-4 w-4"/></Button><Button variant="ghost" size="icon" className="text-destructive" onClick={() => archive(p)}><Trash2 className="h-4 w-4"/></Button></div></TableCell></TableRow>)}{filtered.length === 0 && <TableRow><TableCell colSpan={8} className="h-28 text-center text-muted-foreground">Nenhum pneu encontrado.</TableCell></TableRow>}</TableBody></Table></div></CardContent></Card>
         </TabsContent>
         <TabsContent value="estoque" className="mt-4"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{Object.entries(condicaoLabels).map(([key, label]) => <Card key={key}><CardHeader><CardTitle className="text-sm">{label}</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{items.filter(p => p.condicao === key && p.status !== "DESCARTADO").length}</p><p className="text-xs text-muted-foreground">pneus cadastrados</p></CardContent></Card>)}</div></TabsContent>
+        <TabsContent value="instalacoes" className="mt-4"><PneuInstalacoes/></TabsContent>
+        <TabsContent value="rodizios" className="mt-4"><PneuRodizios/></TabsContent>
+        <TabsContent value="manutencao" className="mt-4"><PneuManutencao/></TabsContent><TabsContent value="gestao" className="mt-4"><PneuGestao/></TabsContent>
         <TabsContent value="historico" className="mt-4"><Card><CardContent className="p-4"><div className="space-y-4">{items.flatMap(p => p.eventos.map(e => ({ ...e, pneu: p }))).sort((a, b) => +new Date(b.data) - +new Date(a.data)).slice(0, 100).map(e => <div key={e.id} className="flex gap-3 border-b pb-4 last:border-0"><div className="mt-1 h-2.5 w-2.5 rounded-full bg-primary"/><div><p className="text-sm font-medium">Pneu {e.pneu.numeroFogo} — {e.observacoes || e.tipo}</p><p className="text-xs text-muted-foreground">{new Date(e.data).toLocaleString("pt-BR")}{e.responsavel ? ` • ${e.responsavel}` : ""}</p></div></div>)}</div></CardContent></Card></TabsContent>
       </Tabs>
     </div>

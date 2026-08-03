@@ -7,7 +7,7 @@ type AuthUser = {
   name: string;
   username: string;
   email: string;
-  role: "ADMIN" | "USER";
+  role: "ADMIN" | "GERENTE" | "BORRACHARIA" | "MANUTENCAO" | "VISUALIZACAO" | "USER";
 };
 
 type AuthResponse = { token: string; user: AuthUser };
