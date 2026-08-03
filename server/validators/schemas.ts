@@ -47,6 +47,16 @@ export const manifestoBody = z.object({
   id: id.optional(), clienteId: id, dataManifesto: dateOnly, produtos: z.array(manifestoProdutoBody), tipoManifesto, pdfUrl: z.string().max(20_000_000).optional().or(z.literal("")), createdAt: z.string().optional(),
 });
 
+export const abastecimentoBody = z.object({
+  id: id.optional(), clienteId: id, veiculoId: id, dataEmissao: dateOnly,
+  produto: text(255),
+  quantidadeLitros: z.coerce.number().finite().positive(),
+  valorUnitario: z.coerce.number().finite().min(0),
+  valorTotal: money.optional(),
+  hodometro: z.coerce.number().finite().min(0),
+  createdAt: z.string().optional(),
+});
+
 export const bodySchema = (schema: z.ZodTypeAny) => z.object({ body: schema, params: z.unknown().optional(), query: z.unknown().optional() });
 export const partialBodySchema = (schema: z.AnyZodObject) => z.object({ body: schema.partial(), params: z.object({ id }), query: z.unknown().optional() });
 
