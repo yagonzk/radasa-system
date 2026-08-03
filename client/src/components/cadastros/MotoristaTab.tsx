@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
-import { useMotoristas, type Motorista } from "@/lib/store";
+import { useMemo, useState, type ReactNode } from "react";
+import { useMotoristas, type Motorista, type StatusMotorista } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,8 +10,15 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import DataTable from "./DataTable";
-import { Plus, User } from "lucide-react";
+import { Plus, User, UserCheck, UserX } from "lucide-react";
 import { toast } from "sonner";
 
 interface FormState {
@@ -20,13 +27,27 @@ interface FormState {
   salarioBase: string;
 }
 
+type StatusFilter = "TODOS" | StatusMotorista;
+
 const emptyForm: FormState = { nome: "", cpf: "", salarioBase: "" };
 
 export default function MotoristaTab() {
-  const { items, create, update, remove } = useMotoristas();
+  const { items, create, update } = useMotoristas();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("TODOS");
+
+  const filteredItems = useMemo(
+    () =>
+      statusFilter === "TODOS"
+        ? items
+        : items.filter((item) => item.status === statusFilter),
+    [items, statusFilter]
+  );
+
+  const ativos = items.filter((item) => item.status === "ATIVO").length;
+  const demitidos = items.length - ativos;
 
   const handleOpenCreate = () => {
     setForm(emptyForm);
@@ -56,10 +77,36 @@ export default function MotoristaTab() {
       update(editingId, { nome: form.nome, cpf: form.cpf, salarioBase });
       toast.success("Motorista atualizado com sucesso!");
     } else {
-      create({ nome: form.nome, cpf: form.cpf, salarioBase });
+      create({
+        nome: form.nome,
+        cpf: form.cpf,
+        salarioBase,
+        status: "ATIVO",
+      });
       toast.success("Motorista cadastrado com sucesso!");
     }
     setOpen(false);
+  };
+
+  const handleStatusChange = (item: Motorista) => {
+    const nextStatus: StatusMotorista =
+      item.status === "ATIVO" ? "DEMITIDO" : "ATIVO";
+    const action = nextStatus === "DEMITIDO" ? "demitir" : "reativar";
+
+    if (
+      !window.confirm(
+        `Deseja realmente ${action} o motorista ${item.nome}?`
+      )
+    ) {
+      return;
+    }
+
+    update(item.id, { status: nextStatus });
+    toast.success(
+      nextStatus === "DEMITIDO"
+        ? "Motorista marcado como demitido."
+        : "Motorista reativado com sucesso."
+    );
   };
 
   const columns = [
@@ -85,14 +132,76 @@ export default function MotoristaTab() {
         </span>
       ),
     },
+    {
+      key: "status",
+      label: "Status",
+      render: (item: Motorista) => (
+        <span
+          className={
+            item.status === "ATIVO"
+              ? "inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700 dark:bg-green-500/15 dark:text-green-400"
+              : "inline-flex rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-400"
+          }
+        >
+          {item.status === "ATIVO" ? "Ativo" : "Demitido"}
+        </span>
+      ),
+    },
+    {
+      key: "situacao",
+      label: "Situação",
+      render: (item: Motorista) => (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => handleStatusChange(item)}
+          className={
+            item.status === "ATIVO"
+              ? "border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-500/30 dark:hover:bg-red-500/10"
+              : "border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700 dark:border-green-500/30 dark:hover:bg-green-500/10"
+          }
+        >
+          {item.status === "ATIVO" ? (
+            <UserX className="mr-1.5 h-4 w-4" />
+          ) : (
+            <UserCheck className="mr-1.5 h-4 w-4" />
+          )}
+          {item.status === "ATIVO" ? "Demitir" : "Reativar"}
+        </Button>
+      ),
+    },
   ];
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {items.length} motorista(s) cadastrado(s)
-        </p>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              {items.length} motorista(s): {ativos} ativo(s) e {demitidos} demitido(s)
+            </p>
+          </div>
+          <div className="w-full sm:w-44">
+            <Label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Filtrar status
+            </Label>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value as StatusFilter)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="TODOS">Todos</SelectItem>
+                <SelectItem value="ATIVO">Ativos</SelectItem>
+                <SelectItem value="DEMITIDO">Demitidos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         <Button onClick={handleOpenCreate} size="sm">
           <Plus className="mr-1.5 h-4 w-4" />
           Novo Motorista
@@ -101,10 +210,9 @@ export default function MotoristaTab() {
 
       <DataTable
         columns={columns}
-        data={items}
+        data={filteredItems}
         onEdit={handleOpenEdit}
-        onDelete={(item) => remove(item.id)}
-        emptyMessage="Nenhum motorista cadastrado. Clique em 'Novo Motorista' para começar."
+        emptyMessage="Nenhum motorista encontrado para o filtro selecionado."
       />
 
       <Dialog open={open} onOpenChange={setOpen}>

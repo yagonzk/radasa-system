@@ -13,7 +13,8 @@ export const idParamsSchema = z.object({
 });
 
 export const motoristaBody = z.object({
-  id: id.optional(), nome: text(), cpf: text(30), salarioBase: money, createdAt: z.string().optional(),
+  id: id.optional(), nome: text(), cpf: text(30), salarioBase: money,
+  status: z.enum(["ATIVO", "DEMITIDO"]).default("ATIVO"), createdAt: z.string().optional(),
 });
 export const chapaBody = z.object({
   id: id.optional(), nome: text(), valorFixo: money, createdAt: z.string().optional(),

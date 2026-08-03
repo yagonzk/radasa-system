@@ -1158,7 +1158,7 @@ export default function Manifestos() {
           open={!!pdfPreview}
           onOpenChange={(open) => !open && setPdfPreview(null)}
         >
-          <DialogContent className="w-[95vw] max-w-6xl h-[90vh] p-0 overflow-hidden flex flex-col">
+          <DialogContent className="h-[95vh] w-[95vw] max-w-[95vw] p-0 overflow-hidden flex flex-col sm:max-w-[95vw]">
             <DialogHeader className="px-5 py-4 border-b border-border shrink-0">
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5 text-primary" />

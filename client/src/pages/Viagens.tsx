@@ -48,6 +48,21 @@ export default function Viagens() {
   const [valorAbastecimento, setValorAbastecimento] = useState("");
   const [valorChapa, setValorChapa] = useState("");
 
+  const motoristasAtivos = useMemo(
+    () => motoristas.filter((motorista) => motorista.status === "ATIVO"),
+    [motoristas]
+  );
+
+  const motoristasDisponiveis = useMemo(
+    () =>
+      motoristas.filter(
+        (motorista) =>
+          motorista.status === "ATIVO" ||
+          motorista.id === editingViagem?.motoristaId
+      ),
+    [motoristas, editingViagem]
+  );
+
   const filteredViagens = useMemo(() => {
     return viagens.filter((v) => {
       if (filterMotorista && v.motoristaId !== filterMotorista) return false;
@@ -63,8 +78,8 @@ export default function Viagens() {
   }, 0);
 
   const handleOpenCreate = () => {
-    if (motoristas.length === 0) {
-      toast.error("Cadastre pelo menos um motorista antes de criar uma viagem.");
+    if (motoristasAtivos.length === 0) {
+      toast.error("Cadastre ou reative pelo menos um motorista antes de criar uma viagem.");
       return;
     }
     if (veiculos.length === 0) {
@@ -441,9 +456,10 @@ export default function Viagens() {
                     <SelectValue placeholder="Selecione o motorista" />
                   </SelectTrigger>
                   <SelectContent>
-                    {motoristas.map((m) => (
+                    {motoristasDisponiveis.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
                         {m.nome}
+                        {m.status === "DEMITIDO" ? " (Demitido)" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

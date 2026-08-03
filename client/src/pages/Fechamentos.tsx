@@ -29,6 +29,11 @@ export default function Fechamentos() {
   const [filterInicio, setFilterInicio] = useState("");
   const [filterFim, setFilterFim] = useState("");
 
+  const motoristasAtivos = useMemo(
+    () => motoristas.filter((motorista) => motorista.status === "ATIVO"),
+    [motoristas]
+  );
+
   const filteredFechamentos = useMemo(() => {
     return fechamentos.filter((f) => {
       if (filterInicio && f.dataInicio < filterInicio) return false;
@@ -38,8 +43,8 @@ export default function Fechamentos() {
   }, [fechamentos, filterInicio, filterFim]);
 
   const handleOpenCreate = () => {
-    if (motoristas.length === 0) {
-      toast.error("Cadastre pelo menos um motorista antes de criar um fechamento.");
+    if (motoristasAtivos.length === 0) {
+      toast.error("Cadastre ou reative pelo menos um motorista antes de criar um fechamento.");
       return;
     }
     if (locais.length === 0) {

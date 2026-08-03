@@ -64,6 +64,12 @@ export default function FechamentoForm({
   const [dataFim, setDataFim] = useState("");
   const [viagens, setViagens] = useState<ViagemFechamento[]>([]);
 
+  const motoristasDisponiveis = motoristas.filter(
+    (motorista) =>
+      motorista.status === "ATIVO" ||
+      motorista.id === editingFechamento?.motoristaId
+  );
+
   useEffect(() => {
     if (editingFechamento) {
       setMotoristaId(editingFechamento.motoristaId);
@@ -151,12 +157,12 @@ export default function FechamentoForm({
                 <SelectValue placeholder="Selecione um motorista" />
               </SelectTrigger>
               <SelectContent>
-                {motoristas.length === 0 ? (
+                {motoristasDisponiveis.length === 0 ? (
                   <SelectItem value="_empty" disabled>
                     Nenhum motorista cadastrado
                   </SelectItem>
                 ) : (
-                  motoristas.map((m) => (
+                  motoristasDisponiveis.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.nome} — {m.cpf}
                     </SelectItem>

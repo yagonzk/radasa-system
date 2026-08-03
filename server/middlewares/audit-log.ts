@@ -8,9 +8,21 @@ const labels: Record<string, string> = {
   manifestos: "manifesto", usuarios: "usuário",
 };
 
-function describe(method: string, path: string) {
+function describe(method: string, path: string, body?: unknown) {
   if (path.includes("/auth/change-password")) return "Alterou a própria senha";
-  const segment = path.split("?")[0].split("/").filter(Boolean).pop() || "registro";
+  const cleanPath = path.split("?")[0];
+  if (
+    cleanPath.includes("/motoristas/") &&
+    (method === "PUT" || method === "PATCH") &&
+    body &&
+    typeof body === "object" &&
+    "status" in body
+  ) {
+    return (body as { status?: string }).status === "DEMITIDO"
+      ? "Demitiu motorista"
+      : "Reativou motorista";
+  }
+  const segment = cleanPath.split("/").filter(Boolean).pop() || "registro";
   const parts = path.split("?")[0].split("/").filter(Boolean);
   const resource = parts.find(part => labels[part]);
   const label = resource ? labels[resource] : segment;
@@ -26,7 +38,7 @@ export const auditMutations: RequestHandler = (req, res, next) => {
     if (!req.user || res.statusCode >= 400 || req.path.includes("/auth/login") || req.path.includes("/auth/register")) return;
     void prisma.auditLog.create({
       data: {
-        userId: req.user.id, action: describe(req.method, req.originalUrl), method: req.method,
+        userId: req.user.id, action: describe(req.method, req.originalUrl, req.body), method: req.method,
         path: req.originalUrl, entityId: req.params.id || null,
       },
     }).catch(error => logger.error({ error }, "Falha ao registrar log de auditoria"));

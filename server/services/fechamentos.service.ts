@@ -11,14 +11,35 @@ const serialize = (item: any) => ({
 });
 const nested = (input: any) => input.viagens.map((v: any) => ({ localId: v.localId, quantidade: v.quantidade }));
 
+async function ensureMotoristaDisponivel(motoristaId: string, fechamentoId?: string) {
+  const motorista = await prisma.motorista.findUnique({
+    where: { id: motoristaId },
+    select: { status: true },
+  });
+  if (!motorista) throw new AppError(404, "Motorista não encontrado.");
+  if (motorista.status === "ATIVO") return;
+
+  if (fechamentoId) {
+    const atual = await prisma.fechamento.findUnique({
+      where: { id: fechamentoId },
+      select: { motoristaId: true },
+    });
+    if (atual?.motoristaId === motoristaId) return;
+  }
+
+  throw new AppError(409, "Motorista demitido não pode ser selecionado em um novo fechamento.");
+}
+
 export const fechamentosService = {
   async list() { return (await prisma.fechamento.findMany({ include, orderBy: { createdAt: "desc" } })).map(serialize); },
   async get(id: string) { const item = await prisma.fechamento.findUnique({ where: { id }, include }); if (!item) throw new AppError(404, "Fechamento não encontrado."); return serialize(item); },
   async create(input: any) {
+    await ensureMotoristaDisponivel(input.motoristaId);
     const item = await prisma.fechamento.create({ include, data: { id: input.id, motoristaId: input.motoristaId, dataInicio: parseDateOnly(input.dataInicio), dataFim: parseDateOnly(input.dataFim), valorTotal: input.valorTotal ?? 0, createdAt: input.createdAt ? new Date(input.createdAt) : undefined, viagens: { create: nested(input) } } });
     return serialize(item);
   },
   async update(id: string, input: any) {
+    await ensureMotoristaDisponivel(input.motoristaId, id);
     const item = await prisma.$transaction(async (tx) => {
       await tx.fechamentoViagem.deleteMany({ where: { fechamentoId: id } });
       return tx.fechamento.update({ where: { id }, include, data: { motoristaId: input.motoristaId, dataInicio: parseDateOnly(input.dataInicio), dataFim: parseDateOnly(input.dataFim), valorTotal: input.valorTotal ?? 0, viagens: { create: nested(input) } } });
