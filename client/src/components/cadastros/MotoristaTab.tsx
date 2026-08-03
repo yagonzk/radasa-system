@@ -65,7 +65,7 @@ export default function MotoristaTab() {
     setOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.nome.trim() || !form.cpf.trim()) {
       toast.error("Preencha nome e CPF.");
@@ -73,22 +73,27 @@ export default function MotoristaTab() {
     }
     const salarioBase = parseFloat(form.salarioBase) || 0;
 
-    if (editingId) {
-      update(editingId, { nome: form.nome, cpf: form.cpf, salarioBase });
-      toast.success("Motorista atualizado com sucesso!");
-    } else {
-      create({
-        nome: form.nome,
-        cpf: form.cpf,
-        salarioBase,
-        status: "ATIVO",
-      });
-      toast.success("Motorista cadastrado com sucesso!");
+    try {
+      if (editingId) {
+        await update(editingId, { nome: form.nome, cpf: form.cpf, salarioBase });
+        toast.success("Motorista atualizado com sucesso!");
+      } else {
+        await create({
+          nome: form.nome,
+          cpf: form.cpf,
+          salarioBase,
+          status: "ATIVO",
+        });
+        toast.success("Motorista cadastrado com sucesso!");
+      }
+      setOpen(false);
+    } catch (error) {
+      console.error("Falha ao salvar motorista.", error);
+      toast.error("Não foi possível salvar o motorista.");
     }
-    setOpen(false);
   };
 
-  const handleStatusChange = (item: Motorista) => {
+  const handleStatusChange = async (item: Motorista) => {
     const nextStatus: StatusMotorista =
       item.status === "ATIVO" ? "DEMITIDO" : "ATIVO";
     const action = nextStatus === "DEMITIDO" ? "demitir" : "reativar";
@@ -101,12 +106,17 @@ export default function MotoristaTab() {
       return;
     }
 
-    update(item.id, { status: nextStatus });
-    toast.success(
-      nextStatus === "DEMITIDO"
-        ? "Motorista marcado como demitido."
-        : "Motorista reativado com sucesso."
-    );
+    try {
+      await update(item.id, { status: nextStatus });
+      toast.success(
+        nextStatus === "DEMITIDO"
+          ? "Motorista marcado como demitido."
+          : "Motorista reativado com sucesso."
+      );
+    } catch (error) {
+      console.error("Falha ao alterar o status do motorista.", error);
+      toast.error("Não foi possível alterar o status do motorista.");
+    }
   };
 
   const columns = [

@@ -34,23 +34,56 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string) {
     return () => window.removeEventListener(eventName(resource), handler);
   }, [refresh, resource]);
 
-  const create = useCallback((data: Omit<T, "id" | "createdAt">): T => {
+  const create = useCallback(async (data: Omit<T, "id" | "createdAt">): Promise<T> => {
     const newItem = { ...data, id: generateId(), createdAt: new Date().toISOString() } as T;
     setItems(current => [...current, newItem]);
-    void api.post<T>(`/${resource}`, newItem).then(() => window.dispatchEvent(new Event(eventName(resource)))).catch(() => setItems(current => current.filter(item => item.id !== newItem.id)));
-    return newItem;
+
+    try {
+      const createdItem = (await api.post<T>(`/${resource}`, newItem)).data;
+      setItems(current => current.map(item => item.id === newItem.id ? createdItem : item));
+      window.dispatchEvent(new Event(eventName(resource)));
+      return createdItem;
+    } catch (error) {
+      setItems(current => current.filter(item => item.id !== newItem.id));
+      throw error;
+    }
   }, [resource]);
 
-  const update = useCallback((id: string, data: Partial<Omit<T, "id" | "createdAt">>) => {
+  const update = useCallback(async (id: string, data: Partial<Omit<T, "id" | "createdAt">>): Promise<T> => {
     let previous: T | undefined;
-    setItems(current => current.map(item => { if (item.id !== id) return item; previous = item; return { ...item, ...data }; }));
-    void api.put<T>(`/${resource}/${id}`, data).then(() => window.dispatchEvent(new Event(eventName(resource)))).catch(() => { if (previous) setItems(current => current.map(item => item.id === id ? previous! : item)); });
+    setItems(current => current.map(item => {
+      if (item.id !== id) return item;
+      previous = item;
+      return { ...item, ...data };
+    }));
+
+    try {
+      const updatedItem = (await api.put<T>(`/${resource}/${id}`, data)).data;
+      setItems(current => current.map(item => item.id === id ? updatedItem : item));
+      window.dispatchEvent(new Event(eventName(resource)));
+      return updatedItem;
+    } catch (error) {
+      if (previous) {
+        setItems(current => current.map(item => item.id === id ? previous! : item));
+      }
+      throw error;
+    }
   }, [resource]);
 
-  const remove = useCallback((id: string) => {
+  const remove = useCallback(async (id: string): Promise<void> => {
     let previous: T | undefined;
-    setItems(current => { previous = current.find(item => item.id === id); return current.filter(item => item.id !== id); });
-    void api.delete(`/${resource}/${id}`).then(() => window.dispatchEvent(new Event(eventName(resource)))).catch(() => { if (previous) setItems(current => [...current, previous!]); });
+    setItems(current => {
+      previous = current.find(item => item.id === id);
+      return current.filter(item => item.id !== id);
+    });
+
+    try {
+      await api.delete(`/${resource}/${id}`);
+      window.dispatchEvent(new Event(eventName(resource)));
+    } catch (error) {
+      if (previous) setItems(current => [...current, previous!]);
+      throw error;
+    }
   }, [resource]);
 
   const getById = useCallback((id: string) => items.find(item => item.id === id), [items]);

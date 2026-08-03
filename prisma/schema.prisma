@@ -42,8 +42,9 @@ model Motorista {
   id          String       @id @default(cuid())
   nome        String
   cpf         String
-  salarioBase Decimal      @db.Decimal(14, 2)
-  createdAt   DateTime     @default(now())
+  salarioBase Decimal          @db.Decimal(14, 2)
+  status      StatusMotorista @default(ATIVO)
+  createdAt   DateTime         @default(now())
   updatedAt   DateTime     @updatedAt
   viagens     Viagem[]
   fechamentos Fechamento[]
