@@ -47,14 +47,20 @@ export const manifestoBody = z.object({
   id: id.optional(), clienteId: id, dataManifesto: dateOnly, produtos: z.array(manifestoProdutoBody), tipoManifesto, pdfUrl: z.string().max(20_000_000).optional().or(z.literal("")), createdAt: z.string().optional(),
 });
 
-export const abastecimentoBody = z.object({
-  id: id.optional(), clienteId: id, veiculoId: id, dataEmissao: dateOnly,
-  produto: text(255),
+export const abastecimentoProdutoBody = z.object({
+  produtoId: id,
   quantidadeLitros: z.coerce.number().finite().positive(),
   valorUnitario: z.coerce.number().finite().min(0),
+  valorTotal: money.optional(),
+});
+
+export const abastecimentoBody = z.object({
+  id: id.optional(), clienteId: id, veiculoId: id, dataEmissao: dateOnly,
+  produtos: z.array(abastecimentoProdutoBody).min(1, "Adicione pelo menos um produto."),
   valorDesconto: z.coerce.number().finite().min(0).optional().default(0),
   valorTotal: money.optional(),
   hodometro: z.coerce.number().finite().min(0),
+  pdfUrl: z.string().max(20_000_000).optional().nullable().or(z.literal("")),
   createdAt: z.string().optional(),
 });
 

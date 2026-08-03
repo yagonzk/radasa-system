@@ -88,6 +88,7 @@ model Produto {
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
   manifestos    ManifestoProduto[]
+  abastecimentos AbastecimentoProduto[]
 
   @@index([nome])
   @@index([codigoInterno])
@@ -204,26 +205,39 @@ model ManifestoProduto {
 
 
 model Abastecimento {
-  id               String   @id @default(cuid())
+  id               String                  @id @default(cuid())
   clienteId        String
   veiculoId        String
-  dataEmissao      DateTime @db.Date
-  produto          String
-  quantidadeLitros Decimal  @db.Decimal(14, 3)
-  valorUnitario    Decimal  @db.Decimal(14, 4)
-  valorDesconto    Decimal  @default(0) @db.Decimal(14, 2)
-  valorTotal       Decimal  @db.Decimal(14, 2)
-  hodometro        Decimal  @db.Decimal(14, 1)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  cliente          Cliente  @relation(fields: [clienteId], references: [id], onDelete: Restrict)
-  veiculo          Veiculo  @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
+  dataEmissao      DateTime                @db.Date
+  valorDesconto    Decimal                 @default(0) @db.Decimal(14, 2)
+  valorTotal       Decimal                 @db.Decimal(14, 2)
+  hodometro        Decimal                 @db.Decimal(14, 1)
+  pdfUrl           String?                 @db.Text
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  cliente          Cliente                 @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  veiculo          Veiculo                 @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
+  produtos         AbastecimentoProduto[]
 
   @@index([clienteId])
   @@index([veiculoId])
   @@index([dataEmissao])
-  @@index([produto])
   @@map("abastecimentos")
+}
+
+model AbastecimentoProduto {
+  id                String          @id @default(cuid())
+  abastecimentoId   String
+  produtoId         String
+  quantidadeLitros  Decimal         @db.Decimal(14, 3)
+  valorUnitario     Decimal         @db.Decimal(14, 4)
+  valorTotal        Decimal         @db.Decimal(14, 2)
+  abastecimento     Abastecimento   @relation(fields: [abastecimentoId], references: [id], onDelete: Cascade)
+  produto            Produto         @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+
+  @@index([abastecimentoId])
+  @@index([produtoId])
+  @@map("abastecimento_produtos")
 }
 
 model AuditLog {
