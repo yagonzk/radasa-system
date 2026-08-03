@@ -240,6 +240,100 @@ model AbastecimentoProduto {
   @@map("abastecimento_produtos")
 }
 
+
+enum StatusPneu {
+  ESTOQUE
+  INSTALADO
+  MANUTENCAO
+  RECAPAGEM
+  DESCARTADO
+}
+
+enum TipoPneu {
+  DIRECIONAL
+  TRACAO
+  LIVRE
+}
+
+enum CondicaoPneu {
+  NOVO
+  USADO
+  RECAPADO
+  AGUARDANDO_RECAPAGEM
+}
+
+enum TipoEventoPneu {
+  COMPRA
+  ALTERACAO
+  STATUS
+  FOTO
+}
+
+model Pneu {
+  id                   String          @id @default(cuid())
+  numeroFogo           String          @unique
+  codigoBarras         String?
+  qrCode               String?
+  marca                String
+  modelo               String
+  medida               String
+  dot                  String
+  numeroSerie          String?
+  tipo                  TipoPneu
+  valorCompra           Decimal         @db.Decimal(14, 2)
+  fornecedor           String
+  dataCompra            DateTime        @db.Date
+  maxRecapagens         Int             @default(0)
+  recapagensRealizadas  Int             @default(0)
+  status                StatusPneu      @default(ESTOQUE)
+  condicao              CondicaoPneu    @default(NOVO)
+  sulcoInicial          Decimal?        @db.Decimal(6, 2)
+  sulcoAtual            Decimal?        @db.Decimal(6, 2)
+  kmAtual               Decimal         @default(0) @db.Decimal(14, 1)
+  proximoRodizioKm      Decimal?        @db.Decimal(14, 1)
+  observacoes           String?         @db.Text
+  deletedAt             DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  fotos                 PneuFoto[]
+  eventos               PneuEvento[]
+
+  @@index([status])
+  @@index([condicao])
+  @@index([marca])
+  @@index([dataCompra])
+  @@map("pneus")
+}
+
+model PneuFoto {
+  id        String   @id @default(cuid())
+  pneuId    String
+  url       String   @db.Text
+  legenda   String?
+  createdAt DateTime @default(now())
+  pneu      Pneu     @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+
+  @@index([pneuId])
+  @@map("pneu_fotos")
+}
+
+model PneuEvento {
+  id          String         @id @default(cuid())
+  pneuId      String
+  tipo        TipoEventoPneu
+  data        DateTime       @default(now())
+  quilometragem Decimal?     @db.Decimal(14, 1)
+  responsavel String?
+  observacoes String?        @db.Text
+  dados       Json?
+  createdAt   DateTime       @default(now())
+  pneu        Pneu           @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+
+  @@index([pneuId])
+  @@index([data])
+  @@map("pneu_eventos")
+}
+
 model AuditLog {
   id        String   @id @default(cuid())
   userId    String

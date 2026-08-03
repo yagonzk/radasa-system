@@ -16,6 +16,12 @@ export interface ManifestoProduto { produtoId: string; quantidade: number; valor
 export interface Manifesto { id: string; clienteId: string; dataManifesto: string; produtos: ManifestoProduto[]; tipoManifesto: TipoManifesto; pdfUrl?: string; createdAt: string; }
 export interface AbastecimentoProduto { produtoId: string; quantidadeLitros: number; valorUnitario: number; valorTotal: number; }
 export interface Abastecimento { id: string; clienteId: string; veiculoId: string; dataEmissao: string; produtos: AbastecimentoProduto[]; valorDesconto: number; valorTotal: number; hodometro: number; pdfUrl?: string | null; createdAt: string; }
+export type StatusPneu = "ESTOQUE" | "INSTALADO" | "MANUTENCAO" | "RECAPAGEM" | "DESCARTADO";
+export type TipoPneu = "DIRECIONAL" | "TRACAO" | "LIVRE";
+export type CondicaoPneu = "NOVO" | "USADO" | "RECAPADO" | "AGUARDANDO_RECAPAGEM";
+export interface PneuFoto { id: string; url: string; legenda?: string | null; createdAt: string; }
+export interface PneuEvento { id: string; tipo: "COMPRA" | "ALTERACAO" | "STATUS" | "FOTO"; data: string; quilometragem?: number | null; responsavel?: string | null; observacoes?: string | null; dados?: unknown; createdAt: string; }
+export interface Pneu { id: string; numeroFogo: string; codigoBarras?: string | null; qrCode?: string | null; marca: string; modelo: string; medida: string; dot: string; numeroSerie?: string | null; tipo: TipoPneu; valorCompra: number; fornecedor: string; dataCompra: string; maxRecapagens: number; recapagensRealizadas: number; status: StatusPneu; condicao: CondicaoPneu; sulcoInicial?: number | null; sulcoAtual?: number | null; kmAtual: number; proximoRodizioKm?: number | null; observacoes?: string | null; fotos: PneuFoto[]; eventos: PneuEvento[]; createdAt: string; }
 
 type Entity = { id: string; createdAt: string };
 const eventName = (resource: string) => `radasa-api-change:${resource}`;
@@ -100,6 +106,7 @@ export const useLocais = () => useApiCrud<Local>("locais", "Local");
 export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");
 export const useViagens = () => useApiCrud<Viagem>("viagens", "Viagem");
 export const useAbastecimentos = () => useApiCrud<Abastecimento>("abastecimentos", "Abastecimento");
+export const usePneus = () => useApiCrud<Pneu>("pneus", "Pneu");
 
 export function useFechamentos() {
   const crud = useApiCrud<Fechamento>("fechamentos", "Fechamento");

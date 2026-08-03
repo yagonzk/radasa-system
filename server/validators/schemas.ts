@@ -64,6 +64,18 @@ export const abastecimentoBody = z.object({
   createdAt: z.string().optional(),
 });
 
+export const pneuBody = z.object({
+  id: id.optional(), numeroFogo: text(100), codigoBarras: optionalText(255), qrCode: optionalText(255),
+  marca: text(120), modelo: text(120), medida: text(80), dot: text(20), numeroSerie: optionalText(120),
+  tipo: z.enum(["DIRECIONAL", "TRACAO", "LIVRE"]), valorCompra: money, fornecedor: text(180), dataCompra: dateOnly,
+  maxRecapagens: z.coerce.number().int().min(0).max(20).default(0), recapagensRealizadas: z.coerce.number().int().min(0).max(20).default(0),
+  status: z.enum(["ESTOQUE", "INSTALADO", "MANUTENCAO", "RECAPAGEM", "DESCARTADO"]).default("ESTOQUE"),
+  condicao: z.enum(["NOVO", "USADO", "RECAPADO", "AGUARDANDO_RECAPAGEM"]).default("NOVO"),
+  sulcoInicial: z.coerce.number().finite().min(0).max(100).optional().nullable(), sulcoAtual: z.coerce.number().finite().min(0).max(100).optional().nullable(),
+  kmAtual: z.coerce.number().finite().min(0).default(0), proximoRodizioKm: z.coerce.number().finite().min(0).optional().nullable(),
+  observacoes: z.string().max(5000).optional().or(z.literal("")), fotos: z.array(z.string().max(20_000_000)).max(10).optional(), createdAt: z.string().optional(),
+});
+
 export const bodySchema = (schema: z.ZodTypeAny) => z.object({ body: schema, params: z.unknown().optional(), query: z.unknown().optional() });
 export const partialBodySchema = (schema: z.AnyZodObject) => z.object({ body: schema.partial(), params: z.object({ id }), query: z.unknown().optional() });
 
