@@ -27,12 +27,6 @@ enum StatusMotorista {
   DEMITIDO
 }
 
-enum CategoriaEstoque {
-  PISCINA
-  PECA
-  FERRAMENTA
-}
-
 enum TipoMovimentacaoEstoque {
   ENTRADA
   SAIDA
@@ -100,7 +94,7 @@ model Produto {
   id                   String                 @id @default(cuid())
   nome                 String
   codigoInterno        String
-  categoriaEstoque     CategoriaEstoque       @default(PISCINA)
+  categoriaEstoque     String                 @default("Produtos de piscina")
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   manifestos           ManifestoProduto[]

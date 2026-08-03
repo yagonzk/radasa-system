@@ -1,6 +1,6 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import Layout from "@/components/Layout";
-import { useEstoque, useProdutos, type CategoriaEstoque, type TipoMovimentacaoEstoque } from "@/lib/store";
+import { useEstoque, useProdutos, type TipoMovimentacaoEstoque } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -12,29 +12,182 @@ import { ArrowDownToLine, ArrowUpFromLine, Boxes, Plus, Trash2 } from "lucide-re
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 
-const categories: Array<{value:CategoriaEstoque;label:string}> = [
-  {value:"PISCINA",label:"Produtos de piscina"},{value:"PECA",label:"Peças"},{value:"FERRAMENTA",label:"Ferramentas"},
-];
-const today = () => new Date().toISOString().slice(0,10);
-export default function Estoque(){
- const { items:produtos }=useProdutos(); const { movimentacoes,resumo,create,remove }=useEstoque();
- const [categoria,setCategoria]=useState<CategoriaEstoque>("PISCINA"); const [open,setOpen]=useState(false);
- const [form,setForm]=useState({produtoId:"",tipo:"ENTRADA" as TipoMovimentacaoEstoque,quantidade:"",valorUnitario:"",data:today(),observacoes:""});
- const produtosCategoria=useMemo(()=>produtos.filter(p=>(p.categoriaEstoque||"PISCINA")===categoria),[produtos,categoria]);
- const resumoCategoria=useMemo(()=>resumo.filter(r=>(r.produto.categoriaEstoque||"PISCINA")===categoria),[resumo,categoria]);
- const movimentosCategoria=useMemo(()=>movimentacoes.filter(m=>(m.produto.categoriaEstoque||"PISCINA")===categoria),[movimentacoes,categoria]);
- const totalEntradas=resumoCategoria.reduce((a,r)=>a+r.entradas,0), totalSaidas=resumoCategoria.reduce((a,r)=>a+r.saidas,0), totalEstoque=resumoCategoria.reduce((a,r)=>a+r.estoque,0);
- const submit=async(e:FormEvent)=>{e.preventDefault(); try{await create({produtoId:form.produtoId,tipo:form.tipo,quantidade:Number(form.quantidade.replace(",",".")),valorUnitario:Number(form.valorUnitario.replace(",",".")||0),data:form.data,observacoes:form.observacoes}); toast.success(form.tipo==="ENTRADA"?"Entrada registrada.":"Saída registrada."); setOpen(false); setForm({produtoId:"",tipo:"ENTRADA",quantidade:"",valorUnitario:"",data:today(),observacoes:""});}catch(err:any){toast.error(err?.response?.data?.message||"Não foi possível registrar a movimentação.");}};
- return <Layout><div className="space-y-6">
-  <div className="flex items-start justify-between"><div><h1 className="text-2xl font-bold">Estoque</h1><p className="text-sm text-muted-foreground">Controle entradas, saídas e o saldo atual dos produtos cadastrados.</p></div><Button onClick={()=>setOpen(true)}><Plus className="mr-2 h-4 w-4"/>Nova movimentação</Button></div>
-  <Tabs value={categoria} onValueChange={v=>setCategoria(v as CategoriaEstoque)}><TabsList className="grid w-full grid-cols-3">{categories.map(c=><TabsTrigger key={c.value} value={c.value}>{c.label}</TabsTrigger>)}</TabsList></Tabs>
-  <div className="grid gap-4 md:grid-cols-3">
-   <Card title="Entradas" value={totalEntradas} icon={<ArrowDownToLine className="h-4 w-4"/>}/><Card title="Saídas" value={totalSaidas} icon={<ArrowUpFromLine className="h-4 w-4"/>}/><Card title="Estoque atual" value={totalEstoque} icon={<Boxes className="h-4 w-4"/>}/>
-  </div>
-  <div className="overflow-hidden rounded-xl border bg-card"><table className="w-full text-sm"><thead className="bg-muted/30"><tr>{["Produto","Código","Entradas","Saídas","Estoque","Valor das saídas"].map(h=><th key={h} className="px-4 py-3 text-left text-muted-foreground">{h}</th>)}</tr></thead><tbody>{resumoCategoria.map(r=><tr key={r.produto.id} className="border-t"><td className="px-4 py-3 font-medium">{r.produto.nome}</td><td className="px-4 py-3">{r.produto.codigoInterno}</td><td className="px-4 py-3 text-emerald-500">{r.entradas.toLocaleString("pt-BR")}</td><td className="px-4 py-3 text-amber-500">{r.saidas.toLocaleString("pt-BR")}</td><td className="px-4 py-3 font-bold text-primary">{r.estoque.toLocaleString("pt-BR")}</td><td className="px-4 py-3">{formatBRL(r.valorSaidas)}</td></tr>)}{!resumoCategoria.length&&<tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Nenhum produto nesta categoria.</td></tr>}</tbody></table></div>
-  <div><h2 className="mb-3 font-semibold">Últimas movimentações</h2><div className="overflow-hidden rounded-xl border bg-card"><table className="w-full text-sm"><thead className="bg-muted/30"><tr>{["Data","Produto","Tipo","Quantidade","Valor unitário","Valor total","Ações"].map(h=><th key={h} className="px-4 py-3 text-left text-muted-foreground">{h}</th>)}</tr></thead><tbody>{movimentosCategoria.map(m=><tr key={m.id} className="border-t"><td className="px-4 py-3">{formatDate(m.data)}</td><td className="px-4 py-3 font-medium">{m.produto.nome}</td><td className="px-4 py-3"><span className={m.tipo==="ENTRADA"?"text-emerald-500":"text-amber-500"}>{m.tipo==="ENTRADA"?"Entrada":"Saída"}</span></td><td className="px-4 py-3">{m.quantidade.toLocaleString("pt-BR")}</td><td className="px-4 py-3">{formatBRL(m.valorUnitario)}</td><td className="px-4 py-3">{formatBRL(m.valorTotal)}</td><td className="px-4 py-3"><button onClick={async()=>{try{await remove(m.id);toast.success("Movimentação removida.")}catch(err:any){toast.error(err?.response?.data?.message||"Não foi possível remover.")}}} className="text-destructive"><Trash2 className="h-4 w-4"/></button></td></tr>)}{!movimentosCategoria.length&&<tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Nenhuma movimentação registrada.</td></tr>}</tbody></table></div></div>
-  <Dialog open={open} onOpenChange={setOpen}><DialogContent className="sm:max-w-[560px]"><DialogHeader><DialogTitle>Nova movimentação</DialogTitle></DialogHeader><form onSubmit={submit} className="space-y-4"><div className="grid grid-cols-2 gap-4"><Field label="Tipo"><Select value={form.tipo} onValueChange={v=>setForm({...form,tipo:v as TipoMovimentacaoEstoque})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="ENTRADA">Entrada</SelectItem><SelectItem value="SAIDA">Saída</SelectItem></SelectContent></Select></Field><Field label="Data"><DatePicker value={form.data} onChange={v=>setForm({...form,data:v})} placeholder="Selecione uma data"/></Field></div><Field label="Produto"><Select value={form.produtoId} onValueChange={v=>setForm({...form,produtoId:v})}><SelectTrigger><SelectValue placeholder="Selecione o produto"/></SelectTrigger><SelectContent>{produtosCategoria.map(p=><SelectItem key={p.id} value={p.id}>{p.nome} - {p.codigoInterno}</SelectItem>)}</SelectContent></Select></Field><div className="grid grid-cols-2 gap-4"><Field label="Quantidade"><Input required value={form.quantidade} onChange={e=>setForm({...form,quantidade:e.target.value})} placeholder="0"/></Field><Field label={form.tipo==="SAIDA"?"Valor unitário da saída *":"Valor unitário"}><Input required={form.tipo==="SAIDA"} value={form.valorUnitario} onChange={e=>setForm({...form,valorUnitario:e.target.value})} placeholder="0,00"/></Field></div><Field label="Observações"><Input value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})}/></Field><div className="flex justify-end"><Button type="submit">Registrar</Button></div></form></DialogContent></Dialog>
- </div></Layout>
+const DEFAULT_CATEGORY = "Produtos de piscina";
+const DEFAULT_CATEGORIES = [DEFAULT_CATEGORY, "Peças", "Ferramentas"];
+const today = () => new Date().toISOString().slice(0, 10);
+
+export default function Estoque() {
+  const { items: produtos } = useProdutos();
+  const { movimentacoes, resumo, create, remove } = useEstoque();
+  const categories = useMemo(
+    () => Array.from(new Set([...DEFAULT_CATEGORIES, ...produtos.map((p) => p.categoriaEstoque).filter(Boolean)])),
+    [produtos],
+  );
+  const [categoria, setCategoria] = useState(DEFAULT_CATEGORY);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    produtoId: "",
+    tipo: "ENTRADA" as TipoMovimentacaoEstoque,
+    quantidade: "",
+    valorUnitario: "",
+    data: today(),
+    observacoes: "",
+  });
+
+  useEffect(() => {
+    if (!categories.includes(categoria)) setCategoria(categories[0] ?? DEFAULT_CATEGORY);
+  }, [categories, categoria]);
+
+  const produtosCategoria = useMemo(
+    () => produtos.filter((p) => (p.categoriaEstoque || DEFAULT_CATEGORY) === categoria),
+    [produtos, categoria],
+  );
+  const resumoCategoria = useMemo(
+    () => resumo.filter((r) => (r.produto.categoriaEstoque || DEFAULT_CATEGORY) === categoria),
+    [resumo, categoria],
+  );
+  const movimentosCategoria = useMemo(
+    () => movimentacoes.filter((m) => (m.produto.categoriaEstoque || DEFAULT_CATEGORY) === categoria),
+    [movimentacoes, categoria],
+  );
+  const totalEntradas = resumoCategoria.reduce((a, r) => a + r.entradas, 0);
+  const totalSaidas = resumoCategoria.reduce((a, r) => a + r.saidas, 0);
+  const totalEstoque = resumoCategoria.reduce((a, r) => a + r.estoque, 0);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await create({
+        produtoId: form.produtoId,
+        tipo: form.tipo,
+        quantidade: Number(form.quantidade.replace(",", ".")),
+        valorUnitario: Number(form.valorUnitario.replace(",", ".") || 0),
+        data: form.data,
+        observacoes: form.observacoes,
+      });
+      toast.success(form.tipo === "ENTRADA" ? "Entrada registrada." : "Saída registrada.");
+      setOpen(false);
+      setForm({ produtoId: "", tipo: "ENTRADA", quantidade: "", valorUnitario: "", data: today(), observacoes: "" });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Não foi possível registrar a movimentação.");
+    }
+  };
+
+  return (
+    <Layout>
+      <div className="space-y-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Estoque</h1>
+            <p className="text-sm text-muted-foreground">Controle entradas, saídas e o saldo atual dos produtos cadastrados.</p>
+          </div>
+          <Button onClick={() => setOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />Nova movimentação
+          </Button>
+        </div>
+
+        <Tabs value={categoria} onValueChange={setCategoria}>
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 p-1">
+            {categories.map((category) => (
+              <TabsTrigger key={category} value={category} className="flex-1 basis-[180px]">
+                {category}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card title="Entradas" value={totalEntradas} icon={<ArrowDownToLine className="h-4 w-4" />} />
+          <Card title="Saídas" value={totalSaidas} icon={<ArrowUpFromLine className="h-4 w-4" />} />
+          <Card title="Estoque atual" value={totalEstoque} icon={<Boxes className="h-4 w-4" />} />
+        </div>
+
+        <div className="overflow-hidden rounded-xl border bg-card">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/30">
+              <tr>{["Produto", "Código", "Entradas", "Saídas", "Estoque", "Valor das saídas"].map((h) => <th key={h} className="px-4 py-3 text-left text-muted-foreground">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {resumoCategoria.map((r) => (
+                <tr key={r.produto.id} className="border-t">
+                  <td className="px-4 py-3 font-medium">{r.produto.nome}</td>
+                  <td className="px-4 py-3">{r.produto.codigoInterno}</td>
+                  <td className="px-4 py-3 text-emerald-500">{r.entradas.toLocaleString("pt-BR")}</td>
+                  <td className="px-4 py-3 text-amber-500">{r.saidas.toLocaleString("pt-BR")}</td>
+                  <td className="px-4 py-3 font-bold text-primary">{r.estoque.toLocaleString("pt-BR")}</td>
+                  <td className="px-4 py-3">{formatBRL(r.valorSaidas)}</td>
+                </tr>
+              ))}
+              {!resumoCategoria.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Nenhum produto nesta categoria.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h2 className="mb-3 font-semibold">Últimas movimentações</h2>
+          <div className="overflow-hidden rounded-xl border bg-card">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30">
+                <tr>{["Data", "Produto", "Tipo", "Quantidade", "Valor unitário", "Valor total", "Ações"].map((h) => <th key={h} className="px-4 py-3 text-left text-muted-foreground">{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {movimentosCategoria.map((m) => (
+                  <tr key={m.id} className="border-t">
+                    <td className="px-4 py-3">{formatDate(m.data)}</td>
+                    <td className="px-4 py-3 font-medium">{m.produto.nome}</td>
+                    <td className="px-4 py-3"><span className={m.tipo === "ENTRADA" ? "text-emerald-500" : "text-amber-500"}>{m.tipo === "ENTRADA" ? "Entrada" : "Saída"}</span></td>
+                    <td className="px-4 py-3">{m.quantidade.toLocaleString("pt-BR")}</td>
+                    <td className="px-4 py-3">{formatBRL(m.valorUnitario)}</td>
+                    <td className="px-4 py-3">{formatBRL(m.valorTotal)}</td>
+                    <td className="px-4 py-3">
+                      <button onClick={async () => { try { await remove(m.id); toast.success("Movimentação removida."); } catch (err: any) { toast.error(err?.response?.data?.message || "Não foi possível remover."); } }} className="text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!movimentosCategoria.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Nenhuma movimentação registrada.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="sm:max-w-[560px]">
+            <DialogHeader><DialogTitle>Nova movimentação</DialogTitle></DialogHeader>
+            <form onSubmit={submit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Tipo">
+                  <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v as TipoMovimentacaoEstoque })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="ENTRADA">Entrada</SelectItem><SelectItem value="SAIDA">Saída</SelectItem></SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Data"><DatePicker value={form.data} onChange={(v) => setForm({ ...form, data: v })} placeholder="Selecione uma data" /></Field>
+              </div>
+              <Field label="Produto">
+                <Select value={form.produtoId} onValueChange={(v) => setForm({ ...form, produtoId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o produto" /></SelectTrigger>
+                  <SelectContent>{produtosCategoria.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome} - {p.codigoInterno}</SelectItem>)}</SelectContent>
+                </Select>
+              </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Quantidade"><Input required value={form.quantidade} onChange={(e) => setForm({ ...form, quantidade: e.target.value })} placeholder="0" /></Field>
+                <Field label={form.tipo === "SAIDA" ? "Valor unitário da saída *" : "Valor unitário"}><Input required={form.tipo === "SAIDA"} value={form.valorUnitario} onChange={(e) => setForm({ ...form, valorUnitario: e.target.value })} placeholder="0,00" /></Field>
+              </div>
+              <Field label="Observações"><Input value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} /></Field>
+              <div className="flex justify-end"><Button type="submit">Registrar</Button></div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </Layout>
+  );
 }
-function Card({title,value,icon}:{title:string;value:number;icon:ReactNode}){return <div className="rounded-xl border bg-card p-5"><div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">{icon}{title}</div><div className="mt-2 text-2xl font-bold">{value.toLocaleString("pt-BR")}</div></div>}
-function Field({label,children}:{label:string;children:ReactNode}){return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>}
+
+function Card({ title, value, icon }: { title: string; value: number; icon: ReactNode }) {
+  return <div className="rounded-xl border bg-card p-5"><div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">{icon}{title}</div><div className="mt-2 text-2xl font-bold">{value.toLocaleString("pt-BR")}</div></div>;
+}
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>;
+}

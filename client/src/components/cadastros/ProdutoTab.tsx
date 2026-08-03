@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useProdutos, type Produto } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,23 +15,37 @@ import DataTable from "./DataTable";
 import { Plus, Package } from "lucide-react";
 import { toast } from "sonner";
 
+const DEFAULT_CATEGORIES = ["Produtos de piscina", "Peças", "Ferramentas"];
+
 interface FormState {
   nome: string;
   codigoInterno: string;
-  categoriaEstoque: "PISCINA" | "PECA" | "FERRAMENTA";
+  categoriaEstoque: string;
 }
 
 const emptyForm: FormState = {
   nome: "",
   codigoInterno: "",
-  categoriaEstoque: "PISCINA",
+  categoriaEstoque: DEFAULT_CATEGORIES[0],
 };
 
 export default function ProdutoTab() {
   const { items, create, update, remove } = useProdutos();
   const [open, setOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [newCategory, setNewCategory] = useState("");
+  const [sessionCategories, setSessionCategories] = useState<string[]>([]);
+
+  const categories = useMemo(() => {
+    const values = [
+      ...DEFAULT_CATEGORIES,
+      ...items.map((item) => item.categoriaEstoque).filter(Boolean),
+      ...sessionCategories,
+    ];
+    return Array.from(new Set(values));
+  }, [items, sessionCategories]);
 
   const handleOpenCreate = () => {
     setForm(emptyForm);
@@ -43,23 +57,49 @@ export default function ProdutoTab() {
     setForm({
       nome: item.nome,
       codigoInterno: item.codigoInterno,
-      categoriaEstoque: item.categoriaEstoque || "PISCINA",
+      categoriaEstoque: item.categoriaEstoque || DEFAULT_CATEGORIES[0],
     });
     setEditingId(item.id);
     setOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleCreateCategory = () => {
+    const normalized = newCategory.trim().replace(/\s+/g, " ");
+    if (!normalized) {
+      toast.error("Digite o nome da categoria.");
+      return;
+    }
+
+    const existing = categories.find(
+      (category) => category.toLocaleLowerCase("pt-BR") === normalized.toLocaleLowerCase("pt-BR"),
+    );
+    const selectedCategory = existing ?? normalized;
+
+    if (!existing) {
+      setSessionCategories((current) => [...current, selectedCategory]);
+    }
+
+    setForm((current) => ({ ...current, categoriaEstoque: selectedCategory }));
+    setNewCategory("");
+    setCategoryOpen(false);
+    toast.success(existing ? "Categoria selecionada." : "Categoria criada e selecionada.");
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (editingId) {
-      update(editingId, { ...form });
-      toast.success("Produto atualizado com sucesso!");
-    } else {
-      create({ ...form });
-      toast.success("Produto cadastrado com sucesso!");
+    try {
+      if (editingId) {
+        await update(editingId, { ...form });
+        toast.success("Produto atualizado com sucesso!");
+      } else {
+        await create({ ...form });
+        toast.success("Produto cadastrado com sucesso!");
+      }
+      setOpen(false);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível salvar o produto.");
     }
-    setOpen(false);
   };
 
   const columns: { key: string; label: string; render?: (item: Produto) => ReactNode }[] = [
@@ -76,7 +116,11 @@ export default function ProdutoTab() {
       ),
     },
     { key: "codigoInterno", label: "Código Interno" },
-    { key: "categoriaEstoque", label: "Categoria", render: (item: Produto) => ({ PISCINA: "Produtos de piscina", PECA: "Peças", FERRAMENTA: "Ferramentas" }[item.categoriaEstoque] || "Produtos de piscina") },
+    {
+      key: "categoriaEstoque",
+      label: "Categoria",
+      render: (item: Produto) => item.categoriaEstoque || DEFAULT_CATEGORIES[0],
+    },
   ];
 
   return (
@@ -100,15 +144,14 @@ export default function ProdutoTab() {
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[540px]">
           <DialogHeader>
-            <DialogTitle>
-              {editingId ? "Editar Produto" : "Novo Produto"}
-            </DialogTitle>
+            <DialogTitle>{editingId ? "Editar Produto" : "Novo Produto"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <FormField label="Nome do Produto">
               <Input
+                required
                 value={form.nome}
                 onChange={(e) => setForm({ ...form, nome: e.target.value })}
                 placeholder="Nome do produto"
@@ -116,27 +159,72 @@ export default function ProdutoTab() {
             </FormField>
             <FormField label="Código Interno">
               <Input
+                required
                 value={form.codigoInterno}
                 onChange={(e) => setForm({ ...form, codigoInterno: e.target.value })}
                 placeholder="Ex: 2001"
               />
             </FormField>
             <FormField label="Categoria no estoque">
-              <Select value={form.categoriaEstoque} onValueChange={(value: FormState["categoriaEstoque"]) => setForm({ ...form, categoriaEstoque: value })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PISCINA">Produtos de piscina</SelectItem>
-                  <SelectItem value="PECA">Peças</SelectItem>
-                  <SelectItem value="FERRAMENTA">Ferramentas</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={form.categoriaEstoque}
+                  onValueChange={(value) => setForm({ ...form, categoriaEstoque: value })}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Selecione uma categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" variant="outline" onClick={() => setCategoryOpen(true)}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Nova categoria
+                </Button>
+              </div>
             </FormField>
             <DialogFooter>
-              <Button type="submit">
-                {editingId ? "Salvar alterações" : "Cadastrar"}
-              </Button>
+              <Button type="submit">{editingId ? "Salvar alterações" : "Cadastrar"}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={categoryOpen} onOpenChange={setCategoryOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Nova categoria de estoque</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <FormField label="Nome da categoria">
+              <Input
+                autoFocus
+                maxLength={80}
+                value={newCategory}
+                onChange={(event) => setNewCategory(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleCreateCategory();
+                  }
+                }}
+                placeholder="Ex: Produtos de limpeza"
+              />
+            </FormField>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCategoryOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={handleCreateCategory}>
+                Criar categoria
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
