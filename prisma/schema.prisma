@@ -27,6 +27,12 @@ enum StatusMotorista {
   DEMITIDO
 }
 
+enum CategoriaEstoque {
+  PISCINA
+  PECA
+  FERRAMENTA
+}
+
 enum TipoMovimentacaoEstoque {
   ENTRADA
   SAIDA
@@ -94,7 +100,7 @@ model Produto {
   id                   String                 @id @default(cuid())
   nome                 String
   codigoInterno        String
-  categoriaEstoque     String                 @default("Produtos de piscina")
+  categoriaEstoque     CategoriaEstoque       @default(PISCINA)
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   manifestos           ManifestoProduto[]
@@ -300,6 +306,8 @@ model EstoqueMovimentacao {
   valorTotal    Decimal                 @default(0) @db.Decimal(14, 2)
   data          DateTime                @db.Date
   observacoes   String?
+  pdfUrl        String?                 @db.Text
+  pdfName       String?
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
   produto       Produto                 @relation(fields: [produtoId], references: [id], onDelete: Restrict)

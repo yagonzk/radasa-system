@@ -4,7 +4,7 @@ import { created, dateOnly, number } from "../utils/serialize";
 
 const serialize = (item: any) => ({
   ...item, quantidade: number(item.quantidade), valorUnitario: number(item.valorUnitario),
-  valorTotal: number(item.valorTotal), data: dateOnly(item.data), createdAt: created(item.createdAt),
+  valorTotal: number(item.valorTotal), data: dateOnly(item.data), pdfUrl: item.pdfUrl ?? null, pdfName: item.pdfName ?? null, createdAt: created(item.createdAt),
 });
 
 async function saldoProduto(produtoId: string, excludeId?: string) {
