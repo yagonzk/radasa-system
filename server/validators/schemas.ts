@@ -24,7 +24,7 @@ export const clienteBody = z.object({
 });
 export const produtoBody = z.object({
   id: id.optional(), nome: text(), codigoInterno: text(100),
-  categoriaEstoque: z.enum(["PISCINA", "PECA", "FERRAMENTA"]).default("PISCINA"),
+  categoriaEstoque: z.string().trim().min(1).max(80).default("Produtos de piscina"),
   createdAt: z.string().optional(),
 });
 

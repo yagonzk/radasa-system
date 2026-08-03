@@ -31,11 +31,18 @@ import {
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 
-const categories: Array<{ value: CategoriaEstoque; label: string }> = [
-  { value: "PISCINA", label: "Produtos de piscina" },
-  { value: "PECA", label: "Peças" },
-  { value: "FERRAMENTA", label: "Ferramentas" },
+const DEFAULT_CATEGORIES: CategoriaEstoque[] = [
+  "Produtos de piscina",
+  "Peças",
+  "Ferramentas",
 ];
+
+const normalizeCategory = (value?: string | null): CategoriaEstoque => {
+  if (!value || value === "PISCINA") return "Produtos de piscina";
+  if (value === "PECA") return "Peças";
+  if (value === "FERRAMENTA") return "Ferramentas";
+  return value;
+};
 
 type ViewMode = "ESTOQUE" | "ENTRADAS" | "SAIDAS";
 
@@ -60,7 +67,7 @@ const fileToDataUrl = (file: File) =>
 export default function Estoque() {
   const { items: produtos } = useProdutos();
   const { movimentacoes, resumo, create, remove } = useEstoque();
-  const [categoria, setCategoria] = useState<CategoriaEstoque>("PISCINA");
+  const [categoria, setCategoria] = useState<CategoriaEstoque>("Produtos de piscina");
   const [viewMode, setViewMode] = useState<ViewMode>("ESTOQUE");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -69,16 +76,23 @@ export default function Estoque() {
   const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const categories = useMemo(() => {
+    const productCategories = produtos.map((produto) =>
+      normalizeCategory(produto.categoriaEstoque),
+    );
+    return Array.from(new Set([...DEFAULT_CATEGORIES, ...productCategories]));
+  }, [produtos]);
+
   const produtosCategoria = useMemo(
-    () => produtos.filter((produto) => (produto.categoriaEstoque || "PISCINA") === categoria),
+    () => produtos.filter((produto) => normalizeCategory(produto.categoriaEstoque) === categoria),
     [produtos, categoria],
   );
   const resumoCategoria = useMemo(
-    () => resumo.filter((item) => (item.produto.categoriaEstoque || "PISCINA") === categoria),
+    () => resumo.filter((item) => normalizeCategory(item.produto.categoriaEstoque) === categoria),
     [resumo, categoria],
   );
   const movimentosCategoria = useMemo(
-    () => movimentacoes.filter((movimento) => (movimento.produto.categoriaEstoque || "PISCINA") === categoria),
+    () => movimentacoes.filter((movimento) => normalizeCategory(movimento.produto.categoriaEstoque) === categoria),
     [movimentacoes, categoria],
   );
   const entradas = useMemo(
@@ -123,7 +137,7 @@ export default function Estoque() {
   };
 
   const exportRows = viewMode === "ENTRADAS" ? entradas : viewMode === "SAIDAS" ? saidas : movimentosCategoria;
-  const categoryLabel = categories.find((item) => item.value === categoria)?.label ?? "Estoque";
+  const categoryLabel = categoria || "Estoque";
 
   const exportCsv = () => {
     const headers = ["Data", "Produto", "Código", "Tipo", "Quantidade", "Valor unitário", "Valor total", "Observações", "NF PDF"];
@@ -145,7 +159,11 @@ export default function Estoque() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `estoque_${categoria.toLowerCase()}_${viewMode.toLowerCase()}.csv`;
+    link.download = `estoque_${categoria
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "_")
+      .toLowerCase()}_${viewMode.toLowerCase()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -180,9 +198,13 @@ export default function Estoque() {
           </div>
         </div>
 
-        <Tabs value={categoria} onValueChange={(value) => setCategoria(value as CategoriaEstoque)}>
-          <TabsList className="grid w-full grid-cols-3">
-            {categories.map((item) => <TabsTrigger key={item.value} value={item.value}>{item.label}</TabsTrigger>)}
+        <Tabs value={categoria} onValueChange={(value) => setCategoria(value)}>
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
+            {categories.map((category) => (
+              <TabsTrigger key={category} value={category}>
+                {category}
+              </TabsTrigger>
+            ))}
           </TabsList>
         </Tabs>
 
