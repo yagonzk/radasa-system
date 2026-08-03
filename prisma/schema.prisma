@@ -211,6 +211,7 @@ model Abastecimento {
   produto          String
   quantidadeLitros Decimal  @db.Decimal(14, 3)
   valorUnitario    Decimal  @db.Decimal(14, 4)
+  valorDesconto    Decimal  @default(0) @db.Decimal(14, 2)
   valorTotal       Decimal  @db.Decimal(14, 2)
   hodometro        Decimal  @db.Decimal(14, 1)
   createdAt        DateTime @default(now())

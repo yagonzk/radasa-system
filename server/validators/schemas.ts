@@ -52,6 +52,7 @@ export const abastecimentoBody = z.object({
   produto: text(255),
   quantidadeLitros: z.coerce.number().finite().positive(),
   valorUnitario: z.coerce.number().finite().min(0),
+  valorDesconto: z.coerce.number().finite().min(0).optional().default(0),
   valorTotal: money.optional(),
   hodometro: z.coerce.number().finite().min(0),
   createdAt: z.string().optional(),

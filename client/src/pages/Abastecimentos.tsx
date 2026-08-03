@@ -42,6 +42,7 @@ interface FormState {
   produto: string;
   quantidadeLitros: string;
   valorUnitario: string;
+  valorDesconto: string;
   veiculoId: string;
   hodometro: string;
 }
@@ -52,6 +53,7 @@ const emptyForm: FormState = {
   produto: "",
   quantidadeLitros: "",
   valorUnitario: "",
+  valorDesconto: "",
   veiculoId: "",
   hodometro: "",
 };
@@ -106,6 +108,7 @@ function AbastecimentoForm({
         produto: editing.produto,
         quantidadeLitros: String(editing.quantidadeLitros),
         valorUnitario: String(editing.valorUnitario),
+        valorDesconto: editing.valorDesconto ? String(editing.valorDesconto) : "",
         veiculoId: editing.veiculoId,
         hodometro: String(editing.hodometro),
       });
@@ -116,7 +119,9 @@ function AbastecimentoForm({
 
   const quantidade = parseNumber(form.quantidadeLitros);
   const valorUnitario = parseNumber(form.valorUnitario);
-  const valorTotal = quantidade * valorUnitario;
+  const valorDesconto = parseNumber(form.valorDesconto);
+  const valorBruto = quantidade * valorUnitario;
+  const valorTotal = Math.max(0, valorBruto - valorDesconto);
 
   const setField = (field: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -143,6 +148,14 @@ function AbastecimentoForm({
       toast.error("Informe um valor unitário válido.");
       return;
     }
+    if (valorDesconto < 0) {
+      toast.error("Informe um valor de desconto válido.");
+      return;
+    }
+    if (valorDesconto > valorBruto) {
+      toast.error("O valor do desconto não pode ser maior que o valor bruto.");
+      return;
+    }
     if (!form.veiculoId) {
       toast.error("Selecione a placa.");
       return;
@@ -159,6 +172,7 @@ function AbastecimentoForm({
       produto: form.produto.trim(),
       quantidadeLitros: quantidade,
       valorUnitario,
+      valorDesconto: Number(valorDesconto.toFixed(2)),
       valorTotal: Number(valorTotal.toFixed(2)),
       veiculoId: form.veiculoId,
       hodometro,
@@ -263,6 +277,20 @@ function AbastecimentoForm({
           </div>
 
           <div className="space-y-1.5">
+            <Label>Valor do desconto</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.valorDesconto}
+              onChange={(event) =>
+                setField("valorDesconto", event.target.value)
+              }
+              placeholder="0,00"
+            />
+          </div>
+
+          <div className="space-y-1.5">
             <Label>Placa *</Label>
             <Select
               value={form.veiculoId}
@@ -301,7 +329,7 @@ function AbastecimentoForm({
                   Valor total calculado
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Quantidade de litros × valor unitário
+                  (Quantidade de litros × valor unitário) − desconto
                 </p>
               </div>
               <p className="text-xl font-bold text-primary">
@@ -339,9 +367,11 @@ export default function Abastecimentos() {
   const [filters, setFilters] = useState({
     cliente: "",
     emissao: "",
+    emissaoAte: "",
     produto: "",
     litros: "",
     valorUnitario: "",
+    valorDesconto: "",
     valorTotal: "",
     placa: "",
     hodometro: "",
@@ -366,7 +396,8 @@ export default function Abastecimentos() {
           if (!matchesCliente) return false;
         }
 
-        if (filters.emissao && item.dataEmissao !== filters.emissao) return false;
+        if (filters.emissao && item.dataEmissao < filters.emissao) return false;
+        if (filters.emissaoAte && item.dataEmissao > filters.emissaoAte) return false;
         if (filters.produto && !normalize(item.produto).includes(normalize(filters.produto))) return false;
 
         if (filters.litros) {
@@ -383,6 +414,14 @@ export default function Abastecimentos() {
             maximumFractionDigits: 2,
           });
           if (!normalize(displayed).includes(normalize(filters.valorUnitario))) return false;
+        }
+
+        if (filters.valorDesconto) {
+          const displayed = item.valorDesconto.toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+          if (!normalize(displayed).includes(normalize(filters.valorDesconto))) return false;
         }
 
         if (filters.valorTotal) {
@@ -413,9 +452,10 @@ export default function Abastecimentos() {
         (acc, item) => {
           acc.litros += item.quantidadeLitros;
           acc.valor += item.valorTotal;
+          acc.desconto += item.valorDesconto;
           return acc;
         },
-        { litros: 0, valor: 0 }
+        { litros: 0, valor: 0, desconto: 0 }
       ),
     [filteredItems]
   );
@@ -557,12 +597,16 @@ export default function Abastecimentos() {
                     { key: "produto", label: "Produto", placeholder: "Pesquisar produto" },
                     { key: "litros", label: "Litros", placeholder: "Ex.: 231,00", align: "right" },
                     { key: "valorUnitario", label: "Valor unitário", placeholder: "Ex.: 6,35", align: "right" },
-                    { key: "valorTotal", label: "Valor total", placeholder: "Ex.: 1.466,85", align: "right" },
+                    { key: "valorDesconto", label: "Valor desconto", placeholder: "Ex.: 50,00", align: "right" },
+                    { key: "valorTotal", label: "Valor total", placeholder: "Ex.: 1.416,85", align: "right" },
                     { key: "placa", label: "Placa", placeholder: "Pesquisar placa" },
                     { key: "hodometro", label: "Odômetro", placeholder: "Ex.: 487.000", align: "right" },
                   ].map((column) => {
                     const key = column.key as keyof typeof filters;
-                    const isActive = Boolean(filters[key]);
+                    const isDateColumn = column.type === "date";
+                    const isActive = isDateColumn
+                      ? Boolean(filters.emissao || filters.emissaoAte)
+                      : Boolean(filters[key]);
                     return (
                       <th
                         key={column.key}
@@ -602,16 +646,34 @@ export default function Abastecimentos() {
                                   Filtrar por {column.label.toLocaleLowerCase("pt-BR")}
                                 </p>
                                 {column.type === "date" ? (
-                                  <DatePicker
-                                    value={filters.emissao}
-                                    onChange={(value) =>
-                                      setFilters((current) => ({
-                                        ...current,
-                                        emissao: value,
-                                      }))
-                                    }
-                                    placeholder="Selecione uma data"
-                                  />
+                                  <div className="space-y-3">
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">De</Label>
+                                      <DatePicker
+                                        value={filters.emissao}
+                                        onChange={(value) =>
+                                          setFilters((current) => ({
+                                            ...current,
+                                            emissao: value,
+                                          }))
+                                        }
+                                        placeholder="Data inicial"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">Até</Label>
+                                      <DatePicker
+                                        value={filters.emissaoAte}
+                                        onChange={(value) =>
+                                          setFilters((current) => ({
+                                            ...current,
+                                            emissaoAte: value,
+                                          }))
+                                        }
+                                        placeholder="Data final"
+                                      />
+                                    </div>
+                                  </div>
                                 ) : (
                                   <Input
                                     value={filters[key]}
@@ -633,10 +695,11 @@ export default function Abastecimentos() {
                                   variant="outline"
                                   className="flex-1"
                                   onClick={() =>
-                                    setFilters((current) => ({
-                                      ...current,
-                                      [key]: "",
-                                    }))
+                                    setFilters((current) =>
+                                      isDateColumn
+                                        ? { ...current, emissao: "", emissaoAte: "" }
+                                        : { ...current, [key]: "" }
+                                    )
                                   }
                                 >
                                   Limpar
@@ -665,7 +728,7 @@ export default function Abastecimentos() {
                 {filteredItems.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
                       Nenhum abastecimento encontrado.
@@ -704,6 +767,9 @@ export default function Abastecimentos() {
                         </td>
                         <td className="px-4 py-3 text-right text-card-foreground">
                           {formatBRL(item.valorUnitario)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-muted-foreground">
+                          {formatBRL(item.valorDesconto)}
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-primary">
                           {formatBRL(item.valorTotal)}

@@ -14,7 +14,7 @@ export interface Viagem { id: string; placa: string; motoristaId: string; valorF
 export type TipoManifesto = "Bonificação - Lebrinha" | "Acertar c/ Lebrinha" | "Receber c/ Cliente";
 export interface ManifestoProduto { produtoId: string; quantidade: number; valorUnitario: number; valorTotal: number; tipoManifesto?: TipoManifesto; }
 export interface Manifesto { id: string; clienteId: string; dataManifesto: string; produtos: ManifestoProduto[]; tipoManifesto: TipoManifesto; pdfUrl?: string; createdAt: string; }
-export interface Abastecimento { id: string; clienteId: string; veiculoId: string; dataEmissao: string; produto: string; quantidadeLitros: number; valorUnitario: number; valorTotal: number; hodometro: number; createdAt: string; }
+export interface Abastecimento { id: string; clienteId: string; veiculoId: string; dataEmissao: string; produto: string; quantidadeLitros: number; valorUnitario: number; valorDesconto: number; valorTotal: number; hodometro: number; createdAt: string; }
 
 type Entity = { id: string; createdAt: string };
 const eventName = (resource: string) => `radasa-api-change:${resource}`;

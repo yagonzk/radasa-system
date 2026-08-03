@@ -7,6 +7,7 @@ const serialize = (item: any) => ({
   ...item,
   quantidadeLitros: number(item.quantidadeLitros),
   valorUnitario: number(item.valorUnitario),
+  valorDesconto: number(item.valorDesconto),
   valorTotal: number(item.valorTotal),
   hodometro: number(item.hodometro),
   dataEmissao: dateOnly(item.dataEmissao),
@@ -25,6 +26,11 @@ async function ensureReferences(clienteId: string, veiculoId: string) {
 function buildData(input: any) {
   const quantidadeLitros = Number(input.quantidadeLitros);
   const valorUnitario = Number(input.valorUnitario);
+  const valorDesconto = Number(input.valorDesconto ?? 0);
+  const valorBruto = Number((quantidadeLitros * valorUnitario).toFixed(2));
+  if (valorDesconto > valorBruto) {
+    throw new AppError(400, "O valor do desconto não pode ser maior que o valor bruto.");
+  }
   return {
     clienteId: input.clienteId,
     veiculoId: input.veiculoId,
@@ -32,7 +38,8 @@ function buildData(input: any) {
     produto: input.produto.trim(),
     quantidadeLitros,
     valorUnitario,
-    valorTotal: Number((quantidadeLitros * valorUnitario).toFixed(2)),
+    valorDesconto,
+    valorTotal: Number((valorBruto - valorDesconto).toFixed(2)),
     hodometro: Number(input.hodometro),
     ...(input.createdAt ? { createdAt: new Date(input.createdAt) } : {}),
   };
@@ -61,6 +68,7 @@ export const abastecimentosService = {
       produto: input.produto ?? current.produto,
       quantidadeLitros: input.quantidadeLitros ?? number(current.quantidadeLitros),
       valorUnitario: input.valorUnitario ?? number(current.valorUnitario),
+      valorDesconto: input.valorDesconto ?? number(current.valorDesconto),
       hodometro: input.hodometro ?? number(current.hodometro),
     };
     await ensureReferences(merged.clienteId, merged.veiculoId);
