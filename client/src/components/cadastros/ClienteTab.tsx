@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import * as XLSX from "xlsx";
 import { useClientes, type Cliente } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,12 +7,13 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
 import DataTable from "./DataTable";
-import { Plus, Building2 } from "lucide-react";
+import { Plus, Building2, Upload, Download, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 
 interface FormState {
@@ -22,6 +24,12 @@ interface FormState {
   enderecoFiscal: string;
 }
 
+interface ImportRow extends FormState {
+  rowNumber: number;
+  status: "valid" | "invalid" | "duplicate";
+  error?: string;
+}
+
 const emptyForm: FormState = {
   nomeFantasia: "",
   codigoInterno: "",
@@ -30,16 +38,55 @@ const emptyForm: FormState = {
   enderecoFiscal: "",
 };
 
+const HEADER_ALIASES: Record<keyof FormState, string[]> = {
+  nomeFantasia: ["nome fantasia", "nome", "cliente", "razao social", "razão social"],
+  codigoInterno: ["codigo interno", "código interno", "codigo", "código", "cod cliente", "cod. cliente"],
+  email: ["email", "e-mail"],
+  telefone: ["telefone", "fone", "celular"],
+  enderecoFiscal: ["endereco fiscal", "endereço fiscal", "endereco", "endereço"],
+};
+
+function normalizeHeader(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeValue(value: unknown) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function findValue(row: Record<string, unknown>, field: keyof FormState) {
+  const aliases = HEADER_ALIASES[field].map(normalizeHeader);
+  const key = Object.keys(row).find((item) => aliases.includes(normalizeHeader(item)));
+  return key ? normalizeValue(row[key]) : "";
+}
+
 export default function ClienteTab() {
   const { items, create, update, remove } = useClientes();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
+  const [fileName, setFileName] = useState("");
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleOpenCreate = () => {
     setForm(emptyForm);
     setEditingId(null);
     setOpen(true);
+  };
+
+  const handleOpenImport = () => {
+    setImportRows([]);
+    setFileName("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setImportOpen(true);
   };
 
   const handleOpenEdit = (item: Cliente) => {
@@ -54,18 +101,159 @@ export default function ClienteTab() {
     setOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (editingId) {
-      update(editingId, { ...form });
+      await Promise.resolve(update(editingId, { ...form }));
       toast.success("Cliente atualizado com sucesso!");
     } else {
-      create({ ...form });
+      await Promise.resolve(create({ ...form }));
       toast.success("Cliente cadastrado com sucesso!");
     }
     setOpen(false);
   };
+
+  const downloadTemplate = () => {
+    const worksheet = XLSX.utils.json_to_sheet([
+      {
+        "Nome Fantasia": "Cliente Exemplo",
+        "Código Interno": "1001",
+        Email: "cliente@exemplo.com",
+        Telefone: "(65) 99999-9999",
+        "Endereço Fiscal": "Rua Exemplo, 123 - Cuiabá/MT",
+      },
+    ]);
+    worksheet["!cols"] = [
+      { wch: 30 },
+      { wch: 18 },
+      { wch: 30 },
+      { wch: 20 },
+      { wch: 45 },
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Clientes");
+    XLSX.writeFile(workbook, "modelo-importacao-clientes.xlsx");
+  };
+
+  const handleFile = async (file?: File) => {
+    if (!file) return;
+
+    if (!/\.(xlsx|xls)$/i.test(file.name)) {
+      toast.error("Selecione uma planilha Excel no formato .xlsx ou .xls.");
+      return;
+    }
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, {
+        defval: "",
+        raw: false,
+      });
+
+      if (!rawRows.length) {
+        toast.error("A planilha está vazia.");
+        return;
+      }
+
+      const existingCodes = new Set(
+        items.map((item) => normalizeHeader(item.codigoInterno)).filter(Boolean),
+      );
+      const existingEmails = new Set(
+        items.map((item) => normalizeHeader(item.email)).filter(Boolean),
+      );
+      const fileCodes = new Set<string>();
+      const fileEmails = new Set<string>();
+
+      const parsed = rawRows.map((raw, index): ImportRow => {
+        const row: FormState = {
+          nomeFantasia: findValue(raw, "nomeFantasia"),
+          codigoInterno: findValue(raw, "codigoInterno"),
+          email: findValue(raw, "email"),
+          telefone: findValue(raw, "telefone"),
+          enderecoFiscal: findValue(raw, "enderecoFiscal"),
+        };
+
+        const code = normalizeHeader(row.codigoInterno);
+        const email = normalizeHeader(row.email);
+        const errors: string[] = [];
+
+        if (!row.nomeFantasia) errors.push("Nome Fantasia obrigatório");
+        if (!row.codigoInterno) errors.push("Código Interno obrigatório");
+        if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
+          errors.push("E-mail inválido");
+        }
+
+        const duplicated =
+          (code && (existingCodes.has(code) || fileCodes.has(code))) ||
+          (email && (existingEmails.has(email) || fileEmails.has(email)));
+
+        if (code) fileCodes.add(code);
+        if (email) fileEmails.add(email);
+
+        return {
+          ...row,
+          rowNumber: index + 2,
+          status: errors.length ? "invalid" : duplicated ? "duplicate" : "valid",
+          error: errors.length
+            ? errors.join("; ")
+            : duplicated
+              ? "Cliente duplicado por código ou e-mail"
+              : undefined,
+        };
+      });
+
+      setFileName(file.name);
+      setImportRows(parsed);
+      toast.success(`${parsed.length} linha(s) lida(s) da planilha.`);
+    } catch (error) {
+      console.error(error);
+      toast.error("Não foi possível ler a planilha. Confira o arquivo e tente novamente.");
+    }
+  };
+
+  const handleImport = async () => {
+    const validRows = importRows.filter((row) => row.status === "valid");
+    if (!validRows.length) {
+      toast.error("Não existem clientes válidos para importar.");
+      return;
+    }
+
+    setImporting(true);
+    let imported = 0;
+    let failed = 0;
+
+    for (const row of validRows) {
+      try {
+        await Promise.resolve(
+          create({
+            nomeFantasia: row.nomeFantasia,
+            codigoInterno: row.codigoInterno,
+            email: row.email,
+            telefone: row.telefone,
+            enderecoFiscal: row.enderecoFiscal,
+          }),
+        );
+        imported += 1;
+      } catch (error) {
+        console.error(`Erro na linha ${row.rowNumber}:`, error);
+        failed += 1;
+      }
+    }
+
+    setImporting(false);
+    toast.success(
+      `${imported} cliente(s) importado(s)${failed ? ` e ${failed} falha(s)` : ""}.`,
+    );
+
+    if (!failed) setImportOpen(false);
+  };
+
+  const validCount = importRows.filter((row) => row.status === "valid").length;
+  const duplicateCount = importRows.filter((row) => row.status === "duplicate").length;
+  const invalidCount = importRows.filter((row) => row.status === "invalid").length;
 
   const columns: { key: string; label: string; render?: (item: Cliente) => ReactNode }[] = [
     {
@@ -92,10 +280,16 @@ export default function ClienteTab() {
         <p className="text-sm text-muted-foreground">
           {items.length} cliente(s) cadastrado(s)
         </p>
-        <Button onClick={handleOpenCreate} size="sm">
-          <Plus className="mr-1.5 h-4 w-4" />
-          Novo Cliente
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={handleOpenImport} size="sm" variant="outline">
+            <Upload className="mr-1.5 h-4 w-4" />
+            Importar
+          </Button>
+          <Button onClick={handleOpenCreate} size="sm">
+            <Plus className="mr-1.5 h-4 w-4" />
+            Novo Cliente
+          </Button>
+        </div>
       </div>
 
       <DataTable
@@ -105,6 +299,109 @@ export default function ClienteTab() {
         onDelete={(item) => remove(item.id)}
         emptyMessage="Nenhum cliente cadastrado. Clique em 'Novo Cliente' para começar."
       />
+
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Importar clientes por Excel</DialogTitle>
+            <DialogDescription>
+              Use o modelo abaixo ou envie uma planilha com as colunas Nome Fantasia,
+              Código Interno, Email, Telefone e Endereço Fiscal.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" onClick={downloadTemplate}>
+                <Download className="mr-2 h-4 w-4" />
+                Baixar modelo
+              </Button>
+              <Button type="button" onClick={() => fileInputRef.current?.click()}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Selecionar planilha
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                className="hidden"
+                onChange={(event) => void handleFile(event.target.files?.[0])}
+              />
+              {fileName && <span className="text-sm text-muted-foreground">{fileName}</span>}
+            </div>
+
+            {!!importRows.length && (
+              <>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border p-3">
+                    <p className="text-sm text-muted-foreground">Prontos para importar</p>
+                    <p className="text-2xl font-semibold">{validCount}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-sm text-muted-foreground">Duplicados</p>
+                    <p className="text-2xl font-semibold">{duplicateCount}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-sm text-muted-foreground">Com erro</p>
+                    <p className="text-2xl font-semibold">{invalidCount}</p>
+                  </div>
+                </div>
+
+                <div className="max-h-[420px] overflow-auto rounded-md border">
+                  <table className="w-full min-w-[900px] text-sm">
+                    <thead className="sticky top-0 bg-muted">
+                      <tr>
+                        <th className="p-2 text-left">Linha</th>
+                        <th className="p-2 text-left">Nome Fantasia</th>
+                        <th className="p-2 text-left">Código</th>
+                        <th className="p-2 text-left">E-mail</th>
+                        <th className="p-2 text-left">Telefone</th>
+                        <th className="p-2 text-left">Situação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importRows.slice(0, 200).map((row) => (
+                        <tr key={`${row.rowNumber}-${row.codigoInterno}`} className="border-t">
+                          <td className="p-2">{row.rowNumber}</td>
+                          <td className="p-2">{row.nomeFantasia || "—"}</td>
+                          <td className="p-2">{row.codigoInterno || "—"}</td>
+                          <td className="p-2">{row.email || "—"}</td>
+                          <td className="p-2">{row.telefone || "—"}</td>
+                          <td className="p-2">
+                            {row.status === "valid" ? (
+                              <span className="text-emerald-600">Pronto</span>
+                            ) : (
+                              <span className="text-destructive">{row.error}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {importRows.length > 200 && (
+                  <p className="text-xs text-muted-foreground">
+                    A prévia mostra as primeiras 200 linhas. Todas as linhas válidas serão importadas.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setImportOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={!validCount || importing}
+              onClick={() => void handleImport()}
+            >
+              {importing ? "Importando..." : `Importar ${validCount} cliente(s)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[500px]">
@@ -135,18 +432,14 @@ export default function ClienteTab() {
                 <Input
                   type="email"
                   value={form.email}
-                  onChange={(e) =>
-                    setForm({ ...form, email: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
                   placeholder="email@exemplo.com"
                 />
               </FormField>
               <FormField label="Telefone">
                 <Input
                   value={form.telefone}
-                  onChange={(e) =>
-                    setForm({ ...form, telefone: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, telefone: e.target.value })}
                   placeholder="(00) 00000-0000"
                 />
               </FormField>
@@ -154,9 +447,7 @@ export default function ClienteTab() {
             <FormField label="Endereço Fiscal">
               <Input
                 value={form.enderecoFiscal}
-                onChange={(e) =>
-                  setForm({ ...form, enderecoFiscal: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, enderecoFiscal: e.target.value })}
                 placeholder="Endereço fiscal completo"
               />
             </FormField>

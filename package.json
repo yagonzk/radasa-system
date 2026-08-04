@@ -79,7 +79,8 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "pino": "^9.9.4",
-    "pino-http": "^10.5.0"
+    "pino-http": "^10.5.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@builder.io/vite-plugin-jsx-loc": "^0.1.1",
