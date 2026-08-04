@@ -4,7 +4,7 @@ import { api } from "./api";
 export type StatusMotorista = "ATIVO" | "DEMITIDO";
 export interface Motorista { id: string; nome: string; cpf: string; salarioBase: number; status: StatusMotorista; createdAt: string; }
 export interface Chapa { id: string; nome: string; valorFixo: number; createdAt: string; }
-export interface Cliente { id: string; nomeFantasia: string; codigoInterno: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
+export interface Cliente { id: string; nomeFantasia: string; codigoInterno: string; cnpj: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
 export type CategoriaEstoque = string;
 export interface Produto { id: string; nome: string; codigoInterno: string; categoriaEstoque: CategoriaEstoque; createdAt: string; }
 export type TipoMovimentacaoEstoque = "ENTRADA" | "SAIDA";
@@ -200,4 +200,33 @@ export function usePneuGestao(){
   const loadAlerts=useCallback(async()=>setAlerts((await api.get<PneuAlerta[]>("/pneus/gestao/alertas")).data),[]);
   const loadReports=useCallback(async(from?:string,to?:string)=>{setLoading(true);try{setReports((await api.get<PneuRelatorios>("/pneus/gestao/relatorios",{params:{from:from||undefined,to:to||undefined}})).data)}finally{setLoading(false)}},[]);
   return {alerts,reports,loading,loadAlerts,loadReports};
+}
+
+export interface SefazCertificate {
+  id:string; cnpj:string; fileName:string; subject:string; issuer?:string|null; serialNumber?:string|null;
+  validFrom:string; validTo:string; cnpjValidated:boolean; active:boolean; lastNsu:string; maxNsu:string;
+  lastSyncAt?:string|null; nextSyncAllowedAt?:string|null; autoSyncEnabled:boolean; autoSyncIntervalMinutes:number;
+  lastAutoSyncAt?:string|null; createdAt:string; updatedAt:string;
+}
+export interface SefazDocumentItem { id:string; itemNumber:number; supplierCode?:string|null; ean?:string|null; description:string; ncm?:string|null; cfop?:string|null; unit?:string|null; quantity:number; unitValue:number; totalValue:number; matchedProdutoId?:string|null; matchedProduto?:Produto|null; }
+export interface SefazDocumentEvent { id:string; type:string; description:string; protocol?:string|null; createdAt:string; }
+export interface SefazDocument { id:string; certificateId:string; nsu:string; schema:string; accessKey?:string|null; documentType?:string|null; issuerCnpj?:string|null; issuerName?:string|null; recipientCnpj?:string|null; recipientName?:string|null; emissionDate?:string|null; totalValue?:number|null; number?:string|null; series?:string|null; operationType?:string|null; status?:string|null; manifestationType?:"CIENCIA"|"CONFIRMACAO"|"DESCONHECIMENTO"|"NAO_REALIZADA"|null; manifestationStatus:"NONE"|"PROCESSING"|"SUCCESS"|"ERROR"; manifestationProtocol?:string|null; manifestedAt?:string|null; importedAt?:string|null; isSummary:boolean; receivedAt:string; items?:SefazDocumentItem[]; events?:SefazDocumentEvent[]; }
+export interface SefazSyncLog { id:string; certificateId:string; status:"RUNNING"|"SUCCESS"|"EMPTY"|"BLOCKED"|"ERROR"; cStat?:string|null; message?:string|null; initialNsu:string; lastNsu?:string|null; maxNsu?:string|null; documentsFound:number; startedAt:string; finishedAt?:string|null; certificate:{cnpj:string;fileName:string}; }
+export interface SefazDashboard { totalDocuments:number; totalValue:number; activeCertificates:number; pendingManifestation:number; cancelled:number; denied:number; lastSyncAt?:string|null; expiredCertificates:number; }
+
+export function useSefaz() {
+  const [certificates,setCertificates]=useState<SefazCertificate[]>([]); const [documents,setDocuments]=useState<SefazDocument[]>([]); const [syncLogs,setSyncLogs]=useState<SefazSyncLog[]>([]); const [dashboard,setDashboard]=useState<SefazDashboard|null>(null); const [loading,setLoading]=useState(false);
+  const refresh=useCallback(async(params?:Record<string,string|undefined>)=>{const [c,d,l,k]=await Promise.all([api.get<SefazCertificate[]>("/sefaz/certificates"),api.get<SefazDocument[]>("/sefaz/documents",{params}),api.get<SefazSyncLog[]>("/sefaz/sync-logs"),api.get<SefazDashboard>("/sefaz/dashboard")]);setCertificates(c.data);setDocuments(d.data);setSyncLogs(l.data);setDashboard(k.data)},[]);
+  useEffect(()=>{void refresh()},[refresh]);
+  const saveCertificate=useCallback(async(data:{cnpj:string;fileName:string;certificateBase64:string;password:string})=>{const r=(await api.post<SefazCertificate>("/sefaz/certificates",data)).data;await refresh();return r},[refresh]);
+  const toggleCertificate=useCallback(async(id:string,active:boolean)=>{await api.put(`/sefaz/certificates/${id}/status`,{active});await refresh()},[refresh]);
+  const updateAutoSync=useCallback(async(id:string,enabled:boolean,intervalMinutes:number)=>{await api.put(`/sefaz/certificates/${id}/auto-sync`,{enabled,intervalMinutes});await refresh()},[refresh]);
+  const sync=useCallback(async(id:string)=>{setLoading(true);try{const r=(await api.post(`/sefaz/certificates/${id}/sync`)).data;await refresh();return r}finally{setLoading(false)}},[refresh]);
+  const details=useCallback(async(id:string)=>(await api.get<SefazDocument>(`/sefaz/documents/${id}`)).data,[]);
+  const manifest=useCallback(async(id:string,type:string,reason?:string)=>{const r=(await api.post(`/sefaz/documents/${id}/manifest`,{type,reason})).data;await refresh();return r},[refresh]);
+  const importStock=useCallback(async(id:string)=>{const r=(await api.post(`/sefaz/documents/${id}/import-stock`)).data;await refresh();return r},[refresh]);
+  const matchItem=useCallback(async(itemId:string,produtoId:string)=>{await api.put(`/sefaz/items/${itemId}/match`,{produtoId})},[]);
+  const downloadXml=useCallback(async(id:string)=>{const response=await api.get(`/sefaz/documents/${id}/xml`,{responseType:"blob"});const url=URL.createObjectURL(response.data);const link=document.createElement("a");link.href=url;link.download=`nfe-${id}.xml`;link.click();URL.revokeObjectURL(url)},[]);
+  const getDanfe=useCallback(async(id:string)=>(await api.get<string>(`/sefaz/documents/${id}/danfe`,{responseType:"text"})).data,[]);
+  return {certificates,documents,syncLogs,dashboard,loading,refresh,saveCertificate,toggleCertificate,updateAutoSync,sync,details,manifest,importStock,matchItem,downloadXml,getDanfe};
 }

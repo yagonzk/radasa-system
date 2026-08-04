@@ -19,6 +19,7 @@ import { toast } from "sonner";
 interface FormState {
   nomeFantasia: string;
   codigoInterno: string;
+  cnpj: string;
   email: string;
   telefone: string;
   enderecoFiscal: string;
@@ -33,6 +34,7 @@ interface ImportRow extends FormState {
 const emptyForm: FormState = {
   nomeFantasia: "",
   codigoInterno: "",
+  cnpj: "",
   email: "",
   telefone: "",
   enderecoFiscal: "",
@@ -41,6 +43,7 @@ const emptyForm: FormState = {
 const HEADER_ALIASES: Record<keyof FormState, string[]> = {
   nomeFantasia: ["nome fantasia", "nome", "cliente", "razao social", "razão social"],
   codigoInterno: ["codigo interno", "código interno", "codigo", "código", "cod cliente", "cod. cliente"],
+  cnpj: ["cnpj", "cnpj cliente", "documento", "documento fiscal"],
   email: ["email", "e-mail"],
   telefone: ["telefone", "fone", "celular"],
   enderecoFiscal: ["endereco fiscal", "endereço fiscal", "endereco", "endereço"],
@@ -57,6 +60,40 @@ function normalizeHeader(value: unknown) {
 function normalizeValue(value: unknown) {
   if (value === null || value === undefined) return "";
   return String(value).trim();
+}
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function formatCnpj(value: string) {
+  const digits = onlyDigits(value).slice(0, 14);
+  return digits
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
+}
+
+function isValidCnpj(value: string) {
+  const cnpj = onlyDigits(value);
+  if (!cnpj) return true;
+  if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
+
+  const digit = (length: 12 | 13) => {
+    const weights =
+      length === 12
+        ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+        : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const total = cnpj
+      .slice(0, length)
+      .split("")
+      .reduce((sum, number, index) => sum + Number(number) * weights[index], 0);
+    const remainder = total % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  return Number(cnpj[12]) === digit(12) && Number(cnpj[13]) === digit(13);
 }
 
 function findValue(row: Record<string, unknown>, field: keyof FormState) {
@@ -93,6 +130,7 @@ export default function ClienteTab() {
     setForm({
       nomeFantasia: item.nomeFantasia,
       codigoInterno: item.codigoInterno,
+      cnpj: item.cnpj || "",
       email: item.email,
       telefone: item.telefone,
       enderecoFiscal: item.enderecoFiscal,
@@ -104,11 +142,29 @@ export default function ClienteTab() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const cnpj = onlyDigits(form.cnpj);
+    if (cnpj && !isValidCnpj(cnpj)) {
+      toast.error("Informe um CNPJ válido.");
+      return;
+    }
+
+    if (
+      cnpj &&
+      items.some(
+        (item) => item.id !== editingId && onlyDigits(item.cnpj || "") === cnpj,
+      )
+    ) {
+      toast.error("Já existe um cliente cadastrado com este CNPJ.");
+      return;
+    }
+
+    const payload = { ...form, cnpj };
+
     if (editingId) {
-      await Promise.resolve(update(editingId, { ...form }));
+      await Promise.resolve(update(editingId, payload));
       toast.success("Cliente atualizado com sucesso!");
     } else {
-      await Promise.resolve(create({ ...form }));
+      await Promise.resolve(create(payload));
       toast.success("Cliente cadastrado com sucesso!");
     }
     setOpen(false);
@@ -119,6 +175,7 @@ export default function ClienteTab() {
       {
         "Nome Fantasia": "Cliente Exemplo",
         "Código Interno": "1001",
+        CNPJ: "15.209.274/0001-62",
         Email: "cliente@exemplo.com",
         Telefone: "(65) 99999-9999",
         "Endereço Fiscal": "Rua Exemplo, 123 - Cuiabá/MT",
@@ -127,6 +184,7 @@ export default function ClienteTab() {
     worksheet["!cols"] = [
       { wch: 30 },
       { wch: 18 },
+      { wch: 22 },
       { wch: 30 },
       { wch: 20 },
       { wch: 45 },
@@ -164,33 +222,42 @@ export default function ClienteTab() {
       const existingEmails = new Set(
         items.map((item) => normalizeHeader(item.email)).filter(Boolean),
       );
+      const existingCnpjs = new Set(
+        items.map((item) => onlyDigits(item.cnpj || "")).filter(Boolean),
+      );
       const fileCodes = new Set<string>();
+      const fileCnpjs = new Set<string>();
       const fileEmails = new Set<string>();
 
       const parsed = rawRows.map((raw, index): ImportRow => {
         const row: FormState = {
           nomeFantasia: findValue(raw, "nomeFantasia"),
           codigoInterno: findValue(raw, "codigoInterno"),
+          cnpj: onlyDigits(findValue(raw, "cnpj")),
           email: findValue(raw, "email"),
           telefone: findValue(raw, "telefone"),
           enderecoFiscal: findValue(raw, "enderecoFiscal"),
         };
 
         const code = normalizeHeader(row.codigoInterno);
+        const cnpj = onlyDigits(row.cnpj);
         const email = normalizeHeader(row.email);
         const errors: string[] = [];
 
         if (!row.nomeFantasia) errors.push("Nome Fantasia obrigatório");
         if (!row.codigoInterno) errors.push("Código Interno obrigatório");
+        if (row.cnpj && !isValidCnpj(row.cnpj)) errors.push("CNPJ inválido");
         if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
           errors.push("E-mail inválido");
         }
 
         const duplicated =
           (code && (existingCodes.has(code) || fileCodes.has(code))) ||
+          (cnpj && (existingCnpjs.has(cnpj) || fileCnpjs.has(cnpj))) ||
           (email && (existingEmails.has(email) || fileEmails.has(email)));
 
         if (code) fileCodes.add(code);
+        if (cnpj) fileCnpjs.add(cnpj);
         if (email) fileEmails.add(email);
 
         return {
@@ -200,7 +267,7 @@ export default function ClienteTab() {
           error: errors.length
             ? errors.join("; ")
             : duplicated
-              ? "Cliente duplicado por código ou e-mail"
+              ? "Cliente duplicado por código, CNPJ ou e-mail"
               : undefined,
         };
       });
@@ -231,6 +298,7 @@ export default function ClienteTab() {
           create({
             nomeFantasia: row.nomeFantasia,
             codigoInterno: row.codigoInterno,
+            cnpj: onlyDigits(row.cnpj),
             email: row.email,
             telefone: row.telefone,
             enderecoFiscal: row.enderecoFiscal,
@@ -269,6 +337,11 @@ export default function ClienteTab() {
       ),
     },
     { key: "codigoInterno", label: "Código Interno" },
+    {
+      key: "cnpj",
+      label: "CNPJ",
+      render: (item: Cliente) => item.cnpj ? formatCnpj(item.cnpj) : "—",
+    },
     { key: "email", label: "Email" },
     { key: "telefone", label: "Telefone" },
     { key: "enderecoFiscal", label: "Endereço Fiscal" },
@@ -306,7 +379,7 @@ export default function ClienteTab() {
             <DialogTitle>Importar clientes por Excel</DialogTitle>
             <DialogDescription>
               Use o modelo abaixo ou envie uma planilha com as colunas Nome Fantasia,
-              Código Interno, Email, Telefone e Endereço Fiscal.
+              Código Interno, CNPJ, Email, Telefone e Endereço Fiscal.
             </DialogDescription>
           </DialogHeader>
 
@@ -427,6 +500,17 @@ export default function ClienteTab() {
                 />
               </FormField>
             </div>
+            <FormField label="CNPJ">
+              <Input
+                value={formatCnpj(form.cnpj)}
+                onChange={(e) =>
+                  setForm({ ...form, cnpj: onlyDigits(e.target.value).slice(0, 14) })
+                }
+                placeholder="00.000.000/0000-00"
+                inputMode="numeric"
+                maxLength={18}
+              />
+            </FormField>
             <div className="grid grid-cols-2 gap-4">
               <FormField label="Email">
                 <Input

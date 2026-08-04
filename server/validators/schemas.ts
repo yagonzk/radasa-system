@@ -20,7 +20,12 @@ export const chapaBody = z.object({
   id: id.optional(), nome: text(), valorFixo: money, createdAt: z.string().optional(),
 });
 export const clienteBody = z.object({
-  id: id.optional(), nomeFantasia: text(), codigoInterno: text(100), email: z.string().trim().max(255), telefone: z.string().trim().max(100), enderecoFiscal: z.string().trim().max(1000), createdAt: z.string().optional(),
+  id: id.optional(), nomeFantasia: text(), codigoInterno: text(100),
+  cnpj: z.string().trim().max(18).transform((value) => value.replace(/\D/g, "")).refine(
+    (value) => !value || value.length === 14,
+    "CNPJ deve possuir 14 dígitos.",
+  ).default(""),
+  email: z.string().trim().max(255), telefone: z.string().trim().max(100), enderecoFiscal: z.string().trim().max(1000), createdAt: z.string().optional(),
 });
 export const produtoBody = z.object({
   id: id.optional(), nome: text(), codigoInterno: text(100),
@@ -160,3 +165,23 @@ export const pneuInspecaoBody = z.object({
   bolhas: z.boolean().default(false), trincas: z.boolean().default(false), desgasteIrregular: z.boolean().default(false),
   lonaAparente: z.boolean().default(false), observacoes: optionalText(2000), fotos: z.array(z.string().max(20_000_000)).max(10).optional(),
 });
+
+
+const cnpj = z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().length(14, "CNPJ deve possuir 14 dígitos"));
+export const sefazCertificateBody = z.object({
+  cnpj,
+  fileName: z.string().trim().regex(/\.(pfx|p12)$/i, "Envie um certificado .pfx ou .p12"),
+  certificateBase64: z.string().min(100).max(10_000_000),
+  password: z.string().min(1).max(500),
+});
+export const sefazDocumentQuery = z.object({
+  body: z.unknown().optional(),
+  params: z.unknown().optional(),
+  query: z.object({ certificateId: id.optional(), search: z.string().trim().max(200).optional(), from: dateOnly.optional(), to: dateOnly.optional(), status: z.string().trim().max(40).optional(), manifestationType: z.enum(["CIENCIA","CONFIRMACAO","DESCONHECIMENTO","NAO_REALIZADA"]).optional() }),
+});
+
+export const sefazCertificateStatusBody = z.object({ active: z.boolean() });
+
+export const sefazAutoSyncBody = z.object({ enabled: z.boolean(), intervalMinutes: z.coerce.number().int().min(15).max(1440) });
+export const sefazManifestBody = z.object({ type: z.enum(["CIENCIA","CONFIRMACAO","DESCONHECIMENTO","NAO_REALIZADA"]), reason: z.string().trim().max(255).optional() }).superRefine((data,ctx)=>{if(data.type==="NAO_REALIZADA"&&(!data.reason||data.reason.length<15))ctx.addIssue({code:"custom",path:["reason"],message:"Informe uma justificativa com pelo menos 15 caracteres."})});
+export const sefazMatchItemBody = z.object({ produtoId: z.string().min(1) });
