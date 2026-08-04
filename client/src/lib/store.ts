@@ -9,29 +9,25 @@ export interface Cliente { id: string; nomeFantasia: string; razaoSocial: string
 export interface Empresa {
   id: string;
   razaoSocial: string;
-  nomeFantasia?: string | null;
+  nomeFantasia?: string;
   cnpj: string;
-  inscricaoEstadual?: string | null;
-  rntrc?: string | null;
-  antt?: string | null;
-  email?: string | null;
-  telefone?: string | null;
-  cep?: string | null;
-  logradouro?: string | null;
-  numero?: string | null;
-  complemento?: string | null;
-  bairro?: string | null;
-  cidade?: string | null;
-  uf?: string | null;
-  certificadoArquivo?: string | null;
-  certificadoValidade?: string | null;
+  inscricaoEstadual?: string;
+  rntrc?: string;
+  antt?: string;
+  email?: string;
+  telefone?: string;
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+  certificadoArquivo?: string;
+  certificadoValidade?: string;
   ativa: boolean;
   empresaPadrao: boolean;
   createdAt: string;
-}
-
-export interface EmpresaInput extends Omit<Empresa, "id" | "createdAt"> {
-  certificadoSenha?: string;
 }
 
 export type CategoriaEstoque = string;
@@ -48,7 +44,45 @@ export type TipoManifesto = "Bonificação - Lebrinha" | "Acertar c/ Lebrinha" |
 export interface ManifestoProduto { produtoId: string; quantidade: number; valorUnitario: number; valorTotal: number; tipoManifesto?: TipoManifesto; }
 export interface Manifesto { id: string; clienteId: string; dataManifesto: string; produtos: ManifestoProduto[]; tipoManifesto: TipoManifesto; pdfUrl?: string; createdAt: string; }
 export interface AbastecimentoProduto { produtoId: string; quantidadeLitros: number; valorUnitario: number; valorTotal: number; }
-export interface Abastecimento { id: string; clienteId: string; veiculoId: string; dataEmissao: string; produtos: AbastecimentoProduto[]; valorDesconto: number; valorTotal: number; hodometro: number; pdfUrl?: string | null; createdAt: string; }
+export interface Abastecimento {
+  id: string;
+  clienteId: string;
+  veiculoId: string;
+  chaveNfe?: string | null;
+  numeroNfe?: string;
+  serieNfe?: string;
+  emitenteCnpj?: string;
+  emitenteRazaoSocial?: string;
+  emitenteNomeFantasia?: string;
+  emitenteInscricaoEstadual?: string;
+  emitenteEndereco?: string;
+  emitenteCidade?: string;
+  emitenteUf?: string;
+  destinatarioCnpjCpf?: string;
+  destinatarioRazaoSocial?: string;
+  destinatarioEndereco?: string;
+  destinatarioCidade?: string;
+  destinatarioUf?: string;
+  naturezaOperacao?: string;
+  placaXml?: string;
+  hodometroOrigem?: string;
+  valorProdutos?: number;
+  valorFrete?: number;
+  valorSeguro?: number;
+  valorOutros?: number;
+  valorIcms?: number;
+  valorPis?: number;
+  valorCofins?: number;
+  informacoesComplementares?: string;
+  dataEmissao: string;
+  produtos: AbastecimentoProduto[];
+  valorDesconto: number;
+  valorTotal: number;
+  hodometro: number;
+  pdfUrl?: string | null;
+  xmlUrl?: string | null;
+  createdAt: string;
+}
 export type StatusCiot =
   | "RASCUNHO"
   | "PRONTO_ENVIO"
@@ -220,19 +254,7 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string) {
 export const useMotoristas = () => useApiCrud<Motorista>("motoristas", "Motorista");
 export const useChapas = () => useApiCrud<Chapa>("chapas", "Chapa");
 export const useClientes = () => useApiCrud<Cliente>("clientes", "Cliente");
-export function useEmpresa() {
-  const crud = useApiCrud<Empresa>("empresa", "Empresa");
-  const create = useCallback(
-    (data: EmpresaInput) => crud.create(data),
-    [crud.create],
-  );
-  const update = useCallback(
-    (id: string, data: Partial<EmpresaInput>) => crud.update(id, data),
-    [crud.update],
-  );
-
-  return { ...crud, create, update };
-}
+export const useEmpresa = () => useApiCrud<Empresa>("empresa", "Empresa");
 export const useProdutos = () => useApiCrud<Produto>("produtos", "Produto");
 export const useLocais = () => useApiCrud<Local>("locais", "Local");
 export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");

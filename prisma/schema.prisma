@@ -327,24 +327,51 @@ model CiotCte {
 }
 
 model Abastecimento {
-  id            String                 @id @default(cuid())
-  clienteId     String
-  veiculoId     String
-  dataEmissao   DateTime               @db.Date
-  valorDesconto Decimal                @default(0) @db.Decimal(14, 2)
-  valorTotal    Decimal                @db.Decimal(14, 2)
-  hodometro     Decimal                @db.Decimal(14, 1)
-  pdfUrl        String?                @db.Text
-  xmlUrl        String?                @db.Text
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
-  cliente       Cliente                @relation(fields: [clienteId], references: [id], onDelete: Restrict)
-  veiculo       Veiculo                @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
-  produtos      AbastecimentoProduto[]
+  id                        String                 @id @default(cuid())
+  clienteId                 String
+  veiculoId                 String
+  chaveNfe                  String?                @unique
+  numeroNfe                 String                 @default("")
+  serieNfe                  String                 @default("")
+  emitenteCnpj              String                 @default("")
+  emitenteRazaoSocial       String                 @default("")
+  emitenteNomeFantasia      String                 @default("")
+  emitenteInscricaoEstadual String                 @default("")
+  emitenteEndereco          String                 @default("") @db.Text
+  emitenteCidade            String                 @default("")
+  emitenteUf                String                 @default("")
+  destinatarioCnpjCpf       String                 @default("")
+  destinatarioRazaoSocial   String                 @default("")
+  destinatarioEndereco      String                 @default("") @db.Text
+  destinatarioCidade        String                 @default("")
+  destinatarioUf            String                 @default("")
+  naturezaOperacao          String                 @default("")
+  placaXml                  String                 @default("")
+  hodometroOrigem           String                 @default("") @db.Text
+  valorProdutos             Decimal                @default(0) @db.Decimal(14, 2)
+  valorFrete                Decimal                @default(0) @db.Decimal(14, 2)
+  valorSeguro               Decimal                @default(0) @db.Decimal(14, 2)
+  valorOutros               Decimal                @default(0) @db.Decimal(14, 2)
+  valorIcms                 Decimal                @default(0) @db.Decimal(14, 2)
+  valorPis                  Decimal                @default(0) @db.Decimal(14, 2)
+  valorCofins               Decimal                @default(0) @db.Decimal(14, 2)
+  informacoesComplementares String                 @default("") @db.Text
+  dataEmissao               DateTime               @db.Date
+  valorDesconto             Decimal                @default(0) @db.Decimal(14, 2)
+  valorTotal                Decimal                @db.Decimal(14, 2)
+  hodometro                 Decimal                @db.Decimal(14, 1)
+  pdfUrl                    String?                @db.Text
+  xmlUrl                    String?                @db.Text
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  cliente                   Cliente                @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  veiculo                   Veiculo                @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
+  produtos                  AbastecimentoProduto[]
 
   @@index([clienteId])
   @@index([veiculoId])
   @@index([dataEmissao])
+  @@index([emitenteCnpj])
   @@map("abastecimentos")
 }
 

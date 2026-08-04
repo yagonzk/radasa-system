@@ -16,6 +16,7 @@ import { fechamentosRoutes } from "./fechamentos.routes";
 import { manifestosRoutes } from "./manifestos.routes";
 import { logsRoutes } from "./logs.routes";
 import { abastecimentosRoutes } from "./abastecimentos.routes";
+import { abastecimentosXmlRoutes } from "./abastecimentos-xml.routes";
 import { pneusRoutes } from "./pneus.routes";
 import { estoqueRoutes } from "./estoque.routes";
 import { ciotsRoutes } from "./ciots.routes";
@@ -42,6 +43,7 @@ apiRoutes.use("/viagens", viagensRoutes);
 apiRoutes.use("/fechamentos", fechamentosRoutes);
 apiRoutes.use("/manifestos", manifestosRoutes);
 apiRoutes.use("/abastecimentos", abastecimentosRoutes);
+apiRoutes.use("/abastecimentos/xml", abastecimentosXmlRoutes);
 apiRoutes.use("/ciots", ciotsRoutes);
 apiRoutes.use("/cte", cteRoutes);
 
