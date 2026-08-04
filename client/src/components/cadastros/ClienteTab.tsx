@@ -13,7 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import DataTable from "./DataTable";
-import { Plus, Building2, Upload, Download, FileSpreadsheet } from "lucide-react";
+import { Plus, Building2, Upload, Download, FileSpreadsheet, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 interface FormState {
@@ -28,7 +28,9 @@ interface FormState {
 
 interface ImportRow extends FormState {
   rowNumber: number;
-  status: "valid" | "invalid" | "duplicate";
+  status: "new" | "update" | "unchanged" | "invalid";
+  existingId?: string;
+  changes?: Partial<FormState>;
   error?: string;
 }
 
@@ -43,12 +45,27 @@ const emptyForm: FormState = {
 };
 
 const HEADER_ALIASES: Record<keyof FormState, string[]> = {
-  nomeFantasia: ["nome fantasia", "nome", "cliente", "razao social", "razão social"],
-  codigoInterno: ["codigo interno", "código interno", "codigo", "código", "cod cliente", "cod. cliente"],
+  nomeFantasia: ["nome fantasia", "fantasia", "cliente", "nome"],
+  razaoSocial: ["razão social", "razao social", "nome empresarial", "razão", "razao"],
+  codigoInterno: [
+    "codigo interno",
+    "código interno",
+    "codigo",
+    "código",
+    "cod cliente",
+    "cod. cliente",
+    "codcliente",
+  ],
   cnpj: ["cnpj", "cnpj cliente", "documento", "documento fiscal"],
-  email: ["email", "e-mail"],
-  telefone: ["telefone", "fone", "celular"],
-  enderecoFiscal: ["endereco fiscal", "endereço fiscal", "endereco", "endereço"],
+  email: ["email", "e-mail", "correio eletrônico", "correio eletronico"],
+  telefone: ["telefone", "fone", "celular", "whatsapp", "whats app"],
+  enderecoFiscal: [
+    "endereco fiscal",
+    "endereço fiscal",
+    "endereco",
+    "endereço",
+    "logradouro",
+  ],
 };
 
 function normalizeHeader(value: unknown) {
@@ -104,6 +121,59 @@ function findValue(row: Record<string, unknown>, field: keyof FormState) {
   return key ? normalizeValue(row[key]) : "";
 }
 
+
+function normalizedEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function normalizedCode(value: string) {
+  return normalizeHeader(value);
+}
+
+function hasRecognizedColumns(row: Record<string, unknown>) {
+  const headers = Object.keys(row).map(normalizeHeader);
+  return Object.values(HEADER_ALIASES).some((aliases) =>
+    aliases.map(normalizeHeader).some((alias) => headers.includes(alias)),
+  );
+}
+
+function nonEmptyPatch(row: FormState): Partial<FormState> {
+  return Object.fromEntries(
+    Object.entries(row).filter(([, value]) => String(value ?? "").trim() !== ""),
+  ) as Partial<FormState>;
+}
+
+function changedPatch(existing: Cliente, row: FormState): Partial<FormState> {
+  const patch = nonEmptyPatch(row);
+  return Object.fromEntries(
+    Object.entries(patch).filter(([key, value]) => {
+      const current = String(existing[key as keyof Cliente] ?? "").trim();
+      const incoming = String(value ?? "").trim();
+      if (key === "cnpj") return onlyDigits(current) !== onlyDigits(incoming);
+      if (key === "email") return normalizedEmail(current) !== normalizedEmail(incoming);
+      return current !== incoming;
+    }),
+  ) as Partial<FormState>;
+}
+
+function spreadsheetErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("password") || normalized.includes("encrypted")) {
+    return "A planilha está protegida por senha. Remova a proteção e tente novamente.";
+  }
+  if (normalized.includes("zip") || normalized.includes("corrupt")) {
+    return "O arquivo parece estar corrompido ou não é um Excel válido.";
+  }
+  if (normalized.includes("unsupported") || normalized.includes("format")) {
+    return "O formato da planilha é incompatível. Salve novamente como .xlsx ou .xls.";
+  }
+  return message
+    ? `Erro ao ler a planilha: ${message}`
+    : "Não foi possível ler a planilha.";
+}
+
 export default function ClienteTab() {
   const { items, create, update, remove } = useClientes();
   const [open, setOpen] = useState(false);
@@ -113,6 +183,7 @@ export default function ClienteTab() {
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [fileName, setFileName] = useState("");
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleOpenCreate = () => {
@@ -124,6 +195,7 @@ export default function ClienteTab() {
   const handleOpenImport = () => {
     setImportRows([]);
     setFileName("");
+    setImportProgress({ current: 0, total: 0 });
     if (fileInputRef.current) fileInputRef.current.value = "";
     setImportOpen(true);
   };
@@ -209,32 +281,62 @@ export default function ClienteTab() {
 
     try {
       const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, {
-        defval: "",
-        raw: false,
+      const workbook = XLSX.read(buffer, {
+        type: "array",
+        cellDates: false,
+        dense: true,
       });
 
-      if (!rawRows.length) {
-        toast.error("A planilha está vazia.");
+      if (!workbook.SheetNames.length) {
+        toast.error("Nenhuma aba foi encontrada na planilha.");
         return;
       }
 
-      const existingCodes = new Set(
-        items.map((item) => normalizeHeader(item.codigoInterno)).filter(Boolean),
-      );
-      const existingEmails = new Set(
-        items.map((item) => normalizeHeader(item.email)).filter(Boolean),
-      );
-      const existingCnpjs = new Set(
-        items.map((item) => onlyDigits(item.cnpj || "")).filter(Boolean),
-      );
-      const fileCodes = new Set<string>();
-      const fileCnpjs = new Set<string>();
-      const fileEmails = new Set<string>();
+      let rawRows: Record<string, unknown>[] = [];
+      let selectedSheet = "";
 
-      const parsed = rawRows.map((raw, index): ImportRow => {
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+          defval: "",
+          raw: false,
+          blankrows: false,
+        });
+
+        if (rows.length && rows.some(hasRecognizedColumns)) {
+          rawRows = rows;
+          selectedSheet = sheetName;
+          break;
+        }
+      }
+
+      if (!rawRows.length) {
+        toast.error(
+          "Não foi possível localizar uma aba com colunas reconhecidas. Use Nome Fantasia, Razão Social, CNPJ, Código, E-mail, Telefone ou Endereço.",
+        );
+        return;
+      }
+
+      const byCnpj = new Map(
+        items
+          .filter((item) => onlyDigits(item.cnpj || ""))
+          .map((item) => [onlyDigits(item.cnpj || ""), item]),
+      );
+      const byCode = new Map(
+        items
+          .filter((item) => normalizedCode(item.codigoInterno))
+          .map((item) => [normalizedCode(item.codigoInterno), item]),
+      );
+      const byEmail = new Map(
+        items
+          .filter((item) => normalizedEmail(item.email || ""))
+          .map((item) => [normalizedEmail(item.email || ""), item]),
+      );
+
+      const parsed: ImportRow[] = [];
+      const rowsByIdentity = new Map<string, number>();
+
+      rawRows.forEach((raw, index) => {
         const row: FormState = {
           nomeFantasia: findValue(raw, "nomeFantasia"),
           razaoSocial: findValue(raw, "razaoSocial"),
@@ -245,90 +347,158 @@ export default function ClienteTab() {
           enderecoFiscal: findValue(raw, "enderecoFiscal"),
         };
 
-        const code = normalizeHeader(row.codigoInterno);
+        const rowNumber = index + 2;
+        const code = normalizedCode(row.codigoInterno);
         const cnpj = onlyDigits(row.cnpj);
-        const email = normalizeHeader(row.email);
+        const email = normalizedEmail(row.email);
         const errors: string[] = [];
 
-        if (!row.nomeFantasia) errors.push("Nome Fantasia obrigatório");
-        if (!row.codigoInterno) errors.push("Código Interno obrigatório");
         if (row.cnpj && !isValidCnpj(row.cnpj)) errors.push("CNPJ inválido");
         if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
           errors.push("E-mail inválido");
         }
 
-        const duplicated =
-          (code && (existingCodes.has(code) || fileCodes.has(code))) ||
-          (cnpj && (existingCnpjs.has(cnpj) || fileCnpjs.has(cnpj))) ||
-          (email && (existingEmails.has(email) || fileEmails.has(email)));
+        const existing =
+          (cnpj ? byCnpj.get(cnpj) : undefined) ??
+          (code ? byCode.get(code) : undefined) ??
+          (email ? byEmail.get(email) : undefined);
 
-        if (code) fileCodes.add(code);
-        if (cnpj) fileCnpjs.add(cnpj);
-        if (email) fileEmails.add(email);
+        if (!existing && !row.nomeFantasia) {
+          errors.push("Nome Fantasia obrigatório para novo cliente");
+        }
+        if (!existing && !row.codigoInterno) {
+          errors.push("Código Interno obrigatório para novo cliente");
+        }
+        if (!existing && !cnpj && !code && !email) {
+          errors.push("Informe CNPJ, Código Interno ou E-mail");
+        }
 
-        return {
+        if (errors.length) {
+          parsed.push({
+            ...row,
+            rowNumber,
+            status: "invalid",
+            error: errors.join("; "),
+          });
+          return;
+        }
+
+        if (existing) {
+          const patch = changedPatch(existing, row);
+          parsed.push({
+            ...row,
+            rowNumber,
+            existingId: existing.id,
+            changes: patch,
+            status: Object.keys(patch).length ? "update" : "unchanged",
+          });
+          return;
+        }
+
+        // Linhas repetidas dentro da própria planilha são mescladas.
+        const identity = cnpj
+          ? `cnpj:${cnpj}`
+          : code
+            ? `code:${code}`
+            : `email:${email}`;
+
+        const previousIndex = rowsByIdentity.get(identity);
+        if (previousIndex !== undefined) {
+          const previous = parsed[previousIndex];
+          const merged = {
+            ...previous,
+            ...Object.fromEntries(
+              Object.entries(row).filter(([, value]) => String(value).trim() !== ""),
+            ),
+          } as ImportRow;
+          parsed[previousIndex] = merged;
+          return;
+        }
+
+        rowsByIdentity.set(identity, parsed.length);
+        parsed.push({
           ...row,
-          rowNumber: index + 2,
-          status: errors.length ? "invalid" : duplicated ? "duplicate" : "valid",
-          error: errors.length
-            ? errors.join("; ")
-            : duplicated
-              ? "Cliente duplicado por código, CNPJ ou e-mail"
-              : undefined,
-        };
+          rowNumber,
+          status: "new",
+        });
       });
 
-      setFileName(file.name);
+      setFileName(`${file.name} — aba: ${selectedSheet}`);
       setImportRows(parsed);
-      toast.success(`${parsed.length} linha(s) lida(s) da planilha.`);
+      setImportProgress({ current: 0, total: 0 });
+      toast.success(`${parsed.length} cliente(s) analisado(s).`);
     } catch (error) {
       console.error(error);
-      toast.error("Não foi possível ler a planilha. Confira o arquivo e tente novamente.");
+      toast.error(spreadsheetErrorMessage(error));
     }
   };
 
   const handleImport = async () => {
-    const validRows = importRows.filter((row) => row.status === "valid");
-    if (!validRows.length) {
-      toast.error("Não existem clientes válidos para importar.");
+    const actionable = importRows.filter(
+      (row) => row.status === "new" || row.status === "update",
+    );
+
+    if (!actionable.length) {
+      toast.error("Não existem clientes novos ou alterações para sincronizar.");
       return;
     }
 
     setImporting(true);
-    let imported = 0;
+    setImportProgress({ current: 0, total: actionable.length });
+
+    let created = 0;
+    let updated = 0;
     let failed = 0;
 
-    for (const row of validRows) {
+    for (let index = 0; index < actionable.length; index += 1) {
+      const row = actionable[index];
+
       try {
-        await Promise.resolve(
-          create({
-            nomeFantasia: row.nomeFantasia,
-            razaoSocial: row.razaoSocial,
-            codigoInterno: row.codigoInterno,
-            cnpj: onlyDigits(row.cnpj),
-            email: row.email,
-            telefone: row.telefone,
-            enderecoFiscal: row.enderecoFiscal,
-          }),
-        );
-        imported += 1;
+        if (row.status === "update" && row.existingId) {
+          await Promise.resolve(update(row.existingId, row.changes ?? {}));
+          updated += 1;
+        } else {
+          await Promise.resolve(
+            create({
+              nomeFantasia: row.nomeFantasia,
+              razaoSocial: row.razaoSocial,
+              codigoInterno: row.codigoInterno,
+              cnpj: onlyDigits(row.cnpj),
+              email: row.email,
+              telefone: row.telefone,
+              enderecoFiscal: row.enderecoFiscal,
+            }),
+          );
+          created += 1;
+        }
       } catch (error) {
         console.error(`Erro na linha ${row.rowNumber}:`, error);
         failed += 1;
+      } finally {
+        setImportProgress({ current: index + 1, total: actionable.length });
+        if ((index + 1) % 25 === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
       }
     }
 
     setImporting(false);
+
+    const unchanged = importRows.filter((row) => row.status === "unchanged").length;
+    const invalid = importRows.filter((row) => row.status === "invalid").length;
+
     toast.success(
-      `${imported} cliente(s) importado(s)${failed ? ` e ${failed} falha(s)` : ""}.`,
+      `${created} criado(s), ${updated} atualizado(s), ${unchanged} sem alteração, ${invalid + failed} com erro.`,
     );
 
     if (!failed) setImportOpen(false);
   };
 
-  const validCount = importRows.filter((row) => row.status === "valid").length;
-  const duplicateCount = importRows.filter((row) => row.status === "duplicate").length;
+  const newCount = importRows.filter((row) => row.status === "new").length;
+  const updateCount = importRows.filter((row) => row.status === "update").length;
+  const unchangedCount = importRows.filter((row) => row.status === "unchanged").length;
   const invalidCount = importRows.filter((row) => row.status === "invalid").length;
+  const actionableCount = newCount + updateCount;
 
   const columns: { key: string; label: string; render?: (item: Cliente) => ReactNode }[] = [
     {
@@ -342,6 +512,11 @@ export default function ClienteTab() {
           <span className="font-medium">{item.nomeFantasia || "—"}</span>
         </div>
       ),
+    },
+    {
+      key: "razaoSocial",
+      label: "Razão Social",
+      render: (item: Cliente) => item.razaoSocial || "—",
     },
     { key: "codigoInterno", label: "Código Interno" },
     {
@@ -385,8 +560,8 @@ export default function ClienteTab() {
           <DialogHeader>
             <DialogTitle>Importar clientes por Excel</DialogTitle>
             <DialogDescription>
-              Use o modelo abaixo ou envie uma planilha com as colunas Nome Fantasia, Razão Social,
-              Código Interno, CNPJ, Email, Telefone e Endereço Fiscal.
+              Clientes existentes são encontrados por CNPJ, Código Interno ou E-mail.
+              Somente células preenchidas atualizam o cadastro; células vazias preservam os dados atuais.
             </DialogDescription>
           </DialogHeader>
 
@@ -412,18 +587,22 @@ export default function ClienteTab() {
 
             {!!importRows.length && (
               <>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-lg border p-3">
-                    <p className="text-sm text-muted-foreground">Prontos para importar</p>
-                    <p className="text-2xl font-semibold">{validCount}</p>
+                    <p className="text-sm text-muted-foreground">Novos</p>
+                    <p className="text-2xl font-semibold text-emerald-600">{newCount}</p>
                   </div>
                   <div className="rounded-lg border p-3">
-                    <p className="text-sm text-muted-foreground">Duplicados</p>
-                    <p className="text-2xl font-semibold">{duplicateCount}</p>
+                    <p className="text-sm text-muted-foreground">Serão atualizados</p>
+                    <p className="text-2xl font-semibold text-blue-600">{updateCount}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-sm text-muted-foreground">Sem alterações</p>
+                    <p className="text-2xl font-semibold text-amber-600">{unchangedCount}</p>
                   </div>
                   <div className="rounded-lg border p-3">
                     <p className="text-sm text-muted-foreground">Com erro</p>
-                    <p className="text-2xl font-semibold">{invalidCount}</p>
+                    <p className="text-2xl font-semibold text-destructive">{invalidCount}</p>
                   </div>
                 </div>
 
@@ -450,9 +629,18 @@ export default function ClienteTab() {
                           <td className="p-2">{row.email || "—"}</td>
                           <td className="p-2">{row.telefone || "—"}</td>
                           <td className="p-2">
-                            {row.status === "valid" ? (
-                              <span className="text-emerald-600">Pronto</span>
-                            ) : (
+                            {row.status === "new" && (
+                              <span className="text-emerald-600">Novo cliente</span>
+                            )}
+                            {row.status === "update" && (
+                              <span className="text-blue-600">
+                                Atualizar: {Object.keys(row.changes ?? {}).join(", ")}
+                              </span>
+                            )}
+                            {row.status === "unchanged" && (
+                              <span className="text-amber-600">Sem alterações</span>
+                            )}
+                            {row.status === "invalid" && (
                               <span className="text-destructive">{row.error}</span>
                             )}
                           </td>
@@ -470,16 +658,44 @@ export default function ClienteTab() {
             )}
           </div>
 
+          {importing && importProgress.total > 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Sincronizando clientes...</span>
+                <span>
+                  {importProgress.current} / {importProgress.total}
+                </span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{
+                    width: `${Math.round(
+                      (importProgress.current / importProgress.total) * 100,
+                    )}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setImportOpen(false)}>
               Cancelar
             </Button>
             <Button
               type="button"
-              disabled={!validCount || importing}
+              disabled={!actionableCount || importing}
               onClick={() => void handleImport()}
             >
-              {importing ? "Importando..." : `Importar ${validCount} cliente(s)`}
+              {importing ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Sincronizando...
+                </>
+              ) : (
+                `Sincronizar ${actionableCount} cliente(s)`
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

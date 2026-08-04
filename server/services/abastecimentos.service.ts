@@ -58,6 +58,7 @@ function buildHeader(input: any, produtos: ReturnType<typeof buildProducts>) {
     valorTotal: Number((valorBruto - valorDesconto).toFixed(2)),
     hodometro: Number(input.hodometro),
     pdfUrl: input.pdfUrl || null,
+    xmlUrl: input.xmlUrl || null,
     ...(input.createdAt ? { createdAt: new Date(input.createdAt) } : {}),
   };
 }
@@ -103,6 +104,7 @@ export const abastecimentosService = {
       valorDesconto: input.valorDesconto ?? number(current.valorDesconto),
       hodometro: input.hodometro ?? number(current.hodometro),
       pdfUrl: input.pdfUrl === undefined ? current.pdfUrl : input.pdfUrl,
+      xmlUrl: input.xmlUrl === undefined ? current.xmlUrl : input.xmlUrl,
     };
     const produtos = buildProducts(merged.produtos);
     await ensureReferences(merged.clienteId, merged.veiculoId, produtos.map((p) => p.produtoId));

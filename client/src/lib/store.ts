@@ -4,7 +4,7 @@ import { api } from "./api";
 export type StatusMotorista = "ATIVO" | "DEMITIDO";
 export interface Motorista { id: string; nome: string; cpf: string; salarioBase: number; status: StatusMotorista; createdAt: string; }
 export interface Chapa { id: string; nome: string; valorFixo: number; createdAt: string; }
-export interface Cliente { id: string; nomeFantasia: string; razaoSocial: string; codigoInterno: string; cnpj: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
+export interface Cliente { id: string; nomeFantasia: string; codigoInterno: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
 export type CategoriaEstoque = string;
 export interface Produto { id: string; nome: string; codigoInterno: string; categoriaEstoque: CategoriaEstoque; createdAt: string; }
 export type TipoMovimentacaoEstoque = "ENTRADA" | "SAIDA";
@@ -210,13 +210,22 @@ export interface SefazCertificate {
 }
 export interface SefazDocumentItem { id:string; itemNumber:number; supplierCode?:string|null; ean?:string|null; description:string; ncm?:string|null; cfop?:string|null; unit?:string|null; quantity:number; unitValue:number; totalValue:number; matchedProdutoId?:string|null; matchedProduto?:Produto|null; }
 export interface SefazDocumentEvent { id:string; type:string; description:string; protocol?:string|null; createdAt:string; }
-export interface SefazDocument { id:string; certificateId:string; nsu:string; schema:string; accessKey?:string|null; documentType?:string|null; issuerCnpj?:string|null; issuerName?:string|null; recipientCnpj?:string|null; recipientName?:string|null; emissionDate?:string|null; totalValue?:number|null; number?:string|null; series?:string|null; operationType?:string|null; status?:string|null; manifestationType?:"CIENCIA"|"CONFIRMACAO"|"DESCONHECIMENTO"|"NAO_REALIZADA"|null; manifestationStatus:"NONE"|"PROCESSING"|"SUCCESS"|"ERROR"; manifestationProtocol?:string|null; manifestedAt?:string|null; importedAt?:string|null; isSummary:boolean; receivedAt:string; items?:SefazDocumentItem[]; events?:SefazDocumentEvent[]; }
+export interface SefazDocument { id:string; certificateId:string; nsu:string; schema:string; accessKey?:string|null; documentType?:string|null; issuerCnpj?:string|null; issuerName?:string|null; recipientCnpj?:string|null; recipientName?:string|null; emissionDate?:string|null; totalValue?:number|null; number?:string|null; series?:string|null; operationType?:string|null; status?:string|null; manifestationType?:"CIENCIA"|"CONFIRMACAO"|"DESCONHECIMENTO"|"NAO_REALIZADA"|null; manifestationStatus:"NONE"|"PROCESSING"|"SUCCESS"|"ERROR"; reviewStatus:"PENDENTE"|"CONFERIDO"|"IGNORADO"; reviewNotes?:string|null; reviewedAt?:string|null; workflowStatus:"PENDENTE"|"EM_ANALISE"|"AGUARDANDO"|"CONCLUIDO"; priority:"BAIXA"|"NORMAL"|"ALTA"|"URGENTE"; assignedToName?:string|null; dueAt?:string|null; workflowNotes?:string|null; workflowUpdatedAt?:string|null; manifestationProtocol?:string|null; manifestedAt?:string|null; importedAt?:string|null; isSummary:boolean; receivedAt:string; items?:SefazDocumentItem[]; events?:SefazDocumentEvent[]; }
 export interface SefazSyncLog { id:string; certificateId:string; status:"RUNNING"|"SUCCESS"|"EMPTY"|"BLOCKED"|"ERROR"; cStat?:string|null; message?:string|null; initialNsu:string; lastNsu?:string|null; maxNsu?:string|null; documentsFound:number; startedAt:string; finishedAt?:string|null; certificate:{cnpj:string;fileName:string}; }
+
+export interface SefazAlert { id:string; type:string; severity:"info"|"warning"|"critical"; title:string; description:string; entityId?:string; }
+export interface SefazReport {
+  summary:{totalDocuments:number;totalValue:number;pendingReview:number;reviewed:number;ignored:number;imported:number;pendingManifestation:number;workflowPending:number;workflowOverdue:number;urgent:number};
+  byIssuer:Array<{name:string;cnpj:string;total:number;count:number}>;
+  byMonth:Array<{month:string;total:number;count:number}>;
+  documents:SefazDocument[];
+}
+
 export interface SefazDashboard { totalDocuments:number; totalValue:number; activeCertificates:number; pendingManifestation:number; cancelled:number; denied:number; lastSyncAt?:string|null; expiredCertificates:number; }
 
 export function useSefaz() {
-  const [certificates,setCertificates]=useState<SefazCertificate[]>([]); const [documents,setDocuments]=useState<SefazDocument[]>([]); const [syncLogs,setSyncLogs]=useState<SefazSyncLog[]>([]); const [dashboard,setDashboard]=useState<SefazDashboard|null>(null); const [loading,setLoading]=useState(false);
-  const refresh=useCallback(async(params?:Record<string,string|undefined>)=>{const [c,d,l,k]=await Promise.all([api.get<SefazCertificate[]>("/sefaz/certificates"),api.get<SefazDocument[]>("/sefaz/documents",{params}),api.get<SefazSyncLog[]>("/sefaz/sync-logs"),api.get<SefazDashboard>("/sefaz/dashboard")]);setCertificates(c.data);setDocuments(d.data);setSyncLogs(l.data);setDashboard(k.data)},[]);
+  const [certificates,setCertificates]=useState<SefazCertificate[]>([]); const [alerts,setAlerts]=useState<SefazAlert[]>([]); const [report,setReport]=useState<SefazReport|null>(null); const [documents,setDocuments]=useState<SefazDocument[]>([]); const [syncLogs,setSyncLogs]=useState<SefazSyncLog[]>([]); const [dashboard,setDashboard]=useState<SefazDashboard|null>(null); const [loading,setLoading]=useState(false);
+  const refresh=useCallback(async(params?:Record<string,string|undefined>)=>{const [c,d,l,k,a]=await Promise.all([api.get<SefazCertificate[]>("/sefaz/certificates"),api.get<SefazDocument[]>("/sefaz/documents",{params}),api.get<SefazSyncLog[]>("/sefaz/sync-logs"),api.get<SefazDashboard>("/sefaz/dashboard"),api.get<SefazAlert[]>("/sefaz/alerts")]);setCertificates(c.data);setDocuments(d.data);setSyncLogs(l.data);setDashboard(k.data);setAlerts(a.data)},[]);
   useEffect(()=>{void refresh()},[refresh]);
   const saveCertificate=useCallback(async(data:{cnpj:string;fileName:string;certificateBase64:string;password:string})=>{const r=(await api.post<SefazCertificate>("/sefaz/certificates",data)).data;await refresh();return r},[refresh]);
   const toggleCertificate=useCallback(async(id:string,active:boolean)=>{await api.put(`/sefaz/certificates/${id}/status`,{active});await refresh()},[refresh]);
@@ -228,5 +237,11 @@ export function useSefaz() {
   const matchItem=useCallback(async(itemId:string,produtoId:string)=>{await api.put(`/sefaz/items/${itemId}/match`,{produtoId})},[]);
   const downloadXml=useCallback(async(id:string)=>{const response=await api.get(`/sefaz/documents/${id}/xml`,{responseType:"blob"});const url=URL.createObjectURL(response.data);const link=document.createElement("a");link.href=url;link.download=`nfe-${id}.xml`;link.click();URL.revokeObjectURL(url)},[]);
   const getDanfe=useCallback(async(id:string)=>(await api.get<string>(`/sefaz/documents/${id}/danfe`,{responseType:"text"})).data,[]);
-  return {certificates,documents,syncLogs,dashboard,loading,refresh,saveCertificate,toggleCertificate,updateAutoSync,sync,details,manifest,importStock,matchItem,downloadXml,getDanfe};
+  const loadReport=useCallback(async(params?:Record<string,string|undefined>)=>{const value=(await api.get<SefazReport>("/sefaz/reports",{params})).data;setReport(value);return value},[]);
+  const updateReview=useCallback(async(id:string,status:"PENDENTE"|"CONFERIDO"|"IGNORADO",notes?:string)=>{await api.put(`/sefaz/documents/${id}/review`,{status,notes});await refresh()},[refresh]);
+  const downloadReportCsv=useCallback(async(params?:Record<string,string|undefined>)=>{const response=await api.get("/sefaz/reports/csv",{params,responseType:"blob"});const url=URL.createObjectURL(response.data);const link=document.createElement("a");link.href=url;link.download="relatorio-sefaz.csv";link.click();URL.revokeObjectURL(url)},[]);
+  const updateWorkflow=useCallback(async(id:string,data:{status:string;priority:string;assignedToName?:string|null;dueAt?:string|null;notes?:string|null})=>{await api.put(`/sefaz/documents/${id}/workflow`,data);await refresh()},[refresh]);
+  const bulkWorkflow=useCallback(async(data:{ids:string[];status?:string;priority?:string;assignedToName?:string|null;dueAt?:string|null})=>{await api.put("/sefaz/documents/workflow/bulk",data);await refresh()},[refresh]);
+  const downloadXmlBatch=useCallback(async(ids:string[])=>{const response=await api.post("/sefaz/documents/xml-batch",{ids},{responseType:"blob"});const url=URL.createObjectURL(response.data);const link=document.createElement("a");link.href=url;link.download="xmls-sefaz.zip";link.click();URL.revokeObjectURL(url)},[]);
+  return {certificates,documents,syncLogs,dashboard,alerts,report,loading,refresh,saveCertificate,toggleCertificate,updateAutoSync,sync,details,manifest,importStock,matchItem,downloadXml,getDanfe,loadReport,updateReview,downloadReportCsv,downloadXmlBatch,updateWorkflow,bulkWorkflow};
 }
