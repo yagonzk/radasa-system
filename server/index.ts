@@ -19,7 +19,9 @@ if (env.NODE_ENV === "production") {
 
 registerErrors(app);
 const server = createServer(app);
-server.listen(env.PORT, () => logger.info(`Servidor em http://localhost:${env.PORT}`));
+server.listen(env.PORT, "0.0.0.0", () =>
+  logger.info(`Servidor rodando na porta ${env.PORT}`),
+);
 
 async function shutdown(signal: string) {
   logger.info({ signal }, "Encerrando servidor");
