@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 interface FormState {
   nomeFantasia: string;
+  razaoSocial: string;
   codigoInterno: string;
   cnpj: string;
   email: string;
@@ -33,6 +34,7 @@ interface ImportRow extends FormState {
 
 const emptyForm: FormState = {
   nomeFantasia: "",
+  razaoSocial: "",
   codigoInterno: "",
   cnpj: "",
   email: "",
@@ -129,6 +131,7 @@ export default function ClienteTab() {
   const handleOpenEdit = (item: Cliente) => {
     setForm({
       nomeFantasia: item.nomeFantasia,
+      razaoSocial: item.razaoSocial || "",
       codigoInterno: item.codigoInterno,
       cnpj: item.cnpj || "",
       email: item.email,
@@ -174,6 +177,7 @@ export default function ClienteTab() {
     const worksheet = XLSX.utils.json_to_sheet([
       {
         "Nome Fantasia": "Cliente Exemplo",
+        "Razão Social": "Cliente Exemplo Comércio e Serviços Ltda.",
         "Código Interno": "1001",
         CNPJ: "15.209.274/0001-62",
         Email: "cliente@exemplo.com",
@@ -183,6 +187,7 @@ export default function ClienteTab() {
     ]);
     worksheet["!cols"] = [
       { wch: 30 },
+      { wch: 40 },
       { wch: 18 },
       { wch: 22 },
       { wch: 30 },
@@ -232,6 +237,7 @@ export default function ClienteTab() {
       const parsed = rawRows.map((raw, index): ImportRow => {
         const row: FormState = {
           nomeFantasia: findValue(raw, "nomeFantasia"),
+          razaoSocial: findValue(raw, "razaoSocial"),
           codigoInterno: findValue(raw, "codigoInterno"),
           cnpj: onlyDigits(findValue(raw, "cnpj")),
           email: findValue(raw, "email"),
@@ -297,6 +303,7 @@ export default function ClienteTab() {
         await Promise.resolve(
           create({
             nomeFantasia: row.nomeFantasia,
+            razaoSocial: row.razaoSocial,
             codigoInterno: row.codigoInterno,
             cnpj: onlyDigits(row.cnpj),
             email: row.email,
@@ -378,7 +385,7 @@ export default function ClienteTab() {
           <DialogHeader>
             <DialogTitle>Importar clientes por Excel</DialogTitle>
             <DialogDescription>
-              Use o modelo abaixo ou envie uma planilha com as colunas Nome Fantasia,
+              Use o modelo abaixo ou envie uma planilha com as colunas Nome Fantasia, Razão Social,
               Código Interno, CNPJ, Email, Telefone e Endereço Fiscal.
             </DialogDescription>
           </DialogHeader>
@@ -426,6 +433,7 @@ export default function ClienteTab() {
                       <tr>
                         <th className="p-2 text-left">Linha</th>
                         <th className="p-2 text-left">Nome Fantasia</th>
+                        <th className="p-2 text-left">Razão Social</th>
                         <th className="p-2 text-left">Código</th>
                         <th className="p-2 text-left">E-mail</th>
                         <th className="p-2 text-left">Telefone</th>
@@ -437,6 +445,7 @@ export default function ClienteTab() {
                         <tr key={`${row.rowNumber}-${row.codigoInterno}`} className="border-t">
                           <td className="p-2">{row.rowNumber}</td>
                           <td className="p-2">{row.nomeFantasia || "—"}</td>
+                          <td className="p-2">{row.razaoSocial || "—"}</td>
                           <td className="p-2">{row.codigoInterno || "—"}</td>
                           <td className="p-2">{row.email || "—"}</td>
                           <td className="p-2">{row.telefone || "—"}</td>
@@ -492,14 +501,21 @@ export default function ClienteTab() {
                   placeholder="Nome fantasia"
                 />
               </FormField>
-              <FormField label="Código Interno">
+              <FormField label="Razão Social">
                 <Input
-                  value={form.codigoInterno}
-                  onChange={(e) => setForm({ ...form, codigoInterno: e.target.value })}
-                  placeholder="Ex: 1001"
+                  value={form.razaoSocial}
+                  onChange={(e) => setForm({ ...form, razaoSocial: e.target.value })}
+                  placeholder="Nome empresarial completo"
                 />
               </FormField>
             </div>
+            <FormField label="Código Interno">
+              <Input
+                value={form.codigoInterno}
+                onChange={(e) => setForm({ ...form, codigoInterno: e.target.value })}
+                placeholder="Ex: 1001"
+              />
+            </FormField>
             <FormField label="CNPJ">
               <Input
                 value={formatCnpj(form.cnpj)}

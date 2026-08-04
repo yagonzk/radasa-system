@@ -27,34 +27,36 @@ enum StatusMotorista {
   DEMITIDO
 }
 
+
+
 enum TipoMovimentacaoEstoque {
   ENTRADA
   SAIDA
 }
 
 model User {
-  id           String     @id @default(cuid())
+  id           String   @id @default(cuid())
   name         String
-  username     String     @unique
-  email        String     @unique
+  username     String   @unique
+  email        String   @unique
   passwordHash String
-  role         UserRole   @default(VISUALIZACAO)
-  active       Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  role         UserRole @default(VISUALIZACAO)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   auditLogs    AuditLog[]
 
   @@map("users")
 }
 
 model Motorista {
-  id          String          @id @default(cuid())
+  id          String       @id @default(cuid())
   nome        String
   cpf         String
-  salarioBase Decimal         @db.Decimal(14, 2)
+  salarioBase Decimal          @db.Decimal(14, 2)
   status      StatusMotorista @default(ATIVO)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime     @updatedAt
   viagens     Viagem[]
   fechamentos Fechamento[]
 
@@ -74,16 +76,17 @@ model Chapa {
 }
 
 model Cliente {
-  id             String          @id @default(cuid())
+  id             String      @id @default(cuid())
   nomeFantasia   String
+  razaoSocial    String      @default("")
   codigoInterno  String
-  cnpj           String          @default("")
-  email          String
-  telefone       String
+  cnpj            String      @default("")
+  email           String
+  telefone        String
   enderecoFiscal String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  manifestos     Manifesto[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  manifestos      Manifesto[]
   abastecimentos Abastecimento[]
 
   @@index([nomeFantasia])
@@ -93,16 +96,16 @@ model Cliente {
 }
 
 model Produto {
-  id                   String                 @id @default(cuid())
-  nome                 String
-  codigoInterno        String
-  categoriaEstoque     String                 @default("Produtos de piscina")
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  manifestos           ManifestoProduto[]
-  abastecimentos       AbastecimentoProduto[]
+  id            String              @id @default(cuid())
+  nome          String
+  codigoInterno String
+  categoriaEstoque String @default("Produtos de piscina")
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  manifestos    ManifestoProduto[]
+  abastecimentos AbastecimentoProduto[]
   movimentacoesEstoque EstoqueMovimentacao[]
-  sefazItens           SefazDocumentItem[]
+  sefazItens SefazDocumentItem[]
 
   @@index([nome])
   @@index([codigoInterno])
@@ -110,11 +113,11 @@ model Produto {
 }
 
 model Local {
-  id            String             @id @default(cuid())
+  id            String              @id @default(cuid())
   cidade        String
-  valorComissao Decimal            @db.Decimal(14, 2)
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  valorComissao Decimal             @db.Decimal(14, 2)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
   fechamentos   FechamentoViagem[]
 
   @@index([cidade])
@@ -122,37 +125,37 @@ model Local {
 }
 
 model Veiculo {
-  id                     String           @id @default(cuid())
-  placa                  String
-  modelo                 String?
-  quantidadePneus        Int              @default(10)
-  quantidadeEstepes      Int              @default(1)
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @updatedAt
-  abastecimentos         Abastecimento[]
-  instalacoesPneus       PneuInstalacao[] @relation("VeiculoInstalacoes")
+  id        String   @id @default(cuid())
+  placa              String
+  modelo             String?
+  quantidadePneus    Int      @default(10)
+  quantidadeEstepes  Int      @default(1)
+  createdAt          DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  abastecimentos Abastecimento[]
+  instalacoesPneus PneuInstalacao[] @relation("VeiculoInstalacoes")
   instalacoesComoCarreta PneuInstalacao[] @relation("CarretaInstalacoes")
-  rodiziosPneus          PneuRodizio[]    @relation("VeiculoRodizios")
-  rodiziosComoCarreta    PneuRodizio[]    @relation("CarretaRodizios")
+  rodiziosPneus PneuRodizio[] @relation("VeiculoRodizios")
+  rodiziosComoCarreta PneuRodizio[] @relation("CarretaRodizios")
 
   @@index([placa])
   @@map("veiculos")
 }
 
 model Viagem {
-  id                 String    @id @default(cuid())
+  id                 String     @id @default(cuid())
   placa              String
   motoristaId        String
-  valorFrete         Decimal   @db.Decimal(14, 2)
-  dataManifesto      DateTime  @db.Date
+  valorFrete         Decimal    @db.Decimal(14, 2)
+  dataManifesto      DateTime   @db.Date
   cidadeEntrega      String
-  distanciaKm        Decimal   @db.Decimal(14, 2)
-  valorPedagio       Decimal   @db.Decimal(14, 2)
-  valorDiaria        Decimal   @db.Decimal(14, 2)
-  valorAbastecimento Decimal   @db.Decimal(14, 2)
-  valorChapa         Decimal   @db.Decimal(14, 2)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  distanciaKm        Decimal    @db.Decimal(14, 2)
+  valorPedagio       Decimal    @db.Decimal(14, 2)
+  valorDiaria        Decimal    @db.Decimal(14, 2)
+  valorAbastecimento Decimal    @db.Decimal(14, 2)
+  valorChapa         Decimal    @db.Decimal(14, 2)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
   motorista          Motorista @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
 
   @@index([motoristaId])
@@ -162,15 +165,15 @@ model Viagem {
 }
 
 model Fechamento {
-  id          String             @id @default(cuid())
+  id           String              @id @default(cuid())
   motoristaId String
-  dataInicio  DateTime           @db.Date
-  dataFim     DateTime           @db.Date
-  valorTotal  Decimal            @db.Decimal(14, 2)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  motorista   Motorista          @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
-  viagens     FechamentoViagem[]
+  dataInicio   DateTime            @db.Date
+  dataFim      DateTime            @db.Date
+  valorTotal   Decimal             @db.Decimal(14, 2)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  motorista    Motorista           @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
+  viagens      FechamentoViagem[]
 
   @@index([motoristaId])
   @@index([dataInicio, dataFim])
@@ -191,15 +194,15 @@ model FechamentoViagem {
 }
 
 model Manifesto {
-  id            String             @id @default(cuid())
-  clienteId     String
-  dataManifesto DateTime           @db.Date
-  tipoManifesto TipoManifesto
-  pdfUrl        String?            @db.Text
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  cliente       Cliente            @relation(fields: [clienteId], references: [id], onDelete: Restrict)
-  produtos      ManifestoProduto[]
+  id             String              @id @default(cuid())
+  clienteId      String
+  dataManifesto  DateTime            @db.Date
+  tipoManifesto  TipoManifesto
+  pdfUrl          String?             @db.Text
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  cliente         Cliente             @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  produtos        ManifestoProduto[]
 
   @@index([clienteId])
   @@index([dataManifesto])
@@ -207,35 +210,37 @@ model Manifesto {
 }
 
 model ManifestoProduto {
-  id            String         @id @default(cuid())
-  manifestoId   String
-  produtoId     String
-  quantidade    Decimal        @db.Decimal(14, 3)
-  valorUnitario Decimal        @db.Decimal(14, 2)
-  valorTotal    Decimal        @db.Decimal(14, 2)
-  tipoManifesto TipoManifesto?
-  manifesto     Manifesto      @relation(fields: [manifestoId], references: [id], onDelete: Cascade)
-  produto       Produto        @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  id             String         @id @default(cuid())
+  manifestoId    String
+  produtoId      String
+  quantidade     Decimal        @db.Decimal(14, 3)
+  valorUnitario  Decimal        @db.Decimal(14, 2)
+  valorTotal     Decimal        @db.Decimal(14, 2)
+  tipoManifesto  TipoManifesto?
+  manifesto      Manifesto      @relation(fields: [manifestoId], references: [id], onDelete: Cascade)
+  produto        Produto        @relation(fields: [produtoId], references: [id], onDelete: Restrict)
 
   @@index([manifestoId])
   @@index([produtoId])
   @@map("manifesto_produtos")
 }
 
+
+
 model Abastecimento {
-  id            String                 @id @default(cuid())
-  clienteId     String
-  veiculoId     String
-  dataEmissao   DateTime               @db.Date
-  valorDesconto Decimal                @default(0) @db.Decimal(14, 2)
-  valorTotal    Decimal                @db.Decimal(14, 2)
-  hodometro     Decimal                @db.Decimal(14, 1)
-  pdfUrl        String?                @db.Text
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
-  cliente       Cliente                @relation(fields: [clienteId], references: [id], onDelete: Restrict)
-  veiculo       Veiculo                @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
-  produtos      AbastecimentoProduto[]
+  id               String                  @id @default(cuid())
+  clienteId        String
+  veiculoId        String
+  dataEmissao      DateTime                @db.Date
+  valorDesconto    Decimal                 @default(0) @db.Decimal(14, 2)
+  valorTotal       Decimal                 @db.Decimal(14, 2)
+  hodometro        Decimal                 @db.Decimal(14, 1)
+  pdfUrl           String?                 @db.Text
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  cliente          Cliente                 @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  veiculo          Veiculo                 @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
+  produtos         AbastecimentoProduto[]
 
   @@index([clienteId])
   @@index([veiculoId])
@@ -244,19 +249,20 @@ model Abastecimento {
 }
 
 model AbastecimentoProduto {
-  id               String        @id @default(cuid())
-  abastecimentoId  String
-  produtoId        String
-  quantidadeLitros Decimal       @db.Decimal(14, 3)
-  valorUnitario    Decimal       @db.Decimal(14, 4)
-  valorTotal       Decimal       @db.Decimal(14, 2)
-  abastecimento    Abastecimento @relation(fields: [abastecimentoId], references: [id], onDelete: Cascade)
-  produto          Produto       @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  id                String          @id @default(cuid())
+  abastecimentoId   String
+  produtoId         String
+  quantidadeLitros  Decimal         @db.Decimal(14, 3)
+  valorUnitario     Decimal         @db.Decimal(14, 4)
+  valorTotal        Decimal         @db.Decimal(14, 2)
+  abastecimento     Abastecimento   @relation(fields: [abastecimentoId], references: [id], onDelete: Cascade)
+  produto            Produto         @relation(fields: [produtoId], references: [id], onDelete: Restrict)
 
   @@index([abastecimentoId])
   @@index([produtoId])
   @@map("abastecimento_produtos")
 }
+
 
 enum StatusPneu {
   ESTOQUE
@@ -295,21 +301,21 @@ enum TipoEventoPneu {
 }
 
 model EstoqueMovimentacao {
-  id              String                  @id @default(cuid())
-  produtoId       String
-  tipo            TipoMovimentacaoEstoque
-  quantidade      Decimal                 @db.Decimal(14, 3)
-  valorUnitario   Decimal                 @default(0) @db.Decimal(14, 2)
-  valorTotal      Decimal                 @default(0) @db.Decimal(14, 2)
-  data            DateTime                @db.Date
-  observacoes     String?
-  pdfUrl          String?                 @db.Text
-  pdfName         String?
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  produto         Produto                 @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  id            String                    @id @default(cuid())
+  produtoId     String
+  tipo          TipoMovimentacaoEstoque
+  quantidade    Decimal                   @db.Decimal(14, 3)
+  valorUnitario Decimal                   @default(0) @db.Decimal(14, 2)
+  valorTotal    Decimal                   @default(0) @db.Decimal(14, 2)
+  data          DateTime                  @db.Date
+  observacoes   String?
+  pdfUrl        String?                   @db.Text
+  pdfName       String?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  produto       Produto                   @relation(fields: [produtoId], references: [id], onDelete: Restrict)
   sefazDocumentId String?
-  sefazDocument   SefazDocument?          @relation(fields: [sefazDocumentId], references: [id], onDelete: SetNull)
+  sefazDocument SefazDocument? @relation(fields: [sefazDocumentId], references: [id], onDelete: SetNull)
 
   @@index([produtoId])
   @@index([tipo])
@@ -319,8 +325,8 @@ model EstoqueMovimentacao {
 }
 
 model Pneu {
-  id                   String                 @id @default(cuid())
-  numeroFogo           String                 @unique
+  id                   String          @id @default(cuid())
+  numeroFogo           String          @unique
   codigoBarras         String?
   qrCode               String?
   marca                String
@@ -328,31 +334,31 @@ model Pneu {
   medida               String
   dot                  String
   numeroSerie          String?
-  tipo                 TipoPneu
-  valorCompra          Decimal                @db.Decimal(14, 2)
+  tipo                  TipoPneu
+  valorCompra           Decimal         @db.Decimal(14, 2)
   fornecedor           String
-  dataCompra           DateTime               @db.Date
-  maxRecapagens        Int                    @default(0)
-  recapagensRealizadas Int                    @default(0)
-  status               StatusPneu             @default(ESTOQUE)
-  condicao             CondicaoPneu           @default(NOVO)
-  sulcoInicial         Decimal?               @db.Decimal(6, 2)
-  sulcoAtual           Decimal?               @db.Decimal(6, 2)
-  kmAtual              Decimal                @default(0) @db.Decimal(14, 1)
-  proximoRodizioKm     Decimal?               @db.Decimal(14, 1)
-  observacoes          String?                @db.Text
-  deletedAt            DateTime?
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  fotos                PneuFoto[]
-  eventos              PneuEvento[]
-  instalacoes          PneuInstalacao[]
-  rodizioMovimentos    PneuRodizioMovimento[]
-  medicoesSulco        PneuMedicaoSulco[]
-  calibragens          PneuCalibragem[]
-  recapagens           PneuRecapagem[]
-  consertos            PneuConserto[]
-  inspecoes            PneuInspecao[]
+  dataCompra            DateTime        @db.Date
+  maxRecapagens         Int             @default(0)
+  recapagensRealizadas  Int             @default(0)
+  status                StatusPneu      @default(ESTOQUE)
+  condicao              CondicaoPneu    @default(NOVO)
+  sulcoInicial          Decimal?        @db.Decimal(6, 2)
+  sulcoAtual            Decimal?        @db.Decimal(6, 2)
+  kmAtual               Decimal         @default(0) @db.Decimal(14, 1)
+  proximoRodizioKm      Decimal?        @db.Decimal(14, 1)
+  observacoes           String?         @db.Text
+  deletedAt             DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  fotos                 PneuFoto[]
+  eventos               PneuEvento[]
+  instalacoes            PneuInstalacao[]
+  rodizioMovimentos      PneuRodizioMovimento[]
+  medicoesSulco          PneuMedicaoSulco[]
+  calibragens            PneuCalibragem[]
+  recapagens             PneuRecapagem[]
+  consertos              PneuConserto[]
+  inspecoes              PneuInspecao[]
 
   @@index([status])
   @@index([condicao])
@@ -374,16 +380,16 @@ model PneuFoto {
 }
 
 model PneuEvento {
-  id            String         @id @default(cuid())
-  pneuId        String
-  tipo          TipoEventoPneu
-  data          DateTime       @default(now())
-  quilometragem Decimal?       @db.Decimal(14, 1)
-  responsavel   String?
-  observacoes   String?        @db.Text
-  dados         Json?
-  createdAt     DateTime       @default(now())
-  pneu          Pneu           @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+  id          String         @id @default(cuid())
+  pneuId      String
+  tipo        TipoEventoPneu
+  data        DateTime       @default(now())
+  quilometragem Decimal?     @db.Decimal(14, 1)
+  responsavel String?
+  observacoes String?        @db.Text
+  dados       Json?
+  createdAt   DateTime       @default(now())
+  pneu        Pneu           @relation(fields: [pneuId], references: [id], onDelete: Cascade)
 
   @@index([pneuId])
   @@index([data])
@@ -391,25 +397,25 @@ model PneuEvento {
 }
 
 model PneuInstalacao {
-  id             String      @id @default(cuid())
-  pneuId         String
-  veiculoId      String
-  carretaId      String?
-  eixo           String
-  posicao        String
-  dataInstalacao DateTime    @db.Date
-  kmInstalacao   Decimal     @db.Decimal(14, 1)
-  responsavel    String
-  dataRetirada   DateTime?   @db.Date
-  kmRetirada     Decimal?    @db.Decimal(14, 1)
-  motivoRetirada String?     @db.Text
-  statusDestino  StatusPneu?
-  ativo          Boolean     @default(true)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  pneu           Pneu        @relation(fields: [pneuId], references: [id], onDelete: Restrict)
-  veiculo        Veiculo     @relation("VeiculoInstalacoes", fields: [veiculoId], references: [id], onDelete: Restrict)
-  carreta        Veiculo?    @relation("CarretaInstalacoes", fields: [carretaId], references: [id], onDelete: Restrict)
+  id               String   @id @default(cuid())
+  pneuId           String
+  veiculoId        String
+  carretaId        String?
+  eixo             String
+  posicao          String
+  dataInstalacao   DateTime @db.Date
+  kmInstalacao     Decimal  @db.Decimal(14, 1)
+  responsavel      String
+  dataRetirada     DateTime? @db.Date
+  kmRetirada       Decimal? @db.Decimal(14, 1)
+  motivoRetirada   String?  @db.Text
+  statusDestino    StatusPneu?
+  ativo            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  pneu             Pneu     @relation(fields: [pneuId], references: [id], onDelete: Restrict)
+  veiculo          Veiculo  @relation("VeiculoInstalacoes", fields: [veiculoId], references: [id], onDelete: Restrict)
+  carreta          Veiculo? @relation("CarretaInstalacoes", fields: [carretaId], references: [id], onDelete: Restrict)
 
   @@index([pneuId, ativo])
   @@index([veiculoId, ativo])
@@ -419,16 +425,16 @@ model PneuInstalacao {
 }
 
 model PneuRodizio {
-  id            String                 @id @default(cuid())
+  id            String   @id @default(cuid())
   veiculoId     String
   carretaId     String?
-  data          DateTime               @db.Date
-  quilometragem Decimal                @db.Decimal(14, 1)
+  data          DateTime @db.Date
+  quilometragem Decimal  @db.Decimal(14, 1)
   responsavel   String
-  motivo        String                 @db.Text
-  createdAt     DateTime               @default(now())
-  veiculo       Veiculo                @relation("VeiculoRodizios", fields: [veiculoId], references: [id], onDelete: Restrict)
-  carreta       Veiculo?               @relation("CarretaRodizios", fields: [carretaId], references: [id], onDelete: Restrict)
+  motivo        String   @db.Text
+  createdAt     DateTime @default(now())
+  veiculo       Veiculo  @relation("VeiculoRodizios", fields: [veiculoId], references: [id], onDelete: Restrict)
+  carreta       Veiculo? @relation("CarretaRodizios", fields: [carretaId], references: [id], onDelete: Restrict)
   movimentos    PneuRodizioMovimento[]
 
   @@index([veiculoId, data])
@@ -445,12 +451,13 @@ model PneuRodizioMovimento {
   eixoDestino    String
   posicaoDestino String
   rodizio        PneuRodizio @relation(fields: [rodizioId], references: [id], onDelete: Cascade)
-  pneu           Pneu        @relation(fields: [pneuId], references: [id], onDelete: Restrict)
+  pneu            Pneu        @relation(fields: [pneuId], references: [id], onDelete: Restrict)
 
   @@index([rodizioId])
   @@index([pneuId])
   @@map("pneu_rodizio_movimentos")
 }
+
 
 model PneuMedicaoSulco {
   id                 String   @id @default(cuid())
@@ -489,18 +496,18 @@ model PneuCalibragem {
 }
 
 model PneuRecapagem {
-  id                String    @id @default(cuid())
-  pneuId            String
+  id               String   @id @default(cuid())
+  pneuId           String
   empresaRecapadora String
-  dataEnvio         DateTime  @db.Date
-  dataRetorno       DateTime? @db.Date
-  valor             Decimal   @db.Decimal(14, 2)
-  garantiaMeses     Int       @default(0)
-  tipoRecapagem     String
-  numeroRecapagem   Int
-  observacoes       String?   @db.Text
-  createdAt         DateTime  @default(now())
-  pneu              Pneu      @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+  dataEnvio        DateTime @db.Date
+  dataRetorno      DateTime? @db.Date
+  valor            Decimal  @db.Decimal(14, 2)
+  garantiaMeses    Int      @default(0)
+  tipoRecapagem    String
+  numeroRecapagem  Int
+  observacoes      String?  @db.Text
+  createdAt        DateTime @default(now())
+  pneu             Pneu     @relation(fields: [pneuId], references: [id], onDelete: Cascade)
 
   @@unique([pneuId, numeroRecapagem])
   @@index([pneuId, dataEnvio])
@@ -508,38 +515,38 @@ model PneuRecapagem {
 }
 
 model PneuConserto {
-  id          String   @id @default(cuid())
-  pneuId      String
-  tipo        String
-  data        DateTime @db.Date
-  valor       Decimal  @db.Decimal(14, 2)
-  responsavel String
-  observacoes String?  @db.Text
-  fotosAntes  Json?
-  fotosDepois Json?
-  createdAt   DateTime @default(now())
-  pneu        Pneu     @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+  id            String   @id @default(cuid())
+  pneuId        String
+  tipo          String
+  data          DateTime @db.Date
+  valor         Decimal  @db.Decimal(14, 2)
+  responsavel   String
+  observacoes   String?  @db.Text
+  fotosAntes    Json?
+  fotosDepois   Json?
+  createdAt     DateTime @default(now())
+  pneu          Pneu     @relation(fields: [pneuId], references: [id], onDelete: Cascade)
 
   @@index([pneuId, data])
   @@map("pneu_consertos")
 }
 
 model PneuInspecao {
-  id                String   @id @default(cuid())
-  pneuId            String
-  data              DateTime @db.Date
-  responsavel       String
-  pressaoOk         Boolean
-  sulcoOk           Boolean
-  cortes            Boolean  @default(false)
-  bolhas            Boolean  @default(false)
-  trincas           Boolean  @default(false)
-  desgasteIrregular Boolean  @default(false)
-  lonaAparente      Boolean  @default(false)
-  observacoes       String?  @db.Text
-  fotos             Json?
-  createdAt         DateTime @default(now())
-  pneu              Pneu     @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+  id                 String   @id @default(cuid())
+  pneuId             String
+  data               DateTime @db.Date
+  responsavel        String
+  pressaoOk          Boolean
+  sulcoOk            Boolean
+  cortes             Boolean  @default(false)
+  bolhas              Boolean  @default(false)
+  trincas             Boolean  @default(false)
+  desgasteIrregular  Boolean  @default(false)
+  lonaAparente        Boolean  @default(false)
+  observacoes         String?  @db.Text
+  fotos               Json?
+  createdAt           DateTime @default(now())
+  pneu                Pneu     @relation(fields: [pneuId], references: [id], onDelete: Cascade)
 
   @@index([pneuId, data])
   @@map("pneu_inspecoes")
@@ -569,33 +576,33 @@ enum SefazSyncStatus {
 }
 
 model SefazCertificate {
-  id                      String          @id @default(cuid())
-  cnpj                    String          @unique
-  fileName                String
-  subject                 String
-  issuer                  String?
-  serialNumber            String?
-  validFrom               DateTime
-  validTo                 DateTime
-  cnpjValidated           Boolean         @default(false)
-  certificateEncrypted    Bytes
-  certificateIv           String
-  certificateTag          String
-  passwordEncrypted       Bytes
-  passwordIv              String
-  passwordTag             String
-  active                  Boolean         @default(true)
-  lastNsu                 String          @default("000000000000000")
-  maxNsu                  String          @default("000000000000000")
-  lastSyncAt              DateTime?
-  nextSyncAllowedAt       DateTime?
-  autoSyncEnabled         Boolean         @default(false)
-  autoSyncIntervalMinutes Int             @default(60)
-  lastAutoSyncAt          DateTime?
-  createdAt               DateTime        @default(now())
-  updatedAt               DateTime        @updatedAt
-  documents               SefazDocument[]
-  syncLogs                SefazSyncLog[]
+  id                    String          @id @default(cuid())
+  cnpj                   String          @unique
+  fileName               String
+  subject                String
+  issuer                 String?
+  serialNumber           String?
+  validFrom              DateTime
+  validTo                DateTime
+  cnpjValidated          Boolean         @default(false)
+  certificateEncrypted   Bytes
+  certificateIv          String
+  certificateTag         String
+  passwordEncrypted      Bytes
+  passwordIv             String
+  passwordTag            String
+  active                 Boolean         @default(true)
+  lastNsu                String          @default("000000000000000")
+  maxNsu                 String          @default("000000000000000")
+  lastSyncAt             DateTime?
+  nextSyncAllowedAt      DateTime?
+  autoSyncEnabled        Boolean         @default(false)
+  autoSyncIntervalMinutes Int            @default(60)
+  lastAutoSyncAt         DateTime?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  documents              SefazDocument[]
+  syncLogs               SefazSyncLog[]
 
   @@index([active])
   @@index([validTo])
@@ -603,54 +610,54 @@ model SefazCertificate {
 }
 
 model SefazSyncLog {
-  id             String           @id @default(cuid())
-  certificateId  String
-  status         SefazSyncStatus
-  cStat          String?
-  message        String?          @db.Text
-  initialNsu     String
-  lastNsu        String?
-  maxNsu         String?
-  documentsFound Int              @default(0)
-  startedAt      DateTime         @default(now())
-  finishedAt     DateTime?
-  certificate    SefazCertificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+  id              String          @id @default(cuid())
+  certificateId   String
+  status          SefazSyncStatus
+  cStat           String?
+  message         String?         @db.Text
+  initialNsu      String
+  lastNsu         String?
+  maxNsu          String?
+  documentsFound  Int             @default(0)
+  startedAt       DateTime        @default(now())
+  finishedAt      DateTime?
+  certificate     SefazCertificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
 
   @@index([certificateId, startedAt])
   @@map("sefaz_sync_logs")
 }
 
 model SefazDocument {
-  id                    String                   @id @default(cuid())
-  certificateId         String
-  nsu                   String
-  schema                String
-  accessKey             String?
-  documentType          String?
-  issuerCnpj            String?
-  issuerName            String?
-  recipientCnpj         String?
-  recipientName         String?
-  emissionDate          DateTime?
-  totalValue            Decimal?                 @db.Decimal(18, 2)
-  number                String?
-  series                String?
-  operationType         String?
-  status                String?
-  manifestationType     SefazManifestationType?
-  manifestationStatus   SefazManifestationStatus @default(NONE)
+  id                  String           @id @default(cuid())
+  certificateId       String
+  nsu                 String
+  schema              String
+  accessKey           String?
+  documentType        String?
+  issuerCnpj          String?
+  issuerName          String?
+  recipientCnpj       String?
+  recipientName       String?
+  emissionDate        DateTime?
+  totalValue          Decimal?         @db.Decimal(18, 2)
+  number              String?
+  series              String?
+  operationType       String?
+  status              String?
+  manifestationType   SefazManifestationType?
+  manifestationStatus SefazManifestationStatus @default(NONE)
   manifestationProtocol String?
-  manifestedAt          DateTime?
-  importedAt            DateTime?
-  isSummary             Boolean                  @default(false)
-  xmlEncrypted          Bytes
-  xmlIv                 String
-  xmlTag                String
-  receivedAt            DateTime                 @default(now())
-  certificate           SefazCertificate         @relation(fields: [certificateId], references: [id], onDelete: Cascade)
-  items                 SefazDocumentItem[]
-  events                SefazDocumentEvent[]
-  stockMovements        EstoqueMovimentacao[]
+  manifestedAt        DateTime?
+  importedAt          DateTime?
+  isSummary           Boolean          @default(false)
+  xmlEncrypted        Bytes
+  xmlIv               String
+  xmlTag              String
+  receivedAt          DateTime         @default(now())
+  certificate         SefazCertificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+  items               SefazDocumentItem[]
+  events              SefazDocumentEvent[]
+  stockMovements      EstoqueMovimentacao[]
 
   @@unique([certificateId, nsu])
   @@index([certificateId, emissionDate])
@@ -673,21 +680,21 @@ enum SefazManifestationStatus {
 }
 
 model SefazDocumentItem {
-  id               String        @id @default(cuid())
-  documentId       String
-  itemNumber       Int
-  supplierCode     String?
-  ean              String?
-  description      String
-  ncm              String?
-  cfop             String?
-  unit             String?
-  quantity         Decimal       @db.Decimal(18, 4)
-  unitValue        Decimal       @db.Decimal(18, 6)
-  totalValue       Decimal       @db.Decimal(18, 2)
+  id              String        @id @default(cuid())
+  documentId      String
+  itemNumber      Int
+  supplierCode    String?
+  ean             String?
+  description     String
+  ncm             String?
+  cfop            String?
+  unit            String?
+  quantity        Decimal       @db.Decimal(18, 4)
+  unitValue       Decimal       @db.Decimal(18, 6)
+  totalValue      Decimal       @db.Decimal(18, 2)
   matchedProdutoId String?
-  document         SefazDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  matchedProduto   Produto?      @relation(fields: [matchedProdutoId], references: [id], onDelete: SetNull)
+  document        SefazDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  matchedProduto  Produto?      @relation(fields: [matchedProdutoId], references: [id], onDelete: SetNull)
 
   @@unique([documentId, itemNumber])
   @@index([matchedProdutoId])
@@ -708,3 +715,4 @@ model SefazDocumentEvent {
   @@index([documentId, createdAt])
   @@map("sefaz_document_events")
 }
+

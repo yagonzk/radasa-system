@@ -4,7 +4,7 @@ import { api } from "./api";
 export type StatusMotorista = "ATIVO" | "DEMITIDO";
 export interface Motorista { id: string; nome: string; cpf: string; salarioBase: number; status: StatusMotorista; createdAt: string; }
 export interface Chapa { id: string; nome: string; valorFixo: number; createdAt: string; }
-export interface Cliente { id: string; nomeFantasia: string; codigoInterno: string; cnpj: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
+export interface Cliente { id: string; nomeFantasia: string; razaoSocial: string; codigoInterno: string; cnpj: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
 export type CategoriaEstoque = string;
 export interface Produto { id: string; nome: string; codigoInterno: string; categoriaEstoque: CategoriaEstoque; createdAt: string; }
 export type TipoMovimentacaoEstoque = "ENTRADA" | "SAIDA";

@@ -20,7 +20,7 @@ export const chapaBody = z.object({
   id: id.optional(), nome: text(), valorFixo: money, createdAt: z.string().optional(),
 });
 export const clienteBody = z.object({
-  id: id.optional(), nomeFantasia: text(), codigoInterno: text(100),
+  id: id.optional(), nomeFantasia: text(), razaoSocial: z.string().trim().max(200).default(""), codigoInterno: text(100),
   cnpj: z.string().trim().max(18).transform((value) => value.replace(/\D/g, "")).refine(
     (value) => !value || value.length === 14,
     "CNPJ deve possuir 14 dígitos.",
