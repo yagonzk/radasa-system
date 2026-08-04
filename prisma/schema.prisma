@@ -9,6 +9,10 @@ datasource db {
 
 enum UserRole {
   ADMIN
+  GERENTE
+  BORRACHARIA
+  MANUTENCAO
+  VISUALIZACAO
   USER
 }
 
@@ -23,13 +27,34 @@ enum StatusMotorista {
   DEMITIDO
 }
 
+enum TipoMovimentacaoEstoque {
+  ENTRADA
+  SAIDA
+}
+
+enum StatusCiot {
+  RASCUNHO
+  PRONTO_ENVIO
+  PROCESSANDO
+  AUTORIZADO
+  REJEITADO
+  CANCELADO
+  ENCERRADO
+}
+
+enum TipoOperacaoCiot {
+  LOTACAO
+  FRACIONADA
+  TAC_AGREGADO
+}
+
 model User {
   id           String     @id @default(cuid())
   name         String
   username     String     @unique
   email        String     @unique
   passwordHash String
-  role         UserRole   @default(USER)
+  role         UserRole   @default(VISUALIZACAO)
   active       Boolean    @default(true)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -48,6 +73,7 @@ model Motorista {
   updatedAt   DateTime        @updatedAt
   viagens     Viagem[]
   fechamentos Fechamento[]
+  ciots       Ciot[]
 
   @@index([nome])
   @@map("motoristas")
@@ -56,18 +82,25 @@ model Motorista {
 model Chapa {
   id        String   @id @default(cuid())
   nome      String
+  telefone  String   @default("")
+  cpf       String   @default("")
+  cidade    String   @default("")
+  chavePix  String   @default("")
   valorFixo Decimal  @db.Decimal(14, 2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([nome])
+  @@index([cpf])
   @@map("chapas")
 }
 
 model Cliente {
   id             String          @id @default(cuid())
   nomeFantasia   String
+  razaoSocial    String          @default("")
   codigoInterno  String
+  cnpj           String          @default("")
   email          String
   telefone       String
   enderecoFiscal String
@@ -75,20 +108,24 @@ model Cliente {
   updatedAt      DateTime        @updatedAt
   manifestos     Manifesto[]
   abastecimentos Abastecimento[]
+  ciots          Ciot[]
 
   @@index([nomeFantasia])
   @@index([codigoInterno])
+  @@index([cnpj])
   @@map("clientes")
 }
 
 model Produto {
-  id             String                 @id @default(cuid())
-  nome           String
-  codigoInterno  String
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
-  manifestos     ManifestoProduto[]
-  abastecimentos AbastecimentoProduto[]
+  id                   String                 @id @default(cuid())
+  nome                 String
+  codigoInterno        String
+  categoriaEstoque     String                 @default("Produtos de piscina")
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  manifestos           ManifestoProduto[]
+  abastecimentos       AbastecimentoProduto[]
+  movimentacoesEstoque EstoqueMovimentacao[]
 
   @@index([nome])
   @@index([codigoInterno])
@@ -108,12 +145,19 @@ model Local {
 }
 
 model Veiculo {
-  id             String          @id @default(cuid())
-  placa          String
-  modelo         String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  abastecimentos Abastecimento[]
+  id                     String           @id @default(cuid())
+  placa                  String
+  modelo                 String?
+  quantidadePneus        Int              @default(10)
+  quantidadeEstepes      Int              @default(1)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  abastecimentos         Abastecimento[]
+  instalacoesPneus       PneuInstalacao[] @relation("VeiculoInstalacoes")
+  instalacoesComoCarreta PneuInstalacao[] @relation("CarretaInstalacoes")
+  rodiziosPneus          PneuRodizio[]    @relation("VeiculoRodizios")
+  rodiziosComoCarreta    PneuRodizio[]    @relation("CarretaRodizios")
+  ciots                  Ciot[]
 
   @@index([placa])
   @@map("veiculos")
@@ -202,6 +246,86 @@ model ManifestoProduto {
   @@map("manifesto_produtos")
 }
 
+model Ciot {
+  id                   String           @id @default(cuid())
+  clienteId            String
+  motoristaId          String
+  veiculoId            String
+  tipoOperacao         TipoOperacaoCiot
+  status               StatusCiot       @default(RASCUNHO)
+  rntrc                String
+  origemCidade         String
+  origemUf             String
+  destinoCidade        String
+  destinoUf            String
+  dataInicio           DateTime         @db.Date
+  dataFim              DateTime?        @db.Date
+  naturezaCarga        String
+  pesoKg               Decimal          @default(0) @db.Decimal(14, 3)
+  valorFrete           Decimal          @default(0) @db.Decimal(14, 2)
+  valorPedagio         Decimal          @default(0) @db.Decimal(14, 2)
+  outrosValores        Decimal          @default(0) @db.Decimal(14, 2)
+  descontos            Decimal          @default(0) @db.Decimal(14, 2)
+  valorLiquido         Decimal          @default(0) @db.Decimal(14, 2)
+  formaPagamento       String           @default("")
+  favorecidoPix        String           @default("")
+  payloadAntt          Json?
+  preparadoEm          DateTime?
+  observacoes          String?          @db.Text
+  numeroCiot           String?
+  codigoVerificador    String?
+  protocolo            String?
+  mensagemRetorno      String?          @db.Text
+  valorMercadoria      Decimal          @default(0) @db.Decimal(14, 2)
+  cnpjsCargaFracionada String           @default("") @db.Text
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  cliente              Cliente          @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  motorista            Motorista        @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
+  veiculo              Veiculo          @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
+  ctes                 CiotCte[]
+
+  @@index([clienteId])
+  @@index([motoristaId])
+  @@index([veiculoId])
+  @@index([status])
+  @@index([dataInicio])
+  @@map("ciots")
+}
+
+model CiotCte {
+  id               String   @id @default(cuid())
+  ciotId           String
+  chave            String
+  numero           String
+  serie            String   @default("")
+  emitenteCnpj     String   @default("")
+  emitenteNome     String   @default("")
+  remetenteCnpj    String   @default("")
+  remetenteNome    String   @default("")
+  destinatarioCnpj String   @default("")
+  destinatarioNome String   @default("")
+  tomadorCnpj      String   @default("")
+  tomadorNome      String   @default("")
+  origemCidade     String   @default("")
+  origemUf         String   @default("")
+  destinoCidade    String   @default("")
+  destinoUf        String   @default("")
+  produto          String   @default("")
+  ncm              String   @default("")
+  pesoKg           Decimal  @default(0) @db.Decimal(14, 3)
+  valorMercadoria  Decimal  @default(0) @db.Decimal(14, 2)
+  valorFrete       Decimal  @default(0) @db.Decimal(14, 2)
+  xmlUrl           String?  @db.Text
+  createdAt        DateTime @default(now())
+  ciot             Ciot     @relation(fields: [ciotId], references: [id], onDelete: Cascade)
+
+  @@unique([ciotId, chave])
+  @@index([ciotId])
+  @@index([chave])
+  @@map("ciot_ctes")
+}
+
 model Abastecimento {
   id            String                 @id @default(cuid())
   clienteId     String
@@ -237,6 +361,290 @@ model AbastecimentoProduto {
   @@index([abastecimentoId])
   @@index([produtoId])
   @@map("abastecimento_produtos")
+}
+
+enum StatusPneu {
+  ESTOQUE
+  INSTALADO
+  MANUTENCAO
+  RECAPAGEM
+  DESCARTADO
+}
+
+enum TipoPneu {
+  DIRECIONAL
+  TRACAO
+  LIVRE
+}
+
+enum CondicaoPneu {
+  NOVO
+  USADO
+  RECAPADO
+  AGUARDANDO_RECAPAGEM
+}
+
+enum TipoEventoPneu {
+  COMPRA
+  ALTERACAO
+  STATUS
+  FOTO
+  INSTALACAO
+  RETIRADA
+  RODIZIO
+  SULCO
+  CALIBRAGEM
+  RECAPAGEM
+  CONSERTO
+  INSPECAO
+}
+
+model EstoqueMovimentacao {
+  id            String                  @id @default(cuid())
+  produtoId     String
+  tipo          TipoMovimentacaoEstoque
+  quantidade    Decimal                 @db.Decimal(14, 3)
+  valorUnitario Decimal                 @default(0) @db.Decimal(14, 2)
+  valorTotal    Decimal                 @default(0) @db.Decimal(14, 2)
+  data          DateTime                @db.Date
+  observacoes   String?
+  pdfUrl        String?                 @db.Text
+  pdfName       String?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  produto       Produto                 @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+
+  @@index([produtoId])
+  @@index([tipo])
+  @@index([data])
+  @@map("estoque_movimentacoes")
+}
+
+model Pneu {
+  id                   String                 @id @default(cuid())
+  numeroFogo           String                 @unique
+  codigoBarras         String?
+  qrCode               String?
+  marca                String
+  modelo               String
+  medida               String
+  dot                  String
+  numeroSerie          String?
+  tipo                 TipoPneu
+  valorCompra          Decimal                @db.Decimal(14, 2)
+  fornecedor           String
+  dataCompra           DateTime               @db.Date
+  maxRecapagens        Int                    @default(0)
+  recapagensRealizadas Int                    @default(0)
+  status               StatusPneu             @default(ESTOQUE)
+  condicao             CondicaoPneu           @default(NOVO)
+  sulcoInicial         Decimal?               @db.Decimal(6, 2)
+  sulcoAtual           Decimal?               @db.Decimal(6, 2)
+  kmAtual              Decimal                @default(0) @db.Decimal(14, 1)
+  proximoRodizioKm     Decimal?               @db.Decimal(14, 1)
+  observacoes          String?                @db.Text
+  deletedAt            DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  fotos                PneuFoto[]
+  eventos              PneuEvento[]
+  instalacoes          PneuInstalacao[]
+  rodizioMovimentos    PneuRodizioMovimento[]
+  medicoesSulco        PneuMedicaoSulco[]
+  calibragens          PneuCalibragem[]
+  recapagens           PneuRecapagem[]
+  consertos            PneuConserto[]
+  inspecoes            PneuInspecao[]
+
+  @@index([status])
+  @@index([condicao])
+  @@index([marca])
+  @@index([dataCompra])
+  @@map("pneus")
+}
+
+model PneuFoto {
+  id        String   @id @default(cuid())
+  pneuId    String
+  url       String   @db.Text
+  legenda   String?
+  createdAt DateTime @default(now())
+  pneu      Pneu     @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+
+  @@index([pneuId])
+  @@map("pneu_fotos")
+}
+
+model PneuEvento {
+  id            String         @id @default(cuid())
+  pneuId        String
+  tipo          TipoEventoPneu
+  data          DateTime       @default(now())
+  quilometragem Decimal?       @db.Decimal(14, 1)
+  responsavel   String?
+  observacoes   String?        @db.Text
+  dados         Json?
+  createdAt     DateTime       @default(now())
+  pneu          Pneu           @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+
+  @@index([pneuId])
+  @@index([data])
+  @@map("pneu_eventos")
+}
+
+model PneuInstalacao {
+  id             String      @id @default(cuid())
+  pneuId         String
+  veiculoId      String
+  carretaId      String?
+  eixo           String
+  posicao        String
+  dataInstalacao DateTime    @db.Date
+  kmInstalacao   Decimal     @db.Decimal(14, 1)
+  responsavel    String
+  dataRetirada   DateTime?   @db.Date
+  kmRetirada     Decimal?    @db.Decimal(14, 1)
+  motivoRetirada String?     @db.Text
+  statusDestino  StatusPneu?
+  ativo          Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  pneu           Pneu        @relation(fields: [pneuId], references: [id], onDelete: Restrict)
+  veiculo        Veiculo     @relation("VeiculoInstalacoes", fields: [veiculoId], references: [id], onDelete: Restrict)
+  carreta        Veiculo?    @relation("CarretaInstalacoes", fields: [carretaId], references: [id], onDelete: Restrict)
+
+  @@index([pneuId, ativo])
+  @@index([veiculoId, ativo])
+  @@index([carretaId, ativo])
+  @@index([eixo, posicao])
+  @@map("pneu_instalacoes")
+}
+
+model PneuRodizio {
+  id            String                 @id @default(cuid())
+  veiculoId     String
+  carretaId     String?
+  data          DateTime               @db.Date
+  quilometragem Decimal                @db.Decimal(14, 1)
+  responsavel   String
+  motivo        String                 @db.Text
+  createdAt     DateTime               @default(now())
+  veiculo       Veiculo                @relation("VeiculoRodizios", fields: [veiculoId], references: [id], onDelete: Restrict)
+  carreta       Veiculo?               @relation("CarretaRodizios", fields: [carretaId], references: [id], onDelete: Restrict)
+  movimentos    PneuRodizioMovimento[]
+
+  @@index([veiculoId, data])
+  @@index([carretaId, data])
+  @@map("pneu_rodizios")
+}
+
+model PneuRodizioMovimento {
+  id             String      @id @default(cuid())
+  rodizioId      String
+  pneuId         String
+  eixoOrigem     String
+  posicaoOrigem  String
+  eixoDestino    String
+  posicaoDestino String
+  rodizio        PneuRodizio @relation(fields: [rodizioId], references: [id], onDelete: Cascade)
+  pneu           Pneu        @relation(fields: [pneuId], references: [id], onDelete: Restrict)
+
+  @@index([rodizioId])
+  @@index([pneuId])
+  @@map("pneu_rodizio_movimentos")
+}
+
+model PneuMedicaoSulco {
+  id                 String   @id @default(cuid())
+  pneuId             String
+  data               DateTime @db.Date
+  quilometragem      Decimal? @db.Decimal(14, 1)
+  sulcoInterno       Decimal  @db.Decimal(6, 2)
+  sulcoCentral       Decimal  @db.Decimal(6, 2)
+  sulcoExterno       Decimal  @db.Decimal(6, 2)
+  mediaSulco         Decimal  @db.Decimal(6, 2)
+  percentualDesgaste Decimal  @db.Decimal(6, 2)
+  vidaUtilRestante   Decimal  @db.Decimal(6, 2)
+  responsavel        String
+  observacoes        String?  @db.Text
+  createdAt          DateTime @default(now())
+  pneu               Pneu     @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+
+  @@index([pneuId, data])
+  @@map("pneu_medicoes_sulco")
+}
+
+model PneuCalibragem {
+  id                 String   @id @default(cuid())
+  pneuId             String
+  data               DateTime @db.Date
+  pressaoRecomendada Decimal  @db.Decimal(8, 2)
+  pressaoEncontrada  Decimal  @db.Decimal(8, 2)
+  pressaoAjustada    Decimal  @db.Decimal(8, 2)
+  responsavel        String
+  observacoes        String?  @db.Text
+  createdAt          DateTime @default(now())
+  pneu               Pneu     @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+
+  @@index([pneuId, data])
+  @@map("pneu_calibragens")
+}
+
+model PneuRecapagem {
+  id                String    @id @default(cuid())
+  pneuId            String
+  empresaRecapadora String
+  dataEnvio         DateTime  @db.Date
+  dataRetorno       DateTime? @db.Date
+  valor             Decimal   @db.Decimal(14, 2)
+  garantiaMeses     Int       @default(0)
+  tipoRecapagem     String
+  numeroRecapagem   Int
+  observacoes       String?   @db.Text
+  createdAt         DateTime  @default(now())
+  pneu              Pneu      @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+
+  @@unique([pneuId, numeroRecapagem])
+  @@index([pneuId, dataEnvio])
+  @@map("pneu_recapagens")
+}
+
+model PneuConserto {
+  id          String   @id @default(cuid())
+  pneuId      String
+  tipo        String
+  data        DateTime @db.Date
+  valor       Decimal  @db.Decimal(14, 2)
+  responsavel String
+  observacoes String?  @db.Text
+  fotosAntes  Json?
+  fotosDepois Json?
+  createdAt   DateTime @default(now())
+  pneu        Pneu     @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+
+  @@index([pneuId, data])
+  @@map("pneu_consertos")
+}
+
+model PneuInspecao {
+  id                String   @id @default(cuid())
+  pneuId            String
+  data              DateTime @db.Date
+  responsavel       String
+  pressaoOk         Boolean
+  sulcoOk           Boolean
+  cortes            Boolean  @default(false)
+  bolhas            Boolean  @default(false)
+  trincas           Boolean  @default(false)
+  desgasteIrregular Boolean  @default(false)
+  lonaAparente      Boolean  @default(false)
+  observacoes       String?  @db.Text
+  fotos             Json?
+  createdAt         DateTime @default(now())
+  pneu              Pneu     @relation(fields: [pneuId], references: [id], onDelete: Cascade)
+
+  @@index([pneuId, data])
+  @@map("pneu_inspecoes")
 }
 
 model AuditLog {

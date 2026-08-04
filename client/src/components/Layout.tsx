@@ -1,9 +1,9 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes, FileBadge2, ChevronDown, ChevronRight, FilePlus2, History } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface NavItem {
@@ -68,6 +68,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
+  const [ciotOpen, setCiotOpen] = useState(() => location.startsWith("/ciot"));
   const isDark = theme === "dark";
   const initials = user?.name?.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "U";
 
@@ -106,13 +107,72 @@ export default function Layout({ children }: { children: ReactNode }) {
                 )}
               >
                 <span className={cn("transition-colors", active ? "text-primary" : "text-muted-foreground")}>
-                {item.icon}
+                  {item.icon}
                 </span>
                 {item.label}
                 {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
               </Link>
             );
           })}
+
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={() => setCiotOpen((current) => !current)}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-150",
+                location.startsWith("/ciot")
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+                  : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+              )}
+              aria-expanded={ciotOpen}
+            >
+              <span
+                className={cn(
+                  "transition-colors",
+                  location.startsWith("/ciot") ? "text-primary" : "text-muted-foreground",
+                )}
+              >
+                <FileBadge2 className="h-[18px] w-[18px]" />
+              </span>
+              CIOT
+              {ciotOpen ? (
+                <ChevronDown className="ml-auto h-4 w-4" />
+              ) : (
+                <ChevronRight className="ml-auto h-4 w-4" />
+              )}
+            </button>
+
+            {ciotOpen && (
+              <div className="ml-4 space-y-1 border-l border-sidebar-border pl-3">
+                <Link
+                  href="/ciot/gerar"
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors",
+                    location.startsWith("/ciot/gerar")
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                  )}
+                >
+                  <FilePlus2 className="h-4 w-4" />
+                  Gerar CIOTs
+                </Link>
+
+                <Link
+                  href="/ciot/gerados"
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors",
+                    location.startsWith("/ciot/gerados")
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                  )}
+                >
+                  <History className="h-4 w-4" />
+                  CIOTs gerados
+                </Link>
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* User profile */}

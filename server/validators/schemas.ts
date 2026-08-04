@@ -17,11 +17,50 @@ export const motoristaBody = z.object({
   status: z.enum(["ATIVO", "DEMITIDO"]).default("ATIVO"), createdAt: z.string().optional(),
 });
 export const chapaBody = z.object({
-  id: id.optional(), nome: text(), valorFixo: money, createdAt: z.string().optional(),
+  id: id.optional(),
+  nome: text(),
+
+  telefone: z
+    .string()
+    .trim()
+    .max(20)
+    .transform((value) => value.replace(/\D/g, ""))
+    .default(""),
+
+  cpf: z
+    .string()
+    .trim()
+    .max(14)
+    .transform((value) => value.replace(/\D/g, ""))
+    .refine(
+      (value) => !value || value.length === 11,
+      "CPF deve possuir 11 dígitos.",
+    )
+    .default(""),
+
+  cidade: z.string().trim().max(120).default(""),
+  chavePix: z.string().trim().max(160).default(""),
+
+  valorFixo: money,
+  createdAt: z.string().optional(),
 });
 export const clienteBody = z.object({
-  id: id.optional(), nomeFantasia: text(), codigoInterno: text(100), email: z.string().trim().max(255), telefone: z.string().trim().max(100), enderecoFiscal: z.string().trim().max(1000), createdAt: z.string().optional(),
+  id: id.optional(), nomeFantasia: text(), razaoSocial: z.string().trim().max(255).default(""), codigoInterno: text(100), cnpj: z.string().trim().max(18).transform(v => v.replace(/\D/g, "")).refine(v => !v || v.length === 14, "CNPJ deve possuir 14 dígitos").default(""), email: z.string().trim().max(255), telefone: z.string().trim().max(100), enderecoFiscal: z.string().trim().max(1000), createdAt: z.string().optional(),
 });
+
+export const clienteSyncBody = z.object({
+  rows: z.array(z.object({
+    rowNumber: z.coerce.number().int().positive(),
+    nomeFantasia: z.string().trim().max(255).default(""),
+    razaoSocial: z.string().trim().max(255).default(""),
+    codigoInterno: z.string().trim().max(100).default(""),
+    cnpj: z.string().trim().max(18).transform(v => v.replace(/\D/g, "")).refine(v => !v || v.length === 14, "CNPJ deve possuir 14 dígitos").default(""),
+    email: z.string().trim().max(255).default(""),
+    telefone: z.string().trim().max(100).default(""),
+    enderecoFiscal: z.string().trim().max(1000).default(""),
+  })).min(1).max(10000),
+});
+
 export const produtoBody = z.object({
   id: id.optional(), nome: text(), codigoInterno: text(100),
   categoriaEstoque: z.string().trim().min(1).max(80).default("Produtos de piscina"),
@@ -72,7 +111,87 @@ export const abastecimentoBody = z.object({
   valorTotal: money.optional(),
   hodometro: z.coerce.number().finite().min(0),
   pdfUrl: z.string().max(20_000_000).optional().nullable().or(z.literal("")),
+  xmlUrl: z.string().max(20_000_000).optional().nullable().or(z.literal("")),
   createdAt: z.string().optional(),
+});
+
+export const statusCiot = z.enum([
+  "RASCUNHO",
+  "PRONTO_ENVIO",
+  "PROCESSANDO",
+  "AUTORIZADO",
+  "REJEITADO",
+  "CANCELADO",
+  "ENCERRADO",
+]);
+
+export const tipoOperacaoCiot = z.enum([
+  "LOTACAO",
+  "FRACIONADA",
+  "TAC_AGREGADO",
+]);
+
+
+export const ciotCteBody = z.object({
+  id: id.optional(),
+  chave: z.string().trim().min(20).max(60),
+  numero: z.string().trim().max(30).default(""),
+  serie: z.string().trim().max(20).default(""),
+  emitenteCnpj: z.string().trim().max(20).default(""),
+  emitenteNome: z.string().trim().max(255).default(""),
+  remetenteCnpj: z.string().trim().max(20).default(""),
+  remetenteNome: z.string().trim().max(255).default(""),
+  destinatarioCnpj: z.string().trim().max(20).default(""),
+  destinatarioNome: z.string().trim().max(255).default(""),
+  tomadorCnpj: z.string().trim().max(20).default(""),
+  tomadorNome: z.string().trim().max(255).default(""),
+  origemCidade: z.string().trim().max(160).default(""),
+  origemUf: z.string().trim().max(2).default(""),
+  destinoCidade: z.string().trim().max(160).default(""),
+  destinoUf: z.string().trim().max(2).default(""),
+  produto: z.string().trim().max(255).default(""),
+  ncm: z.string().trim().max(20).default(""),
+  pesoKg: z.coerce.number().finite().min(0).default(0),
+  valorMercadoria: z.coerce.number().finite().min(0).default(0),
+  valorFrete: z.coerce.number().finite().min(0).default(0),
+  xmlUrl: z.string().max(20_000_000).optional().nullable().or(z.literal("")),
+});
+
+export const ciotBody = z.object({
+  id: id.optional(),
+  clienteId: id,
+  motoristaId: id,
+  veiculoId: id,
+  tipoOperacao: tipoOperacaoCiot,
+  status: statusCiot.default("RASCUNHO"),
+  rntrc: z.string().trim().min(8, "Informe o RNTRC.").max(30),
+  origemCidade: text(160),
+  origemUf: z.string().trim().length(2, "Use a sigla da UF com 2 letras.").transform((value) => value.toUpperCase()),
+  destinoCidade: text(160),
+  destinoUf: z.string().trim().length(2, "Use a sigla da UF com 2 letras.").transform((value) => value.toUpperCase()),
+  dataInicio: dateOnly,
+  dataFim: dateOnly.optional().nullable().or(z.literal("")),
+  naturezaCarga: text(255),
+  pesoKg: z.coerce.number().finite().min(0),
+  valorFrete: money,
+  valorPedagio: money.default(0),
+  outrosValores: money.default(0),
+  descontos: money.default(0),
+  valorLiquido: money.default(0),
+  formaPagamento: z.string().trim().max(120).default(""),
+  favorecidoPix: z.string().trim().max(255).default(""),
+  payloadAntt: z.unknown().optional().nullable(),
+  preparadoEm: z.string().optional().nullable(),
+  observacoes: optionalText(5000),
+  numeroCiot: optionalText(100),
+  codigoVerificador: optionalText(100),
+  protocolo: optionalText(100),
+  mensagemRetorno: optionalText(5000),
+  valorMercadoria: money.default(0),
+  cnpjsCargaFracionada: z.string().trim().max(5000).default(""),
+  ctes: z.array(ciotCteBody).max(200).optional().default([]),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
 });
 
 export const pneuBody = z.object({
@@ -159,65 +278,4 @@ export const pneuInspecaoBody = z.object({
   data: dateOnly, responsavel: text(160), pressaoOk: z.boolean(), sulcoOk: z.boolean(), cortes: z.boolean().default(false),
   bolhas: z.boolean().default(false), trincas: z.boolean().default(false), desgasteIrregular: z.boolean().default(false),
   lonaAparente: z.boolean().default(false), observacoes: optionalText(2000), fotos: z.array(z.string().max(20_000_000)).max(10).optional(),
-});
-
-
-const cnpj = z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().length(14, "CNPJ deve possuir 14 dígitos"));
-export const sefazCertificateBody = z.object({
-  cnpj,
-  fileName: z.string().trim().regex(/\.(pfx|p12)$/i, "Envie um certificado .pfx ou .p12"),
-  certificateBase64: z.string().min(100).max(10_000_000),
-  password: z.string().min(1).max(500),
-});
-export const sefazDocumentQuery = z.object({
-  body: z.unknown().optional(),
-  params: z.unknown().optional(),
-  query: z.object({ certificateId: id.optional(), search: z.string().trim().max(200).optional(), from: dateOnly.optional(), to: dateOnly.optional(), status: z.string().trim().max(40).optional(), manifestationType: z.enum(["CIENCIA","CONFIRMACAO","DESCONHECIMENTO","NAO_REALIZADA"]).optional() }),
-});
-
-export const sefazCertificateStatusBody = z.object({ active: z.boolean() });
-
-export const sefazAutoSyncBody = z.object({ enabled: z.boolean(), intervalMinutes: z.coerce.number().int().min(15).max(1440) });
-export const sefazManifestBody = z.object({ type: z.enum(["CIENCIA","CONFIRMACAO","DESCONHECIMENTO","NAO_REALIZADA"]), reason: z.string().trim().max(255).optional() }).superRefine((data,ctx)=>{if(data.type==="NAO_REALIZADA"&&(!data.reason||data.reason.length<15))ctx.addIssue({code:"custom",path:["reason"],message:"Informe uma justificativa com pelo menos 15 caracteres."})});
-export const sefazMatchItemBody = z.object({ produtoId: z.string().min(1) });
-
-export const sefazReviewBody = z.object({
-  status: z.enum(["PENDENTE", "CONFERIDO", "IGNORADO"]),
-  notes: z.string().trim().max(1000).optional(),
-});
-
-export const sefazReportQuery = z.object({
-  query: z.object({
-    from: z.string().optional(),
-    to: z.string().optional(),
-    certificateId: z.string().optional(),
-    reviewStatus: z.enum(["PENDENTE", "CONFERIDO", "IGNORADO"]).optional(),
-    workflowStatus: z.enum(["PENDENTE", "EM_ANALISE", "AGUARDANDO", "CONCLUIDO"]).optional(),
-    priority: z.enum(["BAIXA", "NORMAL", "ALTA", "URGENTE"]).optional(),
-    overdue: z.enum(["true", "false"]).optional(),
-    imported: z.enum(["true", "false"]).optional(),
-    search: z.string().trim().max(120).optional(),
-  }),
-  body: z.unknown().optional(),
-  params: z.unknown().optional(),
-});
-
-export const sefazBatchXmlBody = z.object({
-  ids: z.array(z.string().min(1)).min(1).max(200),
-});
-
-export const sefazWorkflowBody = z.object({
-  status: z.enum(["PENDENTE", "EM_ANALISE", "AGUARDANDO", "CONCLUIDO"]),
-  priority: z.enum(["BAIXA", "NORMAL", "ALTA", "URGENTE"]).default("NORMAL"),
-  assignedToName: z.string().trim().max(120).optional().nullable(),
-  dueAt: z.string().datetime().optional().nullable(),
-  notes: z.string().trim().max(2000).optional().nullable(),
-});
-
-export const sefazBulkWorkflowBody = z.object({
-  ids: z.array(z.string().min(1)).min(1).max(200),
-  status: z.enum(["PENDENTE", "EM_ANALISE", "AGUARDANDO", "CONCLUIDO"]).optional(),
-  priority: z.enum(["BAIXA", "NORMAL", "ALTA", "URGENTE"]).optional(),
-  assignedToName: z.string().trim().max(120).optional().nullable(),
-  dueAt: z.string().datetime().optional().nullable(),
 });

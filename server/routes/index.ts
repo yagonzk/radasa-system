@@ -16,6 +16,8 @@ import { logsRoutes } from "./logs.routes";
 import { abastecimentosRoutes } from "./abastecimentos.routes";
 import { pneusRoutes } from "./pneus.routes";
 import { estoqueRoutes } from "./estoque.routes";
+import { ciotsRoutes } from "./ciots.routes";
+import { cteRoutes } from "./cte.routes";
 import { auditMutations } from "../middlewares/audit-log";
 
 export const apiRoutes = Router();
@@ -36,6 +38,8 @@ apiRoutes.use("/viagens", viagensRoutes);
 apiRoutes.use("/fechamentos", fechamentosRoutes);
 apiRoutes.use("/manifestos", manifestosRoutes);
 apiRoutes.use("/abastecimentos", abastecimentosRoutes);
+apiRoutes.use("/ciots", ciotsRoutes);
+apiRoutes.use("/cte", cteRoutes);
 
 apiRoutes.use("/pneus", pneusRoutes);
 apiRoutes.use("/estoque", estoqueRoutes);

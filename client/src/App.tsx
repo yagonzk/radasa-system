@@ -16,6 +16,8 @@ import Logs from "./pages/Logs";
 import Abastecimentos from "./pages/Abastecimentos";
 import Pneus from "./pages/Pneus";
 import Estoque from "./pages/Estoque";
+import CiotGerar from "./pages/CiotGerar";
+import CiotGerados from "./pages/CiotGerados";
 import { LoaderCircle } from "lucide-react";
 
 function Router() {
@@ -28,6 +30,9 @@ function Router() {
       <Route path="/manifestos" component={Manifestos} />
       <Route path="/fechamentos" component={Fechamentos} />
       <Route path="/abastecimentos" component={Abastecimentos} />
+      <Route path="/ciot/gerar" component={CiotGerar} />
+      <Route path="/ciot/gerados" component={CiotGerados} />
+      <Route path="/ciot" component={CiotGerar} />
       <Route path="/pneus" component={Pneus} />
       <Route path="/estoque" component={Estoque} />
       <Route path="/alterar-senha" component={ChangePassword} />

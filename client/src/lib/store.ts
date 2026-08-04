@@ -3,8 +3,8 @@ import { api } from "./api";
 
 export type StatusMotorista = "ATIVO" | "DEMITIDO";
 export interface Motorista { id: string; nome: string; cpf: string; salarioBase: number; status: StatusMotorista; createdAt: string; }
-export interface Chapa { id: string; nome: string; valorFixo: number; createdAt: string; }
-export interface Cliente { id: string; nomeFantasia: string; codigoInterno: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
+export interface Chapa { id: string; nome: string; telefone: string; cpf: string; cidade: string; chavePix: string; valorFixo: number; createdAt: string; }
+export interface Cliente { id: string; nomeFantasia: string; razaoSocial: string; codigoInterno: string; cnpj: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
 export type CategoriaEstoque = string;
 export interface Produto { id: string; nome: string; codigoInterno: string; categoriaEstoque: CategoriaEstoque; createdAt: string; }
 export type TipoMovimentacaoEstoque = "ENTRADA" | "SAIDA";
@@ -20,6 +20,79 @@ export interface ManifestoProduto { produtoId: string; quantidade: number; valor
 export interface Manifesto { id: string; clienteId: string; dataManifesto: string; produtos: ManifestoProduto[]; tipoManifesto: TipoManifesto; pdfUrl?: string; createdAt: string; }
 export interface AbastecimentoProduto { produtoId: string; quantidadeLitros: number; valorUnitario: number; valorTotal: number; }
 export interface Abastecimento { id: string; clienteId: string; veiculoId: string; dataEmissao: string; produtos: AbastecimentoProduto[]; valorDesconto: number; valorTotal: number; hodometro: number; pdfUrl?: string | null; createdAt: string; }
+export type StatusCiot =
+  | "RASCUNHO"
+  | "PRONTO_ENVIO"
+  | "PROCESSANDO"
+  | "AUTORIZADO"
+  | "REJEITADO"
+  | "CANCELADO"
+  | "ENCERRADO";
+
+export type TipoOperacaoCiot = "LOTACAO" | "FRACIONADA" | "TAC_AGREGADO";
+
+export interface CiotCte {
+  id?: string;
+  chave: string;
+  numero: string;
+  serie: string;
+  emitenteCnpj: string;
+  emitenteNome: string;
+  remetenteCnpj: string;
+  remetenteNome: string;
+  destinatarioCnpj: string;
+  destinatarioNome: string;
+  tomadorCnpj: string;
+  tomadorNome: string;
+  origemCidade: string;
+  origemUf: string;
+  destinoCidade: string;
+  destinoUf: string;
+  produto: string;
+  ncm: string;
+  pesoKg: number;
+  valorMercadoria: number;
+  valorFrete: number;
+  xmlUrl?: string | null;
+}
+
+export interface Ciot {
+  id: string;
+  clienteId: string;
+  motoristaId: string;
+  veiculoId: string;
+  tipoOperacao: TipoOperacaoCiot;
+  status: StatusCiot;
+  rntrc: string;
+  origemCidade: string;
+  origemUf: string;
+  destinoCidade: string;
+  destinoUf: string;
+  dataInicio: string;
+  dataFim?: string | null;
+  naturezaCarga: string;
+  pesoKg: number;
+  valorFrete: number;
+  valorPedagio: number;
+  outrosValores: number;
+  descontos: number;
+  valorLiquido: number;
+  formaPagamento: string;
+  favorecidoPix: string;
+  payloadAntt?: unknown;
+  preparadoEm?: string | null;
+  observacoes?: string | null;
+  numeroCiot?: string | null;
+  codigoVerificador?: string | null;
+  protocolo?: string | null;
+  mensagemRetorno?: string | null;
+  valorMercadoria: number;
+  cnpjsCargaFracionada: string;
+  ctes?: CiotCte[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export type StatusPneu = "ESTOQUE" | "INSTALADO" | "MANUTENCAO" | "RECAPAGEM" | "DESCARTADO";
 export type TipoPneu = "DIRECIONAL" | "TRACAO" | "LIVRE";
 export type CondicaoPneu = "NOVO" | "USADO" | "RECAPADO" | "AGUARDANDO_RECAPAGEM";
@@ -123,6 +196,7 @@ export const useLocais = () => useApiCrud<Local>("locais", "Local");
 export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");
 export const useViagens = () => useApiCrud<Viagem>("viagens", "Viagem");
 export const useAbastecimentos = () => useApiCrud<Abastecimento>("abastecimentos", "Abastecimento");
+export const useCiots = () => useApiCrud<Ciot>("ciots", "CIOT");
 export const usePneus = () => useApiCrud<Pneu>("pneus", "Pneu");
 
 export function useFechamentos() {
@@ -200,48 +274,4 @@ export function usePneuGestao(){
   const loadAlerts=useCallback(async()=>setAlerts((await api.get<PneuAlerta[]>("/pneus/gestao/alertas")).data),[]);
   const loadReports=useCallback(async(from?:string,to?:string)=>{setLoading(true);try{setReports((await api.get<PneuRelatorios>("/pneus/gestao/relatorios",{params:{from:from||undefined,to:to||undefined}})).data)}finally{setLoading(false)}},[]);
   return {alerts,reports,loading,loadAlerts,loadReports};
-}
-
-export interface SefazCertificate {
-  id:string; cnpj:string; fileName:string; subject:string; issuer?:string|null; serialNumber?:string|null;
-  validFrom:string; validTo:string; cnpjValidated:boolean; active:boolean; lastNsu:string; maxNsu:string;
-  lastSyncAt?:string|null; nextSyncAllowedAt?:string|null; autoSyncEnabled:boolean; autoSyncIntervalMinutes:number;
-  lastAutoSyncAt?:string|null; createdAt:string; updatedAt:string;
-}
-export interface SefazDocumentItem { id:string; itemNumber:number; supplierCode?:string|null; ean?:string|null; description:string; ncm?:string|null; cfop?:string|null; unit?:string|null; quantity:number; unitValue:number; totalValue:number; matchedProdutoId?:string|null; matchedProduto?:Produto|null; }
-export interface SefazDocumentEvent { id:string; type:string; description:string; protocol?:string|null; createdAt:string; }
-export interface SefazDocument { id:string; certificateId:string; nsu:string; schema:string; accessKey?:string|null; documentType?:string|null; issuerCnpj?:string|null; issuerName?:string|null; recipientCnpj?:string|null; recipientName?:string|null; emissionDate?:string|null; totalValue?:number|null; number?:string|null; series?:string|null; operationType?:string|null; status?:string|null; manifestationType?:"CIENCIA"|"CONFIRMACAO"|"DESCONHECIMENTO"|"NAO_REALIZADA"|null; manifestationStatus:"NONE"|"PROCESSING"|"SUCCESS"|"ERROR"; reviewStatus:"PENDENTE"|"CONFERIDO"|"IGNORADO"; reviewNotes?:string|null; reviewedAt?:string|null; workflowStatus:"PENDENTE"|"EM_ANALISE"|"AGUARDANDO"|"CONCLUIDO"; priority:"BAIXA"|"NORMAL"|"ALTA"|"URGENTE"; assignedToName?:string|null; dueAt?:string|null; workflowNotes?:string|null; workflowUpdatedAt?:string|null; manifestationProtocol?:string|null; manifestedAt?:string|null; importedAt?:string|null; isSummary:boolean; receivedAt:string; items?:SefazDocumentItem[]; events?:SefazDocumentEvent[]; }
-export interface SefazSyncLog { id:string; certificateId:string; status:"RUNNING"|"SUCCESS"|"EMPTY"|"BLOCKED"|"ERROR"; cStat?:string|null; message?:string|null; initialNsu:string; lastNsu?:string|null; maxNsu?:string|null; documentsFound:number; startedAt:string; finishedAt?:string|null; certificate:{cnpj:string;fileName:string}; }
-
-export interface SefazAlert { id:string; type:string; severity:"info"|"warning"|"critical"; title:string; description:string; entityId?:string; }
-export interface SefazReport {
-  summary:{totalDocuments:number;totalValue:number;pendingReview:number;reviewed:number;ignored:number;imported:number;pendingManifestation:number;workflowPending:number;workflowOverdue:number;urgent:number};
-  byIssuer:Array<{name:string;cnpj:string;total:number;count:number}>;
-  byMonth:Array<{month:string;total:number;count:number}>;
-  documents:SefazDocument[];
-}
-
-export interface SefazDashboard { totalDocuments:number; totalValue:number; activeCertificates:number; pendingManifestation:number; cancelled:number; denied:number; lastSyncAt?:string|null; expiredCertificates:number; }
-
-export function useSefaz() {
-  const [certificates,setCertificates]=useState<SefazCertificate[]>([]); const [alerts,setAlerts]=useState<SefazAlert[]>([]); const [report,setReport]=useState<SefazReport|null>(null); const [documents,setDocuments]=useState<SefazDocument[]>([]); const [syncLogs,setSyncLogs]=useState<SefazSyncLog[]>([]); const [dashboard,setDashboard]=useState<SefazDashboard|null>(null); const [loading,setLoading]=useState(false);
-  const refresh=useCallback(async(params?:Record<string,string|undefined>)=>{const [c,d,l,k,a]=await Promise.all([api.get<SefazCertificate[]>("/sefaz/certificates"),api.get<SefazDocument[]>("/sefaz/documents",{params}),api.get<SefazSyncLog[]>("/sefaz/sync-logs"),api.get<SefazDashboard>("/sefaz/dashboard"),api.get<SefazAlert[]>("/sefaz/alerts")]);setCertificates(c.data);setDocuments(d.data);setSyncLogs(l.data);setDashboard(k.data);setAlerts(a.data)},[]);
-  useEffect(()=>{void refresh()},[refresh]);
-  const saveCertificate=useCallback(async(data:{cnpj:string;fileName:string;certificateBase64:string;password:string})=>{const r=(await api.post<SefazCertificate>("/sefaz/certificates",data)).data;await refresh();return r},[refresh]);
-  const toggleCertificate=useCallback(async(id:string,active:boolean)=>{await api.put(`/sefaz/certificates/${id}/status`,{active});await refresh()},[refresh]);
-  const updateAutoSync=useCallback(async(id:string,enabled:boolean,intervalMinutes:number)=>{await api.put(`/sefaz/certificates/${id}/auto-sync`,{enabled,intervalMinutes});await refresh()},[refresh]);
-  const sync=useCallback(async(id:string)=>{setLoading(true);try{const r=(await api.post(`/sefaz/certificates/${id}/sync`)).data;await refresh();return r}finally{setLoading(false)}},[refresh]);
-  const details=useCallback(async(id:string)=>(await api.get<SefazDocument>(`/sefaz/documents/${id}`)).data,[]);
-  const manifest=useCallback(async(id:string,type:string,reason?:string)=>{const r=(await api.post(`/sefaz/documents/${id}/manifest`,{type,reason})).data;await refresh();return r},[refresh]);
-  const importStock=useCallback(async(id:string)=>{const r=(await api.post(`/sefaz/documents/${id}/import-stock`)).data;await refresh();return r},[refresh]);
-  const matchItem=useCallback(async(itemId:string,produtoId:string)=>{await api.put(`/sefaz/items/${itemId}/match`,{produtoId})},[]);
-  const downloadXml=useCallback(async(id:string)=>{const response=await api.get(`/sefaz/documents/${id}/xml`,{responseType:"blob"});const url=URL.createObjectURL(response.data);const link=document.createElement("a");link.href=url;link.download=`nfe-${id}.xml`;link.click();URL.revokeObjectURL(url)},[]);
-  const getDanfe=useCallback(async(id:string)=>(await api.get<string>(`/sefaz/documents/${id}/danfe`,{responseType:"text"})).data,[]);
-  const loadReport=useCallback(async(params?:Record<string,string|undefined>)=>{const value=(await api.get<SefazReport>("/sefaz/reports",{params})).data;setReport(value);return value},[]);
-  const updateReview=useCallback(async(id:string,status:"PENDENTE"|"CONFERIDO"|"IGNORADO",notes?:string)=>{await api.put(`/sefaz/documents/${id}/review`,{status,notes});await refresh()},[refresh]);
-  const downloadReportCsv=useCallback(async(params?:Record<string,string|undefined>)=>{const response=await api.get("/sefaz/reports/csv",{params,responseType:"blob"});const url=URL.createObjectURL(response.data);const link=document.createElement("a");link.href=url;link.download="relatorio-sefaz.csv";link.click();URL.revokeObjectURL(url)},[]);
-  const updateWorkflow=useCallback(async(id:string,data:{status:string;priority:string;assignedToName?:string|null;dueAt?:string|null;notes?:string|null})=>{await api.put(`/sefaz/documents/${id}/workflow`,data);await refresh()},[refresh]);
-  const bulkWorkflow=useCallback(async(data:{ids:string[];status?:string;priority?:string;assignedToName?:string|null;dueAt?:string|null})=>{await api.put("/sefaz/documents/workflow/bulk",data);await refresh()},[refresh]);
-  const downloadXmlBatch=useCallback(async(ids:string[])=>{const response=await api.post("/sefaz/documents/xml-batch",{ids},{responseType:"blob"});const url=URL.createObjectURL(response.data);const link=document.createElement("a");link.href=url;link.download="xmls-sefaz.zip";link.click();URL.revokeObjectURL(url)},[]);
-  return {certificates,documents,syncLogs,dashboard,alerts,report,loading,refresh,saveCertificate,toggleCertificate,updateAutoSync,sync,details,manifest,importStock,matchItem,downloadXml,getDanfe,loadReport,updateReview,downloadReportCsv,downloadXmlBatch,updateWorkflow,bulkWorkflow};
 }
