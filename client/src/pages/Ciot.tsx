@@ -276,6 +276,17 @@ export default function CiotPage() {
       pesoKg: parseDecimal(form.pesoKg),
       valorFrete: parseDecimal(form.valorFrete),
       valorPedagio: parseDecimal(form.valorPedagio),
+      outrosValores: editing?.outrosValores ?? 0,
+      descontos: editing?.descontos ?? 0,
+      valorLiquido:
+        parseDecimal(form.valorFrete) +
+        parseDecimal(form.valorPedagio) +
+        (editing?.outrosValores ?? 0) -
+        (editing?.descontos ?? 0),
+      formaPagamento: editing?.formaPagamento ?? "",
+      favorecidoPix: editing?.favorecidoPix ?? "",
+      valorMercadoria: editing?.valorMercadoria ?? 0,
+      cnpjsCargaFracionada: editing?.cnpjsCargaFracionada ?? "",
       observacoes: form.observacoes.trim() || null,
       numeroCiot: editing?.numeroCiot ?? null,
       codigoVerificador: editing?.codigoVerificador ?? null,
@@ -349,13 +360,15 @@ export default function CiotPage() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          {[
-            ["Total", counts.total, FileBadge2],
-            ["Rascunhos", counts.rascunho, Clock3],
-            ["Prontos", counts.pronto, CheckCircle2],
-            ["Autorizados", counts.autorizado, CheckCircle2],
-            ["Rejeitados", counts.rejeitado, XCircle],
-          ].map(([label, value, Icon]) => {
+          {(
+            [
+              ["Total", counts.total, FileBadge2],
+              ["Rascunhos", counts.rascunho, Clock3],
+              ["Prontos", counts.pronto, CheckCircle2],
+              ["Autorizados", counts.autorizado, CheckCircle2],
+              ["Rejeitados", counts.rejeitado, XCircle],
+            ] as const
+          ).map(([label, value, Icon]) => {
             const CardIcon = Icon as typeof FileBadge2;
             return (
               <div key={String(label)} className="rounded-xl border bg-card p-4">

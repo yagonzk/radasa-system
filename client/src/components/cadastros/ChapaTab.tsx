@@ -51,7 +51,14 @@ export default function ChapaTab() {
       update(editingId, { nome: form.nome, valorFixo });
       toast.success("Chapa atualizada com sucesso!");
     } else {
-      create({ nome: form.nome, valorFixo });
+      create({
+        nome: form.nome,
+        telefone: "",
+        cpf: "",
+        cidade: "",
+        chavePix: "",
+        valorFixo,
+      });
       toast.success("Chapa cadastrada com sucesso!");
     }
     setOpen(false);

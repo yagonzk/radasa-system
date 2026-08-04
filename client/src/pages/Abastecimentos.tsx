@@ -35,6 +35,7 @@ import {
   Download,
   Eye,
   FileText,
+  Filter,
   Fuel,
   Gauge,
   Pencil,
@@ -191,6 +192,28 @@ function SearchableSelect({
   );
 }
 
+
+interface DocumentoProdutoInterpretado {
+  codigo?: string | null;
+  descricao: string;
+  quantidadeLitros: number;
+  valorUnitario: number;
+  valorTotal: number;
+}
+
+interface DocumentoAbastecimentoInterpretado {
+  origem?: string | null;
+  numeroNota?: string | null;
+  dataEmissao?: string | null;
+  fornecedorCnpj?: string | null;
+  fornecedorNome?: string | null;
+  placa?: string | null;
+  hodometro?: number | null;
+  valorTotal?: number | null;
+  valorDesconto?: number | null;
+  produtos: DocumentoProdutoInterpretado[];
+  avisos: string[];
+}
 
 type BatchStatus = "COMPLETO" | "PENDENTE" | "INVALIDO" | "IMPORTADO" | "ERRO";
 
@@ -1835,7 +1858,14 @@ export default function Abastecimentos() {
           ? (item.produtos ?? []).reduce((sum, entry) => sum + entry.valorTotal, 0) / litros
           : 0;
 
-        if (filters.cliente && !normalize(clienteSearchText(cliente)).includes(normalize(filters.cliente))) return false;
+        if (
+          filters.cliente &&
+          !normalize(cliente ? clienteSearchText(cliente) : "").includes(
+            normalize(filters.cliente),
+          )
+        ) {
+          return false;
+        }
         if (filters.produto && !normalize(nomesProdutos).includes(normalize(filters.produto))) return false;
         if (filters.placa && !normalize(`${veiculo?.placa ?? ""} ${veiculo?.modelo ?? ""}`).includes(normalize(filters.placa))) return false;
         if (filters.emissao && item.dataEmissao < filters.emissao) return false;
