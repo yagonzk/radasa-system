@@ -661,3 +661,33 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+model Empresa {
+  id                  String    @id @default(cuid())
+  razaoSocial         String
+  nomeFantasia        String?   @default("")
+  cnpj                String    @unique
+  inscricaoEstadual   String?   @default("")
+  rntrc               String?   @default("")
+  antt                String?   @default("")
+  email               String?   @default("")
+  telefone            String?   @default("")
+  cep                 String?   @default("")
+  logradouro          String?   @default("")
+  numero              String?   @default("")
+  complemento         String?   @default("")
+  bairro              String?   @default("")
+  cidade              String?   @default("")
+  uf                  String?   @default("")
+  certificadoArquivo  String?   @default("") @db.Text
+  certificadoSenha    String?   @default("") @db.Text
+  certificadoValidade DateTime?
+  ativa               Boolean   @default(true)
+  empresaPadrao       Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([cnpj])
+  @@index([empresaPadrao])
+  @@map("empresas")
+}

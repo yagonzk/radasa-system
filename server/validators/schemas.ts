@@ -61,6 +61,32 @@ export const clienteSyncBody = z.object({
   })).min(1).max(10000),
 });
 
+
+export const empresaBody = z.object({
+  id: id.optional(),
+  razaoSocial: text(),
+  nomeFantasia: optionalText(255),
+  cnpj: z.string().trim().max(18).transform(v => v.replace(/\D/g, "")).refine(v => !v || v.length === 14, "CNPJ deve possuir 14 dígitos"),
+  inscricaoEstadual: optionalText(30),
+  rntrc: optionalText(30),
+  antt: optionalText(30),
+  email: z.string().trim().email().optional().or(z.literal("")),
+  telefone: optionalText(30),
+  cep: optionalText(12),
+  logradouro: optionalText(255),
+  numero: optionalText(30),
+  complemento: optionalText(255),
+  bairro: optionalText(255),
+  cidade: optionalText(120),
+  uf: z.string().trim().max(2).optional().or(z.literal("")),
+  certificadoArquivo: z.string().max(20_000_000).optional().or(z.literal("")),
+  certificadoSenha: z.string().trim().max(500).optional().or(z.literal("")),
+  certificadoValidade: z.string().optional().nullable().or(z.literal("")),
+  ativa: z.coerce.boolean().default(true),
+  empresaPadrao: z.coerce.boolean().default(false),
+  createdAt: z.string().optional(),
+});
+
 export const produtoBody = z.object({
   id: id.optional(), nome: text(), codigoInterno: text(100),
   categoriaEstoque: z.string().trim().min(1).max(80).default("Produtos de piscina"),

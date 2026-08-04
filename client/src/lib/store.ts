@@ -5,6 +5,35 @@ export type StatusMotorista = "ATIVO" | "DEMITIDO";
 export interface Motorista { id: string; nome: string; cpf: string; salarioBase: number; status: StatusMotorista; createdAt: string; }
 export interface Chapa { id: string; nome: string; telefone: string; cpf: string; cidade: string; chavePix: string; valorFixo: number; createdAt: string; }
 export interface Cliente { id: string; nomeFantasia: string; razaoSocial: string; codigoInterno: string; cnpj: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
+
+export interface Empresa {
+  id: string;
+  razaoSocial: string;
+  nomeFantasia?: string | null;
+  cnpj: string;
+  inscricaoEstadual?: string | null;
+  rntrc?: string | null;
+  antt?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  cep?: string | null;
+  logradouro?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+  certificadoArquivo?: string | null;
+  certificadoValidade?: string | null;
+  ativa: boolean;
+  empresaPadrao: boolean;
+  createdAt: string;
+}
+
+export interface EmpresaInput extends Omit<Empresa, "id" | "createdAt"> {
+  certificadoSenha?: string;
+}
+
 export type CategoriaEstoque = string;
 export interface Produto { id: string; nome: string; codigoInterno: string; categoriaEstoque: CategoriaEstoque; createdAt: string; }
 export type TipoMovimentacaoEstoque = "ENTRADA" | "SAIDA";
@@ -191,6 +220,19 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string) {
 export const useMotoristas = () => useApiCrud<Motorista>("motoristas", "Motorista");
 export const useChapas = () => useApiCrud<Chapa>("chapas", "Chapa");
 export const useClientes = () => useApiCrud<Cliente>("clientes", "Cliente");
+export function useEmpresa() {
+  const crud = useApiCrud<Empresa>("empresa", "Empresa");
+  const create = useCallback(
+    (data: EmpresaInput) => crud.create(data),
+    [crud.create],
+  );
+  const update = useCallback(
+    (id: string, data: Partial<EmpresaInput>) => crud.update(id, data),
+    [crud.update],
+  );
+
+  return { ...crud, create, update };
+}
 export const useProdutos = () => useApiCrud<Produto>("produtos", "Produto");
 export const useLocais = () => useApiCrud<Local>("locais", "Local");
 export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");

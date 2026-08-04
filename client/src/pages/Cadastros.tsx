@@ -7,6 +7,7 @@ import ClienteTab from "@/components/cadastros/ClienteTab";
 import ProdutoTab from "@/components/cadastros/ProdutoTab";
 import LocaisTab from "@/components/cadastros/LocaisTab";
 import VeiculoTab from "@/components/cadastros/VeiculoTab";
+import EmpresaTab from "@/components/cadastros/EmpresaTab";
 
 export default function Cadastros() {
   const [match, params] = useRoute("/cadastros/:tab");
@@ -25,13 +26,14 @@ export default function Cadastros() {
         </div>
 
         <Tabs defaultValue={activeTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-6">
+          <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
             <TabsTrigger value="motoristas">Motoristas</TabsTrigger>
             <TabsTrigger value="chapas">Chapas</TabsTrigger>
             <TabsTrigger value="clientes">Clientes</TabsTrigger>
             <TabsTrigger value="produtos">Produtos</TabsTrigger>
             <TabsTrigger value="locais">Locais</TabsTrigger>
             <TabsTrigger value="veiculos">Veículos</TabsTrigger>
+            <TabsTrigger value="empresa">Empresa</TabsTrigger>
           </TabsList>
 
           <TabsContent value="motoristas" className="mt-6">
@@ -51,6 +53,9 @@ export default function Cadastros() {
           </TabsContent>
           <TabsContent value="veiculos" className="mt-6">
             <VeiculoTab />
+          </TabsContent>
+          <TabsContent value="empresa" className="mt-6">
+            <EmpresaTab />
           </TabsContent>
         </Tabs>
       </div>
