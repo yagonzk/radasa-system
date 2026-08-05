@@ -159,7 +159,7 @@ abastecimentosXmlRoutes.post("/importar-lote", async (req, res, next) => {
         produtos: Array.isArray(item?.produtos) ? item.produtos : [],
       }))
       .filter(
-        (item) =>
+        (item: any) =>
           !item.clienteId ||
           !item.veiculoId ||
           item.chaveNfe.length !== 44 ||
@@ -179,7 +179,7 @@ abastecimentosXmlRoutes.post("/importar-lote", async (req, res, next) => {
     if (invalidos.length) {
       res.status(400).json({
         message: `${invalidos.length} item(ns) possuem dados obrigatórios inválidos.`,
-        indices: invalidos.map((item) => item.index),
+        indices: invalidos.map((item: any) => item.index),
       });
       return;
     }

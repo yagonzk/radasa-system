@@ -91,7 +91,19 @@ const emptyProdutoDraft: ProdutoDraft = {
 };
 
 function parseNumber(value: string) {
-  const normalized = value.trim().replace(/\./g, "").replace(",", ".");
+  const cleaned = value
+    .trim()
+    .replace(/\s/g, "")
+    .replace(/R\$/gi, "");
+
+  if (!cleaned) return 0;
+
+  // Formato brasileiro: 1.234,56 ou 21,4
+  const normalized = cleaned.includes(",")
+    ? cleaned.replace(/\./g, "").replace(",", ".")
+    // Inputs HTML do tipo number sempre devolvem ponto decimal: 21.4
+    : cleaned;
+
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -294,6 +306,7 @@ interface XmlSugestoes {
       id: string;
       nome: string;
       codigoInterno: string;
+      criadoAutomaticamente?: boolean;
     } | null;
   }>;
 }
@@ -322,6 +335,9 @@ interface BatchXmlRow {
   produtos: Array<{
     produtoXml: XmlProdutoInterpretado;
     produtoId: string;
+    cadastroNome?: string;
+    cadastroCodigo?: string;
+    criadoAutomaticamente?: boolean;
   }>;
   importMessage?: string;
 }
@@ -386,11 +402,28 @@ function BatchXmlDialog({
       "combustivel",
   );
 
-  const produtoOptions = produtosCombustivel.map((produto) => ({
-    value: produto.id,
-    label: `${produto.nome} - ${produto.codigoInterno}`,
-    keywords: `${produto.nome} ${produto.codigoInterno}`,
-  }));
+  const produtosCriadosNoLote = items.flatMap((item) =>
+    item.produtos
+      .filter((entry) => entry.produtoId && entry.cadastroNome)
+      .map((entry) => ({
+        id: entry.produtoId,
+        nome: entry.cadastroNome!,
+        codigoInterno: entry.cadastroCodigo ?? "",
+      })),
+  );
+
+  const produtoOptions = Array.from(
+    new Map(
+      [...produtosCombustivel, ...produtosCriadosNoLote].map((produto) => [
+        produto.id,
+        {
+          value: produto.id,
+          label: `${produto.nome}${produto.codigoInterno ? ` - ${produto.codigoInterno}` : ""}`,
+          keywords: `${produto.nome} ${produto.codigoInterno ?? ""}`,
+        },
+      ]),
+    ).values(),
+  );
 
   const recalculateStatus = (item: BatchXmlRow): BatchXmlRow => {
     if (!item.documento) return item;
@@ -433,6 +466,10 @@ function BatchXmlDialog({
         item.sugestoes?.produtos.map((produto) => ({
           produtoXml: produto.produto,
           produtoId: produto.cadastro?.id ?? "",
+          cadastroNome: produto.cadastro?.nome,
+          cadastroCodigo: produto.cadastro?.codigoInterno,
+          criadoAutomaticamente:
+            produto.cadastro?.criadoAutomaticamente ?? false,
         })) ?? [],
     };
 
@@ -491,8 +528,20 @@ function BatchXmlDialog({
       setItems(rows);
       setProgress({ current: files.length, total: files.length });
 
+      const criadosAutomaticamente = new Set(
+        rows.flatMap((row) =>
+          row.produtos
+            .filter((produto) => produto.criadoAutomaticamente)
+            .map((produto) => produto.produtoId),
+        ),
+      ).size;
+
       toast.success(
-        `${response.data.resumo.completos} pronto(s), ${response.data.resumo.pendentes} pendente(s) e ${response.data.resumo.invalidos} inválido(s).`,
+        `${response.data.resumo.completos} pronto(s), ${response.data.resumo.pendentes} pendente(s) e ${response.data.resumo.invalidos} inválido(s).${
+          criadosAutomaticamente
+            ? ` ${criadosAutomaticamente} produto(s) de combustível cadastrado(s) automaticamente.`
+            : ""
+        }`,
       );
     } catch (error: any) {
       console.error(error);
@@ -1360,15 +1409,109 @@ function AbastecimentoForm({
   const matchProduto = (item: DocumentoProdutoInterpretado) => {
     const description = normalizeText(item.descricao);
     const code = normalizeText(item.codigo ?? "");
-    return produtosCombustivel.find((produto) => {
-      const productName = normalizeText(produto.nome);
-      const productCode = normalizeText(produto.codigoInterno);
-      return (
-        (code && code === productCode) ||
-        description.includes(productName) ||
-        productName.includes(description)
-      );
-    });
+    const codeDigits = digits(code);
+
+    const ignoredWords = new Set([
+      "oleo",
+      "combustivel",
+      "produto",
+      "automotivo",
+      "litro",
+      "litros",
+      "lt",
+      "l",
+      "comum",
+      "tipo",
+      "b",
+    ]);
+
+    const tokens = (value: string) =>
+      normalizeText(value)
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 2 && !ignoredWords.has(token));
+
+    const fuelSignature = (value: string) => {
+      const normalized = normalizeText(value);
+
+      if (/\barla\s*32\b/.test(normalized)) return "arla32";
+      if (/\bgnv\b|gas natural veicular/.test(normalized)) return "gnv";
+      if (/etanol|alcool/.test(normalized)) return "etanol";
+      if (/gasolina/.test(normalized)) {
+        if (/aditiv/.test(normalized)) return "gasolina-aditivada";
+        return "gasolina-comum";
+      }
+      if (/diesel/.test(normalized)) {
+        if (/s\s*10|s10/.test(normalized)) return "diesel-s10";
+        if (/s\s*500|s500/.test(normalized)) return "diesel-s500";
+        return "diesel";
+      }
+
+      return "";
+    };
+
+    const sourceSignature = fuelSignature(description);
+    const sourceTokens = new Set(tokens(description));
+
+    const ranked = produtosCombustivel
+      .map((produto) => {
+        const productName = normalizeText(produto.nome);
+        const productCode = normalizeText(produto.codigoInterno);
+        const productCodeDigits = digits(productCode);
+        const targetSignature = fuelSignature(productName);
+        const targetTokens = new Set(tokens(productName));
+
+        let score = 0;
+
+        if (code && productCode && code === productCode) score += 100;
+        if (
+          codeDigits.length >= 3 &&
+          productCodeDigits.length >= 3 &&
+          codeDigits === productCodeDigits
+        ) {
+          score += 95;
+        }
+
+        if (description === productName) score += 90;
+        if (
+          productName.length >= 4 &&
+          (description.includes(productName) || productName.includes(description))
+        ) {
+          score += 55;
+        }
+
+        if (sourceSignature && targetSignature) {
+          if (sourceSignature === targetSignature) {
+            score += 70;
+          } else if (
+            sourceSignature.startsWith("diesel") &&
+            targetSignature.startsWith("diesel")
+          ) {
+            score -= 30;
+          } else {
+            score -= 100;
+          }
+        }
+
+        const commonTokens = Array.from(sourceTokens).filter((token) =>
+          targetTokens.has(token),
+        ).length;
+        const totalRelevantTokens = Math.max(
+          1,
+          Math.min(sourceTokens.size, targetTokens.size),
+        );
+        score += (commonTokens / totalRelevantTokens) * 40;
+
+        return { produto, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    const best = ranked[0];
+    const second = ranked[1];
+
+    if (!best || best.score < 50) return undefined;
+    if (second && best.score - second.score < 10) return undefined;
+
+    return best.produto;
   };
 
   const applyDocumentResult = (result: DocumentoAbastecimentoInterpretado) => {
@@ -1928,7 +2071,16 @@ export default function Abastecimentos() {
       0
     );
     const valor = filteredItems.reduce((sum, item) => sum + item.valorTotal, 0);
-    return { litros, valor, media: litros > 0 ? valor / litros : 0 };
+    const descontos = filteredItems.reduce(
+      (sum, item) => sum + Number(item.valorDesconto || 0),
+      0,
+    );
+    return {
+      litros,
+      valor,
+      descontos,
+      media: litros > 0 ? valor / litros : 0,
+    };
   }, [filteredItems]);
 
   const mediaKmLitro = useMemo(() => {
@@ -2017,7 +2169,7 @@ export default function Abastecimentos() {
           </div>
         </div>
 
-        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4" /> Total de litros</p>
             <p className="mt-2 whitespace-nowrap text-2xl font-bold tabular-nums">{formatLitros(totals.litros)}</p>
@@ -2025,6 +2177,10 @@ export default function Abastecimentos() {
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Banknote className="h-4 w-4" /> Valor total</p>
             <p className="mt-2 text-2xl font-bold text-primary">{formatBRL(totals.valor)}</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Banknote className="h-4 w-4" /> Total de descontos</p>
+            <p className="mt-2 text-2xl font-bold text-emerald-600 dark:text-emerald-400">{formatBRL(totals.descontos)}</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4" /> Média de R$/L</p>

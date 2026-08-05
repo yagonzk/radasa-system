@@ -16,7 +16,7 @@ const nested = (input: any) =>
   }));
 
 async function calcularValorTotal(viagens: Array<{ localId: string; quantidade: number }>) {
-  const localIds = [...new Set(viagens.map((viagem) => viagem.localId))];
+  const localIds = Array.from(new Set(viagens.map((viagem) => viagem.localId)));
   const locais = await prisma.local.findMany({
     where: { id: { in: localIds } },
     select: { id: true, valorComissao: true },

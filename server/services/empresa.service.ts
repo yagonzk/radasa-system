@@ -15,7 +15,7 @@ function serialize(item: any) {
   };
 }
 
-function normalizeData(data: any, preservePassword = false) {
+function normalizeData(data: any, preservePassword = false): any {
   const {
     createdAt,
     certificadoValidade,
@@ -23,7 +23,7 @@ function normalizeData(data: any, preservePassword = false) {
     ...rest
   } = data;
 
-  const normalized: Record<string, unknown> = {
+  const normalized: any = {
     ...rest,
   };
 

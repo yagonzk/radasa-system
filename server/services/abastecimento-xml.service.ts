@@ -73,19 +73,18 @@ function joinAddress(address: any) {
 }
 
 function noteTexts(infNfe: any) {
-  const obsCont = asArray(infNfe?.infAdic?.obsCont)
-    .flatMap((item: any) => [
-      item?.["@_xCampo"],
-      item?.xTexto,
-      item?.["@_xTexto"],
-    ]);
+  const combinedObservations = [
+    ...asArray(infNfe?.infAdic?.obsCont),
+    ...asArray(infNfe?.infAdic?.obsFisco),
+  ].flatMap((item: any) => {
+    const field = firstText(item?.["@_xCampo"]);
+    const value = firstText(item?.xTexto, item?.["@_xTexto"]);
 
-  const obsFisco = asArray(infNfe?.infAdic?.obsFisco)
-    .flatMap((item: any) => [
-      item?.["@_xCampo"],
-      item?.xTexto,
-      item?.["@_xTexto"],
-    ]);
+    return [
+      field && value ? `${field}: ${value}` : "",
+      value,
+    ].filter(Boolean);
+  });
 
   const itemNotes = asArray(infNfe?.det).flatMap((det: any) => [
     det?.infAdProd,
@@ -95,8 +94,7 @@ function noteTexts(infNfe: any) {
   return [
     infNfe?.infAdic?.infCpl,
     infNfe?.infAdic?.infAdFisco,
-    ...obsCont,
-    ...obsFisco,
+    ...combinedObservations,
     ...itemNotes,
   ]
     .map((value) => String(value ?? "").trim())
@@ -105,38 +103,72 @@ function noteTexts(infNfe: any) {
 
 function parseOdometerCandidate(raw: string) {
   const cleaned = raw.trim().replace(/\s/g, "");
+  if (!cleaned) return null;
 
-  // 231.481,0 -> 231481
-  // 231,481 -> 231481 quando usado após um rótulo de quilometragem
-  // 231481 -> 231481
+  // O número após o rótulo KM/ODÔMETRO pode vir como 231.481,0.
+  // Para hodômetro, a parte decimal não é relevante.
   const integerPart = cleaned.split(",")[0];
   const digits = onlyDigits(integerPart || cleaned);
   const value = Number(digits);
 
   if (!Number.isFinite(value)) return null;
+
+  // 0 e 1 são usados por vários postos como preenchimento genérico.
   if (value < 100) return null;
   if (value > 99_999_999) return null;
 
   return value;
 }
 
-export function extrairHodometro(texts: string[]) {
-  const aliases = [
-    "quilometragem atual",
-    "quilometragem",
-    "hodometro",
-    "hodômetro",
-    "odometro",
-    "odômetro",
-    "horimetro",
-    "horímetro",
-    "km atual",
-    "km",
-    "hd",
-    "ho",
-    "od",
+function normalizePlate(value: unknown) {
+  return String(value ?? "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+}
+
+function isStrictPlate(value: string) {
+  return /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(value);
+}
+
+function isLoosePlateCandidate(value: string) {
+  const letters = (value.match(/[A-Z]/g) ?? []).length;
+  const digits = (value.match(/[0-9]/g) ?? []).length;
+
+  return value.length >= 5 && value.length <= 8 && letters >= 2 && digits >= 2;
+}
+
+function findLabeledPlate(text: string) {
+  const normalized = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+
+  const patterns = [
+    /\bPLACA\s*\/\s*(?:KM|HM|ODOM(?:ETRO)?)\s*[:=\-]?\s*([A-Z0-9.\s/_-]{5,14})/,
+    /\b(?:PLACA|VEICULO|CAVALO|TRATOR|FROTA|PREFIXO)(?:\s+(?:DO\s+)?(?:VEICULO|CAVALO|TRATOR))?\s*[:=\-#]?\s*([A-Z0-9.\s/_-]{5,14})/,
+    /\b(?:PCA|PLAQ)\s*[:=\-#]?\s*([A-Z0-9.\s/_-]{5,14})/,
   ];
 
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (!match?.[1]) continue;
+
+    // Interrompe antes do próximo campo do rodapé.
+    const token = match[1].split(
+      /\s+(?:KM|HM|HODOMETRO|ODOMETRO|HORIMETRO|QUILOMETRAGEM|MOTORISTA|FRETISTA|VEICULO)\b|\||;|,|\//,
+    )[0];
+
+    const candidate = normalizePlate(token);
+
+    if (isStrictPlate(candidate) || isLoosePlateCandidate(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "";
+}
+
+export function extrairHodometro(texts: string[]) {
   const candidates: Array<{
     value: number;
     alias: string;
@@ -144,84 +176,176 @@ export function extrairHodometro(texts: string[]) {
     confidence: number;
   }> = [];
 
+  const patterns: Array<{
+    alias: string;
+    confidence: number;
+    regex: RegExp;
+  }> = [
+    {
+      alias: "PLACA/KM",
+      confidence: 125,
+      regex:
+        /\bPLACA\s*\/\s*(?:KM|KMS?|OD(?:OM(?:ETRO)?)?|HOD(?:OM(?:ETRO)?)?|HD|HO|HM|HORIMETRO)\s*[:=\-#.]?\s*[A-Z0-9.\s/_-]{5,14}\s*[\/;|,\-]\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
+    },
+    {
+      alias: "PLACA + ODOMETRO",
+      confidence: 123,
+      regex:
+        /\bPLACA\s*[:=\-#.]?\s*[A-Z0-9.-]{5,10}.{0,100}?\b(?:KM|KMS?|OD|ODOM|ODOMETRO|HOD|HODOM|HODOMETRO|HD|HO|HM|HORIMETRO|QUILOMETRAGEM)\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
+    },
+    {
+      alias: "ODOMETRO COMPLETO",
+      confidence: 121,
+      regex:
+        /\b(?:HODOMETRO|ODOMETRO|HORIMETRO|QUILOMETRAGEM)(?:\s+(?:ATUAL|FINAL|INICIAL|VEICULO|RODADO|TOTAL))?\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
+    },
+    {
+      alias: "KM QUALIFICADO",
+      confidence: 119,
+      regex:
+        /(?:^|[\s;|,(])(?:-\s*)?KM(?:S)?(?:\s+(?:ATUAL|FINAL|INICIAL|VEICULO|RODADO|TOTAL|ODOMETRO|HODOMETRO))?\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
+    },
+    {
+      alias: "ABREVIACAO ODOMETRO",
+      confidence: 117,
+      regex:
+        /(?:^|[\s;|,(])(?:ODOM|HODOM|HOD|OD|HD|HO|HM)\.?\s*(?:ATUAL|FINAL|INICIAL|VEICULO|RODADO|TOTAL)?\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
+    },
+    {
+      alias: "KM/ODOMETRO",
+      confidence: 115,
+      regex:
+        /\b(?:KM|ODOMETRO|HODOMETRO|ODOM|HODOM|OD|HOD)\s*\/\s*(?:HM|HD|HO|HORIMETRO|ODOM(?:ETRO)?|HODOM(?:ETRO)?)\s*[:=\-/]\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
+    },
+    {
+      alias: "ROTULO CURTO COLADO",
+      confidence: 110,
+      regex:
+        /(?:^|[\s;|,(])(?:KM|KMS|ODOM|HODOM|HOD|OD|HD|HO|HM)\.?\s*(\d{3,8})(?=\D|$)/i,
+    },
+    {
+      alias: "PLACA E NUMERO",
+      confidence: 103,
+      regex:
+        /\b[A-Z]{2,3}[0-9A-Z]{3,5}\s*[;|,/\-]\s*(\d{4,8})(?=\D|$)/i,
+    },
+  ];
+
   for (const source of texts) {
     const normalizedSource = source
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
-    for (const alias of aliases) {
-      const normalizedAlias = alias
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "");
+    for (const pattern of patterns) {
+      const match = normalizedSource.match(pattern.regex);
+      if (!match?.[1]) continue;
 
-      const escaped = normalizedAlias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const value = parseOdometerCandidate(match[1]);
+      if (value === null) continue;
 
-      const patterns = [
-        new RegExp(
-          `(?:^|[^a-z0-9])${escaped}\\s*(?:atual)?\\s*[:=\\-]?\\s*(\\d{3,8}(?:[\\.,]\\d{1,3})?)`,
-          "i",
-        ),
-        new RegExp(
-          `(\\d{3,8}(?:[\\.,]\\d{1,3})?)\\s*${escaped}(?:\\b|$)`,
-          "i",
-        ),
-      ];
+      candidates.push({
+        value,
+        alias: pattern.alias,
+        source: source.slice(0, 500),
+        confidence: pattern.confidence,
+      });
+    }
 
-      for (const pattern of patterns) {
-        const match = normalizedSource.match(pattern);
-        if (!match?.[1]) continue;
+    // Alguns emissores gravam apenas: ;RAX6E36;410890;
+    const adjacent = normalizedSource.match(
+      /(?:^|;|\||,)\s*([A-Z0-9-]{5,9})\s*[;|/,\-]\s*(\d{3,8})(?:;|\||,|$)/i,
+    );
 
-        const value = parseOdometerCandidate(match[1]);
-        if (value === null) continue;
+    if (adjacent?.[1] && adjacent?.[2]) {
+      const plate = normalizePlate(adjacent[1]);
+      const value = parseOdometerCandidate(adjacent[2]);
 
-        const confidence =
-          normalizedAlias.length > 3
-            ? 100
-            : normalizedAlias === "km"
-              ? 85
-              : 70;
-
+      if (isLoosePlateCandidate(plate) && value !== null) {
         candidates.push({
           value,
-          alias,
+          alias: "PLACA/ODÔMETRO SEM RÓTULO",
           source: source.slice(0, 500),
-          confidence,
+          confidence: 90,
         });
       }
     }
   }
 
-  candidates.sort(
-    (a, b) => b.confidence - a.confidence || b.value - a.value,
-  );
+  candidates.sort((a, b) => b.confidence - a.confidence);
 
   return candidates[0] ?? null;
 }
 
 function extractPlate(infNfe: any, texts: string[]) {
-  const direct = firstText(
+  // 1. Campo oficial da NF-e.
+  const directCandidates = [
     infNfe?.transp?.veicTransp?.placa,
-    infNfe?.transp?.reboque?.placa,
-    asArray(infNfe?.transp?.reboque)[0]?.placa,
-  )
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .toUpperCase();
+    ...asArray(infNfe?.transp?.reboque).map((item: any) => item?.placa),
+  ];
 
-  if (/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(direct)) {
-    return direct;
+  for (const candidate of directCandidates) {
+    const plate = normalizePlate(candidate);
+    if (isStrictPlate(plate)) return plate;
   }
 
+  // 2. Campo PLACA escrito nas informações complementares/rodapé.
+  // Também preserva candidatos com um caractere faltando, pois eles podem
+  // ser conciliados com a frota cadastrada por similaridade.
   for (const text of texts) {
-    const match = text
-      .toUpperCase()
-      .match(/\b([A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2})\b/);
+    const plate = findLabeledPlate(text);
+    if (plate) return plate;
+  }
 
-    if (match?.[1]) {
-      return match[1].replace(/[-\s]/g, "");
+  // 3. Último recurso: qualquer placa estritamente válida no texto.
+  for (const text of texts) {
+    const normalizedText = text
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase();
+
+    const match = normalizedText.match(
+      /(?:^|[^A-Z0-9])([A-Z]{3})[\s.\-]?([0-9][A-Z0-9][0-9]{2})(?![A-Z0-9])/,
+    );
+
+    if (match?.[1] && match?.[2]) {
+      return `${match[1]}${match[2]}`;
     }
+
+    // Formato sem rótulo: ;RAX6E36;410890;
+    const adjacent = normalizedText.match(
+      /(?:^|;|\||,)\s*([A-Z0-9-]{5,9})\s*[;|/,\-]\s*\d{3,8}(?:;|\||,|$)/,
+    );
+
+    const candidate = normalizePlate(adjacent?.[1]);
+    if (isLoosePlateCandidate(candidate)) return candidate;
   }
 
   return "";
+}
+
+function levenshteinDistance(left: string, right: string) {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitutionCost =
+        left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + substitutionCost,
+      );
+    }
+
+    for (let index = 0; index < current.length; index += 1) {
+      previous[index] = current[index];
+    }
+  }
+
+  return previous[right.length];
 }
 
 export interface AbastecimentoXmlProduto {
@@ -422,21 +546,137 @@ async function findClienteSuggestion(document: AbastecimentoXmlInterpretado) {
 }
 
 async function findVehicleSuggestion(plate: string) {
-  if (!plate) return null;
+  const normalizedPlate = normalizePlate(plate);
 
-  return prisma.veiculo.findFirst({
-    where: {
-      placa: {
-        equals: plate,
-        mode: "insensitive",
-      },
-    },
+  if (!normalizedPlate) return null;
+
+  const candidates = await prisma.veiculo.findMany({
     select: {
       id: true,
       placa: true,
       modelo: true,
     },
   });
+
+  const normalizedCandidates = candidates.map((vehicle) => ({
+    vehicle,
+    normalized: normalizePlate(vehicle.placa),
+  }));
+
+  const exact = normalizedCandidates.find(
+    (candidate) => candidate.normalized === normalizedPlate,
+  );
+
+  if (exact) return exact.vehicle;
+
+  // Nos 192 XMLs analisados apareceram placas com um caractere omitido,
+  // por exemplo RAQF96 no lugar de RAQ5F96 e RATF79 no lugar de RAT8F79.
+  // Só aceita aproximação quando existe um único melhor resultado na frota.
+  if (!isLoosePlateCandidate(normalizedPlate)) return null;
+
+  const ranked = normalizedCandidates
+    .map((candidate) => ({
+      ...candidate,
+      distance: levenshteinDistance(normalizedPlate, candidate.normalized),
+    }))
+    .filter((candidate) => candidate.distance <= 1)
+    .sort((a, b) => a.distance - b.distance);
+
+  if (!ranked.length) return null;
+
+  const bestDistance = ranked[0].distance;
+  const bestMatches = ranked.filter(
+    (candidate) => candidate.distance === bestDistance,
+  );
+
+  return bestMatches.length === 1 ? bestMatches[0].vehicle : null;
+}
+
+
+function isFuelProduct(product: AbastecimentoXmlProduto) {
+  if (product.combustivel) return true;
+
+  const text = normalizeSearch(
+    [product.nome, product.ncm].join(" "),
+  );
+
+  return /\b(?:diesel|gasolina|etanol|alcool|arla|gnv|gas natural veicular|combustivel|s10|s 10|s500|s 500)\b/.test(
+    text,
+  );
+}
+
+function generatedInternalCode(product: AbastecimentoXmlProduto) {
+  const source = firstText(
+    product.codigo,
+    product.combustivel?.codigoAnp,
+    product.ean,
+    product.ncm,
+    product.nome,
+  );
+
+  const normalized = String(source)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+
+  return `ABAST-${normalized || "PRODUTO"}`;
+}
+
+async function createFuelProductIfMissing(product: AbastecimentoXmlProduto) {
+  if (!isFuelProduct(product)) return null;
+
+  const exactName = firstText(product.nome, product.combustivel?.descricaoAnp);
+  if (!exactName) return null;
+
+  const existingByName = await prisma.produto.findFirst({
+    where: {
+      nome: { equals: exactName, mode: "insensitive" },
+      categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
+    },
+    select: { id: true, nome: true, codigoInterno: true },
+  });
+
+  if (existingByName) return { ...existingByName, criadoAutomaticamente: false };
+
+  const baseCode = generatedInternalCode(product);
+  let code = baseCode;
+  let suffix = 2;
+
+  while (
+    await prisma.produto.findFirst({
+      where: { codigoInterno: { equals: code, mode: "insensitive" } },
+      select: { id: true },
+    })
+  ) {
+    const sameProduct = await prisma.produto.findFirst({
+      where: {
+        codigoInterno: { equals: code, mode: "insensitive" },
+        nome: { equals: exactName, mode: "insensitive" },
+      },
+      select: { id: true, nome: true, codigoInterno: true },
+    });
+
+    if (sameProduct) {
+      return { ...sameProduct, criadoAutomaticamente: false };
+    }
+
+    code = `${baseCode}-${suffix}`;
+    suffix += 1;
+  }
+
+  const created = await prisma.produto.create({
+    data: {
+      nome: exactName,
+      codigoInterno: code,
+      categoriaEstoque: "Combustível",
+    },
+    select: { id: true, nome: true, codigoInterno: true },
+  });
+
+  return { ...created, criadoAutomaticamente: true };
 }
 
 async function findProductSuggestion(product: AbastecimentoXmlProduto) {
@@ -445,6 +685,7 @@ async function findProductSuggestion(product: AbastecimentoXmlProduto) {
   if (code) {
     const byCode = await prisma.produto.findFirst({
       where: {
+        categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
         codigoInterno: {
           equals: code,
           mode: "insensitive",
@@ -457,7 +698,7 @@ async function findProductSuggestion(product: AbastecimentoXmlProduto) {
       },
     });
 
-    if (byCode) return byCode;
+    if (byCode) return { ...byCode, criadoAutomaticamente: false };
   }
 
   const normalizedName = normalizeSearch(
@@ -469,38 +710,47 @@ async function findProductSuggestion(product: AbastecimentoXmlProduto) {
     .filter((term) => term.length >= 3)
     .slice(0, 4);
 
-  if (!terms.length) return null;
-
-  return prisma.produto.findFirst({
-    where: {
-      OR: terms.map((term) => ({
-        nome: {
-          contains: term,
-          mode: "insensitive",
+  const matched = terms.length
+    ? await prisma.produto.findFirst({
+        where: {
+          categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
+          OR: terms.map((term) => ({
+            nome: {
+              contains: term,
+              mode: "insensitive",
+            },
+          })),
         },
-      })),
-    },
-    select: {
-      id: true,
-      nome: true,
-      codigoInterno: true,
-    },
-  });
+        select: {
+          id: true,
+          nome: true,
+          codigoInterno: true,
+        },
+      })
+    : null;
+
+  if (matched) return { ...matched, criadoAutomaticamente: false };
+
+  return createFuelProductIfMissing(product);
 }
 
 export async function sugerirVinculosAbastecimento(
   document: AbastecimentoXmlInterpretado,
 ) {
-  const [cliente, veiculo, produtos] = await Promise.all([
+  const [cliente, veiculo] = await Promise.all([
     findClienteSuggestion(document),
     findVehicleSuggestion(document.placa),
-    Promise.all(
-      document.produtos.map(async (produto) => ({
-        produto,
-        cadastro: await findProductSuggestion(produto),
-      })),
-    ),
   ]);
+
+  // Processa em sequência para evitar criar produtos duplicados quando
+  // o mesmo combustível aparece mais de uma vez no mesmo lote/documento.
+  const produtos = [];
+  for (const produto of document.produtos) {
+    produtos.push({
+      produto,
+      cadastro: await findProductSuggestion(produto),
+    });
+  }
 
   return {
     cliente,

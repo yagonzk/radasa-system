@@ -218,6 +218,8 @@ export const ciotCteBody = z.object({
   valorFrete: z.coerce.number().finite().min(0).default(0),
   valorPedagio: z.coerce.number().finite().min(0).default(0),
   xmlUrl: z.string().max(20_000_000).optional().nullable().or(z.literal("")),
+  arquivoNome: z.string().trim().max(500).optional().default(""),
+  dataEmissao: dateOnly.optional().nullable().or(z.literal("")),
 });
 
 export const ciotBody = z.object({
@@ -281,7 +283,7 @@ export const pneuBody = z.object({
 });
 
 export const bodySchema = (schema: z.ZodTypeAny) => z.object({ body: schema, params: z.unknown().optional(), query: z.unknown().optional() });
-export const partialBodySchema = (schema: z.AnyZodObject) => z.object({ body: schema.partial(), params: z.object({ id }), query: z.unknown().optional() });
+export const partialBodySchema = (schema: z.ZodObject<any>) => z.object({ body: schema.partial(), params: z.object({ id }), query: z.unknown().optional() });
 
 const username = z.string().trim().toLowerCase().min(3, "O usuário deve ter pelo menos 3 caracteres").max(30).regex(/^[a-z0-9._-]+$/, "Use apenas letras, números, ponto, hífen ou sublinhado");
 const password = z.string().min(8, "A senha deve ter pelo menos 8 caracteres").max(200);

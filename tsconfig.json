@@ -8,7 +8,11 @@
     "node_modules",
     "build",
     "dist",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "server/controllers/sefaz-agent.controller.ts",
+    "server/middlewares/sefaz-agent-auth.ts",
+    "server/routes/sefaz-agent.routes.ts",
+    "server/services/sefaz-folder-sync.service.ts"
   ],
   "compilerOptions": {
     "incremental": true,
@@ -37,6 +41,8 @@
       "@shared/*": [
         "./shared/*"
       ]
-    }
+    },
+    "target": "ES2020",
+    "downlevelIteration": true
   }
 }
