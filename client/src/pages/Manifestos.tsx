@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, ReactNode } from "react";
 import Layout from "@/components/Layout";
 import { useManifestos, useClientes, useProdutos, type Manifesto, type ManifestoProduto, type TipoManifesto, type Produto } from "@/lib/store";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
@@ -33,8 +33,52 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Plus, Trash2, Edit3, Eye, FileText, Package, Building2, Calculator, Download, Upload, X, ChevronDown, Check, ChevronsUpDown } from "lucide-react";
+import { Plus, Trash2, Edit3, Eye, FileText, Package, Building2, Calculator, Download, Upload, X, ChevronDown, Check, ChevronsUpDown, AlertTriangle, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "@/lib/api";
+
+
+interface ManifestoPdfProdutoImportado {
+  romaneio: string;
+  data: string;
+  item: string;
+  codigo: string;
+  descricao: string;
+  quantidade: number;
+  valorUnitario: number;
+  valorTotal: number;
+  instrucaoCobranca: string;
+  notaFiscal: string;
+  serie: string;
+  tipoManifesto: TipoManifesto;
+}
+
+interface ManifestoPdfResponse {
+  documento: {
+    dataEmissao: string;
+    transportadoraCodigo: string;
+    transportadoraNome: string;
+    veiculoCodigo: string;
+    placaVeiculo: string;
+    modeloVeiculo: string;
+    romaneios: string[];
+    notasFiscais: string[];
+    valorTotal: number;
+    avisos: string[];
+  };
+  sugestoes: {
+    cliente: { id: string } | null;
+    produtos: Array<{
+      produto: ManifestoPdfProdutoImportado;
+      cadastro: { id: string; nome: string; codigoInterno: string } | null;
+    }>;
+  };
+  pendencias: string[];
+}
+
+interface ProdutoPendentePdf extends ManifestoPdfProdutoImportado {
+  produtoId: string;
+}
 
 interface FormField {
   label: string;
@@ -113,6 +157,17 @@ export default function Manifestos() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [existingPdfUrl, setExistingPdfUrl] = useState<string | null>(null);
   const [clienteSelectOpen, setClienteSelectOpen] = useState(false);
+  const [importandoPdf, setImportandoPdf] = useState(false);
+  const [pendenciasPdf, setPendenciasPdf] = useState<string[]>([]);
+  const [produtosPendentesPdf, setProdutosPendentesPdf] = useState<ProdutoPendentePdf[]>([]);
+  const importPdfInputRef = useRef<HTMLInputElement>(null);
+  const [transportadoraCodigo, setTransportadoraCodigo] = useState("");
+  const [transportadoraNome, setTransportadoraNome] = useState("");
+  const [veiculoCodigo, setVeiculoCodigo] = useState("");
+  const [placaVeiculo, setPlacaVeiculo] = useState("");
+  const [modeloVeiculo, setModeloVeiculo] = useState("");
+  const [romaneios, setRomaneios] = useState("");
+  const [notasFiscais, setNotasFiscais] = useState("");
 
   // Current product being added
   const [currentProdutoId, setCurrentProdutoId] = useState("");
@@ -150,6 +205,15 @@ export default function Manifestos() {
     setCurrentProdutoTipo("");
     setEditingManifesto(null);
     setClienteSelectOpen(false);
+    setPendenciasPdf([]);
+    setProdutosPendentesPdf([]);
+    setTransportadoraCodigo("");
+    setTransportadoraNome("");
+    setVeiculoCodigo("");
+    setPlacaVeiculo("");
+    setModeloVeiculo("");
+    setRomaneios("");
+    setNotasFiscais("");
     setFormOpen(true);
   };
 
@@ -166,7 +230,113 @@ export default function Manifestos() {
     setCurrentProdutoTipo("");
     setEditingManifesto(manifesto);
     setClienteSelectOpen(false);
+    setPendenciasPdf([]);
+    setProdutosPendentesPdf([]);
+    setTransportadoraCodigo(manifesto.transportadoraCodigo ?? "");
+    setTransportadoraNome(manifesto.transportadoraNome ?? "");
+    setVeiculoCodigo(manifesto.veiculoCodigo ?? "");
+    setPlacaVeiculo(manifesto.placaVeiculo ?? "");
+    setModeloVeiculo(manifesto.modeloVeiculo ?? "");
+    setRomaneios(manifesto.romaneios ?? "");
+    setNotasFiscais(manifesto.notasFiscais ?? "");
     setFormOpen(true);
+  };
+
+  const manifestoMetadata = () => ({
+    transportadoraCodigo,
+    transportadoraNome,
+    veiculoCodigo,
+    placaVeiculo,
+    modeloVeiculo,
+    romaneios,
+    notasFiscais,
+  });
+
+  const handleImportPdf = async (file?: File) => {
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("Selecione um arquivo PDF válido.");
+      return;
+    }
+
+    setImportandoPdf(true);
+    try {
+      const formData = new FormData();
+      formData.append("arquivo", file);
+      const response = await api.post<ManifestoPdfResponse>(
+        "/manifestos/interpretar-pdf",
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" }, timeout: 120_000 },
+      );
+
+      const { documento, sugestoes, pendencias } = response.data;
+      setPdfFile(file);
+      setEditingManifesto(null);
+      setExistingPdfUrl(null);
+      setClienteId(sugestoes.cliente?.id ?? "");
+      setDataManifesto(documento.dataEmissao ?? "");
+      setTransportadoraCodigo(documento.transportadoraCodigo ?? "");
+      setTransportadoraNome(documento.transportadoraNome ?? "");
+      setVeiculoCodigo(documento.veiculoCodigo ?? "");
+      setPlacaVeiculo(documento.placaVeiculo ?? "");
+      setModeloVeiculo(documento.modeloVeiculo ?? "");
+      setRomaneios(documento.romaneios.join(", "));
+      setNotasFiscais(documento.notasFiscais.join(", "));
+
+      const associados: ManifestoProduto[] = [];
+      const naoAssociados: ProdutoPendentePdf[] = [];
+      sugestoes.produtos.forEach(({ produto, cadastro }) => {
+        if (cadastro) {
+          associados.push({
+            produtoId: cadastro.id,
+            quantidade: produto.quantidade,
+            valorUnitario: produto.valorUnitario,
+            valorTotal: produto.valorTotal,
+            tipoManifesto: produto.tipoManifesto,
+          });
+        } else {
+          naoAssociados.push({ ...produto, produtoId: "" });
+        }
+      });
+
+      setProdutosForm(associados);
+      setProdutosPendentesPdf(naoAssociados);
+      const tipos = associados.map((produto) => produto.tipoManifesto).filter(Boolean) as TipoManifesto[];
+      setTipoManifesto(tipos[0] ?? "Bonificação - Lebrinha");
+      setPendenciasPdf(Array.from(new Set([...pendencias, ...documento.avisos])));
+      setFormOpen(true);
+
+      if (pendencias.length || naoAssociados.length) {
+        toast.warning("PDF lido. Revise e preencha os campos pendentes antes de salvar.");
+      } else {
+        toast.success("PDF lido e manifesto preenchido automaticamente.");
+      }
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message ?? "Não foi possível interpretar o PDF.");
+    } finally {
+      setImportandoPdf(false);
+      if (importPdfInputRef.current) importPdfInputRef.current.value = "";
+    }
+  };
+
+  const resolverProdutoPendente = (index: number) => {
+    const pendente = produtosPendentesPdf[index];
+    if (!pendente?.produtoId) {
+      toast.error("Selecione o produto correspondente.");
+      return;
+    }
+    setProdutosForm((atuais) => [
+      ...atuais,
+      {
+        produtoId: pendente.produtoId,
+        quantidade: pendente.quantidade,
+        valorUnitario: pendente.valorUnitario,
+        valorTotal: pendente.valorTotal,
+        tipoManifesto: pendente.tipoManifesto,
+      },
+    ]);
+    setProdutosPendentesPdf((atuais) => atuais.filter((_, itemIndex) => itemIndex !== index));
   };
 
   const handleAddProduct = () => {
@@ -256,6 +426,10 @@ export default function Manifestos() {
       toast.error("Selecione a data do manifesto.");
       return;
     }
+    if (produtosPendentesPdf.length > 0) {
+      toast.error("Associe todos os produtos pendentes do PDF.");
+      return;
+    }
     if (produtosForm.length === 0) {
       toast.error("Adicione pelo menos um produto.");
       return;
@@ -267,10 +441,10 @@ export default function Manifestos() {
       reader.onload = () => {
         pdfUrl = reader.result as string;
         if (editingManifesto) {
-          update(editingManifesto.id, clienteId, dataManifesto, produtosForm, tipoManifesto, pdfUrl);
+          update(editingManifesto.id, clienteId, dataManifesto, produtosForm, tipoManifesto, pdfUrl, manifestoMetadata());
           toast.success("Manifesto atualizado com sucesso!");
         } else {
-          create(clienteId, dataManifesto, produtosForm, tipoManifesto, pdfUrl);
+          create(clienteId, dataManifesto, produtosForm, tipoManifesto, pdfUrl, manifestoMetadata());
           toast.success("Manifesto cadastrado com sucesso!");
         }
         setFormOpen(false);
@@ -285,10 +459,11 @@ export default function Manifestos() {
           produtosForm,
           tipoManifesto,
           existingPdfUrl ?? undefined,
+          manifestoMetadata(),
         );
         toast.success("Manifesto atualizado com sucesso!");
       } else {
-        create(clienteId, dataManifesto, produtosForm, tipoManifesto);
+        create(clienteId, dataManifesto, produtosForm, tipoManifesto, undefined, manifestoMetadata());
         toast.success("Manifesto cadastrado com sucesso!");
       }
       setFormOpen(false);
@@ -391,10 +566,33 @@ export default function Manifestos() {
           <p className="text-sm text-muted-foreground">
             {manifestos.length} manifesto(s) cadastrado(s)
           </p>
-          <Button onClick={handleOpenCreate} size="sm">
-            <Plus className="mr-1.5 h-4 w-4" />
-            Novo Manifesto
-          </Button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={importPdfInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={(event) => void handleImportPdf(event.target.files?.[0])}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={importandoPdf}
+              onClick={() => importPdfInputRef.current?.click()}
+            >
+              {importandoPdf ? (
+                <LoaderCircle className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="mr-1.5 h-4 w-4" />
+              )}
+              Importar PDF
+            </Button>
+            <Button onClick={handleOpenCreate} size="sm">
+              <Plus className="mr-1.5 h-4 w-4" />
+              Novo Manifesto
+            </Button>
+          </div>
         </div>
 
         <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -797,6 +995,16 @@ export default function Manifestos() {
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {pendenciasPdf.length > 0 && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+                  <div className="mb-1 flex items-center gap-2 font-semibold">
+                    <AlertTriangle className="h-4 w-4" />
+                    Conferência manual necessária
+                  </div>
+                  <p>{pendenciasPdf.join(" • ")}</p>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField label="Cliente *">
                   <Popover open={clienteSelectOpen} onOpenChange={setClienteSelectOpen}>
@@ -870,8 +1078,79 @@ export default function Manifestos() {
                 </FormField>
               </div>
 
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <h3 className="mb-3 font-semibold">Dados extraídos do PDF</h3>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <FormField label="Código da transportadora">
+                    <Input value={transportadoraCodigo} onChange={(e) => setTransportadoraCodigo(e.target.value)} />
+                  </FormField>
+                  <FormField label="Transportadora">
+                    <Input value={transportadoraNome} onChange={(e) => setTransportadoraNome(e.target.value)} />
+                  </FormField>
+                  <FormField label="Código do veículo">
+                    <Input value={veiculoCodigo} onChange={(e) => setVeiculoCodigo(e.target.value)} />
+                  </FormField>
+                  <FormField label="Placa do veículo">
+                    <Input value={placaVeiculo} onChange={(e) => setPlacaVeiculo(e.target.value.toUpperCase())} />
+                  </FormField>
+                  <FormField label="Modelo do veículo">
+                    <Input value={modeloVeiculo} onChange={(e) => setModeloVeiculo(e.target.value)} />
+                  </FormField>
+                  <FormField label="Romaneios">
+                    <Input value={romaneios} onChange={(e) => setRomaneios(e.target.value)} />
+                  </FormField>
+                  <div className="sm:col-span-2">
+                    <FormField label="Notas fiscais / séries">
+                      <Input value={notasFiscais} onChange={(e) => setNotasFiscais(e.target.value)} />
+                    </FormField>
+                  </div>
+                </div>
+              </div>
+
               <div className="border-t pt-4">
                 <h3 className="font-semibold mb-3">Produtos</h3>
+
+                {produtosPendentesPdf.length > 0 && (
+                  <div className="mb-4 space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                      Produtos não associados automaticamente
+                    </p>
+                    {produtosPendentesPdf.map((pendente, index) => (
+                      <div key={`${pendente.romaneio}-${pendente.item}-${index}`} className="rounded-md border bg-background p-3">
+                        <p className="mb-2 text-sm font-medium">{pendente.codigo} - {pendente.descricao}</p>
+                        <p className="mb-2 text-xs text-muted-foreground">
+                          {pendente.quantidade} un × {formatBRL(pendente.valorUnitario)} = {formatBRL(pendente.valorTotal)}
+                        </p>
+                        <div className="flex gap-2">
+                          <Select
+                            value={pendente.produtoId}
+                            onValueChange={(value) =>
+                              setProdutosPendentesPdf((atuais) =>
+                                atuais.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, produtoId: value } : item,
+                                ),
+                              )
+                            }
+                          >
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Selecione o produto cadastrado" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {produtos.map((produto) => (
+                                <SelectItem key={produto.id} value={produto.id}>
+                                  {produto.nome} {produto.codigoInterno ? `(Cód: ${produto.codigoInterno})` : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button type="button" variant="outline" onClick={() => resolverProdutoPendente(index)}>
+                            Associar
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Produto + Tipo na mesma linha */}
                 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -1111,6 +1390,14 @@ export default function Manifestos() {
                       return `${cliente.nomeFantasia || "—"}${cliente.codigoInterno ? ` - ${cliente.codigoInterno}` : ""}`;
                     })()}
                   />
+                  {(viewingManifesto.transportadoraNome || viewingManifesto.placaVeiculo || viewingManifesto.romaneios) && (
+                    <>
+                      <InfoRow label="Transportadora" value={`${viewingManifesto.transportadoraCodigo ?? ""}${viewingManifesto.transportadoraCodigo && viewingManifesto.transportadoraNome ? " - " : ""}${viewingManifesto.transportadoraNome ?? "—"}`} />
+                      <InfoRow label="Veículo" value={`${viewingManifesto.placaVeiculo ?? ""}${viewingManifesto.modeloVeiculo ? ` - ${viewingManifesto.modeloVeiculo}` : ""}` || "—"} />
+                      <InfoRow label="Romaneios" value={viewingManifesto.romaneios || "—"} />
+                      <InfoRow label="Notas fiscais" value={viewingManifesto.notasFiscais || "—"} />
+                    </>
+                  )}
                   
                   <div className="border-t border-border pt-3 mt-3">
                     <p className="font-semibold text-sm mb-2">Produtos ({(viewingManifesto.produtos ?? []).length})</p>

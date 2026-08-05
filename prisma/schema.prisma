@@ -218,12 +218,19 @@ model FechamentoViagem {
 }
 
 model Manifesto {
-  id            String             @id @default(cuid())
-  clienteId     String
-  dataManifesto DateTime           @db.Date
-  tipoManifesto TipoManifesto
-  pdfUrl        String?            @db.Text
-  createdAt     DateTime           @default(now())
+  id                    String             @id @default(cuid())
+  clienteId             String
+  dataManifesto         DateTime           @db.Date
+  tipoManifesto         TipoManifesto
+  pdfUrl                String?            @db.Text
+  transportadoraCodigo  String             @default("")
+  transportadoraNome    String             @default("")
+  veiculoCodigo         String             @default("")
+  placaVeiculo          String             @default("")
+  modeloVeiculo         String             @default("")
+  romaneios             String             @default("") @db.Text
+  notasFiscais          String             @default("") @db.Text
+  createdAt             DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   cliente       Cliente            @relation(fields: [clienteId], references: [id], onDelete: Restrict)
   produtos      ManifestoProduto[]
