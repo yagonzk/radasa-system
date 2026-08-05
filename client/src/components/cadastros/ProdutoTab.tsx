@@ -37,6 +37,7 @@ export default function ProdutoTab() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [newCategory, setNewCategory] = useState("");
   const [sessionCategories, setSessionCategories] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
 
   const categories = useMemo(() => {
     const values = [
@@ -46,6 +47,12 @@ export default function ProdutoTab() {
     ];
     return Array.from(new Set(values));
   }, [items, sessionCategories]);
+
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = normalizeSearch(query).trim();
+    if (!normalizedQuery) return items;
+    return items.filter((item) => normalizeSearch([item.nome, item.codigoInterno, item.categoriaEstoque].join(" ")).includes(normalizedQuery));
+  }, [items, query]);
 
   const handleOpenCreate = () => {
     setForm(emptyForm);
@@ -125,10 +132,11 @@ export default function ProdutoTab() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {items.length} produto(s) cadastrado(s)
-        </p>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex w-full flex-col gap-3 sm:max-w-xl">
+          <p className="text-sm text-muted-foreground">{items.length} produto(s) cadastrado(s)</p>
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por nome, código ou categoria..." />
+        </div>
         <Button onClick={handleOpenCreate} size="sm">
           <Plus className="mr-1.5 h-4 w-4" />
           Novo Produto
@@ -137,10 +145,10 @@ export default function ProdutoTab() {
 
       <DataTable
         columns={columns}
-        data={items}
+        data={filteredItems}
         onEdit={handleOpenEdit}
         onDelete={(item) => remove(item.id)}
-        emptyMessage="Nenhum produto cadastrado. Clique em 'Novo Produto' para começar."
+        emptyMessage="Nenhum produto encontrado para a pesquisa informada."
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -229,6 +237,13 @@ export default function ProdutoTab() {
       </Dialog>
     </div>
   );
+}
+
+function normalizeSearch(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
 }
 
 function FormField({ label, children }: { label: string; children: ReactNode }) {

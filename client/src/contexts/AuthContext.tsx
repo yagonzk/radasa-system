@@ -2,28 +2,28 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { api, setAccessToken } from "@/lib/api";
 import { migrateLegacyLocalStorage } from "@/lib/legacyMigration";
 
-type AuthUser = {
+export type AuthUser = {
   id: string;
   name: string;
   username: string;
   email: string;
+  telefone: string;
+  cpf: string | null;
+  fotoPerfil: string | null;
   role: "ADMIN" | "GERENTE" | "BORRACHARIA" | "MANUTENCAO" | "VISUALIZACAO" | "USER";
 };
 
 type AuthResponse = { token: string; user: AuthUser };
 
-type RegisterInput = {
-  name: string;
-  username: string;
-  email: string;
-  password: string;
-};
+type RegisterInput = { name: string; username: string; email: string; password: string };
+export type UpdateProfileInput = { name: string; email: string; telefone: string; cpf: string; fotoPerfil?: string | null };
 
 type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
   login: (identifier: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
+  updateProfile: (input: UpdateProfileInput) => Promise<AuthUser>;
   logout: () => void;
 };
 
@@ -40,34 +40,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const handleUnauthorized = () => {
-      setAccessToken(null);
-      setUser(null);
-    };
+    const handleUnauthorized = () => { setAccessToken(null); setUser(null); };
     window.addEventListener("radasa:unauthorized", handleUnauthorized);
     return () => window.removeEventListener("radasa:unauthorized", handleUnauthorized);
   }, []);
 
   useEffect(() => {
     let active = true;
-
     api.get<AuthUser>("/auth/me")
-      .then(async ({ data }) => {
-        if (!active) return;
-        setUser(data);
-        await migrateLegacyLocalStorage();
-      })
-      .catch(() => {
-        setAccessToken(null);
-        if (active) setUser(null);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
+      .then(async ({ data }) => { if (!active) return; setUser(data); await migrateLegacyLocalStorage(); })
+      .catch(() => { setAccessToken(null); if (active) setUser(null); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
   const login = async (identifier: string, password: string) => {
@@ -80,16 +64,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await finishAuthentication(data);
   };
 
-  const logout = () => {
-    setAccessToken(null);
-    setUser(null);
+  const updateProfile = async (input: UpdateProfileInput) => {
+    const { data } = await api.put<AuthUser>("/auth/profile", input);
+    setUser(data);
+    return data;
   };
 
-  return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const logout = () => { setAccessToken(null); setUser(null); };
+
+  return <AuthContext.Provider value={{ user, loading, login, register, updateProfile, logout }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

@@ -40,7 +40,7 @@ import {
   type StatusCiot,
   type TipoOperacaoCiot,
   useCiots,
-  useClientes,
+  useEmpresa,
   useMotoristas,
   useVeiculos,
 } from "@/lib/store";
@@ -48,8 +48,29 @@ import { toast } from "sonner";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
+type FieldProps = {
+  label: string;
+  children: React.ReactNode;
+};
+
+function Field({ label, children }: FieldProps) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
 type FormState = {
-  clienteId: string;
+  empresaId: string;
+  contratadoRazaoSocial: string;
+  contratadoNomeFantasia: string;
+  contratadoCnpj: string;
+  contratadoInscricaoEstadual: string;
+  contratadoEndereco: string;
+  contratadoCidade: string;
+  contratadoUf: string;
   motoristaId: string;
   veiculoId: string;
   tipoOperacao: TipoOperacaoCiot;
@@ -76,7 +97,14 @@ type FormState = {
 };
 
 const emptyForm: FormState = {
-  clienteId: "",
+  empresaId: "",
+  contratadoRazaoSocial: "",
+  contratadoNomeFantasia: "",
+  contratadoCnpj: "",
+  contratadoInscricaoEstadual: "",
+  contratadoEndereco: "",
+  contratadoCidade: "",
+  contratadoUf: "",
   motoristaId: "",
   veiculoId: "",
   tipoOperacao: "LOTACAO",
@@ -111,7 +139,14 @@ const stepLabels = [
 ];
 
 function decimal(value: string) {
-  const normalized = value.trim().replace(/\./g, "").replace(",", ".");
+  const text = value.trim().replace(/\s/g, "");
+  if (!text) return 0;
+
+  // Valores vindos do XML usam ponto decimal (3350.40).
+  // Valores digitados em pt-BR podem usar ponto de milhar e vírgula decimal.
+  const normalized = text.includes(",")
+    ? text.replace(/\./g, "").replace(",", ".")
+    : text;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -120,6 +155,15 @@ function money(value: number) {
   return value.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
+  });
+}
+
+function decimalInput(value: number | string | null | undefined) {
+  const parsed = typeof value === "number" ? value : Number(value ?? 0);
+  return (Number.isFinite(parsed) ? parsed : 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: false,
   });
 }
 
@@ -140,7 +184,14 @@ function uniqueCnpjs(value: string) {
 
 function formFromItem(item: Ciot): FormState {
   return {
-    clienteId: item.clienteId,
+    empresaId: item.empresaId ?? "",
+    contratadoRazaoSocial: item.contratadoRazaoSocial ?? "",
+    contratadoNomeFantasia: item.contratadoNomeFantasia ?? "",
+    contratadoCnpj: item.contratadoCnpj ?? "",
+    contratadoInscricaoEstadual: item.contratadoInscricaoEstadual ?? "",
+    contratadoEndereco: item.contratadoEndereco ?? "",
+    contratadoCidade: item.contratadoCidade ?? "",
+    contratadoUf: item.contratadoUf ?? "",
     motoristaId: item.motoristaId,
     veiculoId: item.veiculoId,
     tipoOperacao: item.tipoOperacao,
@@ -154,11 +205,11 @@ function formFromItem(item: Ciot): FormState {
     dataFim: item.dataFim ?? "",
     naturezaCarga: item.naturezaCarga,
     pesoKg: String(item.pesoKg),
-    valorMercadoria: String(item.valorMercadoria ?? 0),
-    valorFrete: String(item.valorFrete),
-    valorPedagio: String(item.valorPedagio),
-    outrosValores: String(item.outrosValores ?? 0),
-    descontos: String(item.descontos ?? 0),
+    valorMercadoria: decimalInput(item.valorMercadoria ?? 0),
+    valorFrete: decimalInput(item.valorFrete),
+    valorPedagio: decimalInput(item.valorPedagio),
+    outrosValores: decimalInput(item.outrosValores ?? 0),
+    descontos: decimalInput(item.descontos ?? 0),
     formaPagamento: item.formaPagamento ?? "",
     favorecidoPix: item.favorecidoPix ?? "",
     cnpjsCargaFracionada: item.cnpjsCargaFracionada ?? "",
@@ -169,7 +220,7 @@ function formFromItem(item: Ciot): FormState {
 
 export default function CiotGerarPage() {
   const { items, create, update, remove } = useCiots();
-  const { items: clientes } = useClientes();
+  const { items: empresas } = useEmpresa();
   const { items: motoristas } = useMotoristas();
   const { items: veiculos } = useVeiculos();
 
@@ -199,14 +250,16 @@ export default function CiotGerarPage() {
     if (!q) return activeItems;
 
     return activeItems.filter((item) => {
-      const cliente = clientes.find((c) => c.id === item.clienteId);
       const motorista = motoristas.find((m) => m.id === item.motoristaId);
       const veiculo = veiculos.find((v) => v.id === item.veiculoId);
 
       return [
-        cliente?.razaoSocial,
-        cliente?.nomeFantasia,
-        cliente?.cnpj,
+        item.contratanteRazaoSocial,
+        item.contratanteNomeFantasia,
+        item.contratanteCnpj,
+        item.contratadoRazaoSocial,
+        item.contratadoNomeFantasia,
+        item.contratadoCnpj,
         motorista?.nome,
         veiculo?.placa,
         item.origemCidade,
@@ -219,9 +272,18 @@ export default function CiotGerarPage() {
         .toLocaleLowerCase("pt-BR")
         .includes(q);
     });
-  }, [activeItems, clientes, motoristas, query, veiculos]);
+  }, [activeItems, motoristas, query, veiculos]);
 
-  const selectedCliente = clientes.find((item) => item.id === form.clienteId);
+  const empresaContratante = useMemo(() => {
+    const certificadas = empresas.filter(
+      (empresa) => empresa.ativa && Boolean(empresa.certificadoArquivo?.trim()),
+    );
+    return (
+      certificadas.find((empresa) => empresa.empresaPadrao) ??
+      certificadas[0] ??
+      null
+    );
+  }, [empresas]);
   const selectedMotorista = motoristas.find(
     (item) => item.id === form.motoristaId,
   );
@@ -253,12 +315,17 @@ export default function CiotGerarPage() {
       5: [],
     };
 
-    if (!form.clienteId) errors[1].push("Selecione o cliente contratante.");
+    if (!empresaContratante) {
+      errors[1].push("Cadastre uma empresa ativa com certificado digital.");
+    }
+    if (!form.contratadoCnpj || !form.contratadoRazaoSocial) {
+      errors[1].push("Importe um XML de CT-e para identificar o contratado.");
+    }
     if (form.ctes.length === 0 && !form.naturezaCarga.trim()) {
       errors[1].push("Importe CT-e ou informe a natureza da carga.");
     }
 
-    if (!form.rntrc.trim()) errors[2].push("Informe o RNTRC.");
+    if (!(empresaContratante?.rntrc ?? form.rntrc).trim()) errors[2].push("Informe o RNTRC no cadastro da empresa.");
     if (!form.origemCidade.trim() || form.origemUf.length !== 2) {
       errors[2].push("Informe cidade e UF de origem.");
     }
@@ -299,7 +366,7 @@ export default function CiotGerarPage() {
     ];
 
     return errors;
-  }, [form]);
+  }, [empresaContratante, form]);
 
   const completedSteps = useMemo(
     () =>
@@ -313,7 +380,11 @@ export default function CiotGerarPage() {
 
   const openManual = () => {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      empresaId: empresaContratante?.id ?? "",
+      rntrc: empresaContratante?.rntrc ?? "",
+    });
     setStep(1);
     setChoiceOpen(false);
     setWizardOpen(true);
@@ -326,13 +397,74 @@ export default function CiotGerarPage() {
     setWizardOpen(true);
   };
 
+  const cnpjsDosCtes = (ctes: CiotCte[]) =>
+    Array.from(
+      new Set(
+        ctes
+          .map((cte) => digits(cte.destinatarioCnpj))
+          .filter(Boolean),
+      ),
+    );
+
+  const contratadoPrincipalDosCtes = (ctes: CiotCte[]) =>
+    ctes.reduce<CiotCte | undefined>((principal, atual) => {
+      if (!principal) return atual;
+
+      const valorAtual = Number(atual.valorMercadoria || 0);
+      const valorPrincipal = Number(principal.valorMercadoria || 0);
+      if (valorAtual !== valorPrincipal) {
+        return valorAtual > valorPrincipal ? atual : principal;
+      }
+
+      const freteAtual = Number(atual.valorFrete || 0);
+      const fretePrincipal = Number(principal.valorFrete || 0);
+      return freteAtual > fretePrincipal ? atual : principal;
+    }, undefined);
+
+  const resumoDosCtes = (ctes: CiotCte[]) => {
+    const cnpjs = cnpjsDosCtes(ctes);
+    const fracionada = ctes.length > 1 && cnpjs.length > 1;
+
+    return {
+      tipoOperacao: fracionada ? ("FRACIONADA" as const) : ("LOTACAO" as const),
+      cnpjs,
+      contratadoPrincipal: contratadoPrincipalDosCtes(ctes),
+      pesoKg: ctes.reduce((sum, item) => sum + Number(item.pesoKg || 0), 0),
+      valorMercadoria: ctes.reduce(
+        (sum, item) => sum + Number(item.valorMercadoria || 0),
+        0,
+      ),
+      valorFrete: ctes.reduce(
+        (sum, item) => sum + Number(item.valorFrete || 0),
+        0,
+      ),
+      valorPedagio: ctes.reduce(
+        (sum, item) => sum + Number(item.valorPedagio || 0),
+        0,
+      ),
+      naturezaCarga: Array.from(
+        new Set(ctes.map((item) => item.produto?.trim()).filter(Boolean)),
+      ).join(", "),
+    };
+  };
+
   const importFiles = async (files?: FileList | null) => {
     if (!files?.length) return;
 
     setImporting(true);
     try {
+      const file = files.item(0);
+      if (!file) return;
+
+      const lowerName = file.name.toLowerCase();
+      const isXml = lowerName.endsWith(".xml") || file.type.includes("xml");
+      if (!isXml) {
+        toast.error("Apenas arquivos XML do CT-e são suportados.");
+        return;
+      }
+
       const data = new FormData();
-      Array.from(files).forEach((file) => data.append("arquivos", file));
+      data.append("arquivos", file);
 
       const response = await api.post<{
         ctes: Array<
@@ -342,59 +474,78 @@ export default function CiotGerarPage() {
             dataEmissao: string;
           }
         >;
-        resumo: {
-          quantidade: number;
-          tipoOperacao: TipoOperacaoCiot;
-          pesoKg: number;
-          valorMercadoria: number;
-          valorFrete: number;
-          valorPedagio: number;
-          cnpjs: string[];
-        };
+        erros?: Array<{ fileName: string; message: string }>;
       }>("/cte/interpretar", data, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      const { ctes, resumo } = response.data;
-      const first = ctes[0];
-      const cliente =
-        clientes.find((item) => digits(item.cnpj) === first.tomadorCnpj) ??
-        clientes.find((item) => digits(item.cnpj) === first.remetenteCnpj) ??
-        clientes.find(
-          (item) => digits(item.cnpj) === first.destinatarioCnpj,
+      const novosCtes = response.data.ctes;
+      if (!empresaContratante) {
+        throw new Error(
+          "Cadastre uma empresa ativa com certificado digital antes de gerar o CIOT.",
         );
+      }
+
+      const primeiroCte = novosCtes[0];
+      if (!primeiroCte) {
+        throw new Error("O XML não contém um CT-e válido.");
+      }
+
+      setForm((current) => {
+        const ctes = [primeiroCte];
+        const resumo = resumoDosCtes(ctes);
+        const contratadoPrincipal = primeiroCte;
+
+        return {
+          ...current,
+          empresaId: empresaContratante.id,
+          rntrc: empresaContratante.rntrc ?? "",
+          contratadoRazaoSocial: contratadoPrincipal.destinatarioNome,
+          contratadoNomeFantasia: contratadoPrincipal.destinatarioNomeFantasia ?? "",
+          contratadoCnpj: contratadoPrincipal.destinatarioCnpj,
+          contratadoInscricaoEstadual:
+            contratadoPrincipal.destinatarioInscricaoEstadual ?? "",
+          contratadoEndereco: contratadoPrincipal.destinatarioEndereco ?? "",
+          contratadoCidade: contratadoPrincipal.destinatarioCidade ?? contratadoPrincipal.destinoCidade,
+          contratadoUf: contratadoPrincipal.destinatarioUf ?? contratadoPrincipal.destinoUf,
+          tipoOperacao: "LOTACAO",
+          origemCidade: current.origemCidade || primeiroCte.origemCidade,
+          origemUf: current.origemUf || primeiroCte.origemUf,
+          destinoCidade: current.destinoCidade || primeiroCte.destinoCidade,
+          destinoUf: current.destinoUf || primeiroCte.destinoUf,
+          dataInicio:
+            current.dataInicio ||
+            (primeiroCte as CiotCte & { dataEmissao?: string }).dataEmissao ||
+            "",
+          naturezaCarga: resumo.naturezaCarga,
+          pesoKg: decimalInput(resumo.pesoKg),
+          valorMercadoria: decimalInput(resumo.valorMercadoria),
+          valorFrete: decimalInput(resumo.valorFrete),
+          valorPedagio: decimalInput(resumo.valorPedagio),
+          cnpjsCargaFracionada: "",
+          ctes,
+        };
+      });
 
       setEditing(null);
-      setForm({
-        ...emptyForm,
-        clienteId: cliente?.id ?? "",
-        tipoOperacao: resumo.tipoOperacao,
-        origemCidade: first.origemCidade,
-        origemUf: first.origemUf,
-        destinoCidade: first.destinoCidade,
-        destinoUf: first.destinoUf,
-        dataInicio: first.dataEmissao,
-        naturezaCarga:
-          Array.from(
-            new Set(ctes.map((item) => item.produto).filter(Boolean)),
-          ).join(", ") || "",
-        pesoKg: String(resumo.pesoKg),
-        valorMercadoria: String(resumo.valorMercadoria),
-        valorFrete: String(resumo.valorFrete),
-        valorPedagio: String(resumo.valorPedagio),
-        cnpjsCargaFracionada:
-          resumo.quantidade > 1 ? resumo.cnpjs.join(", ") : "",
-        ctes,
-      });
       setStep(1);
       setChoiceOpen(false);
       setWizardOpen(true);
-      toast.success(`${resumo.quantidade} CT-e(s) importado(s).`);
+      const arquivosComErro = response.data.erros ?? [];
+      if (arquivosComErro.length) {
+        toast.warning(
+          arquivosComErro
+            .map((item) => `${item.fileName}: ${item.message}`)
+            .join(", "),
+        );
+      } else {
+        toast.success("CT-e importado com sucesso.");
+      }
     } catch (error: any) {
       toast.error(
         error?.response?.data?.message ??
           error?.message ??
-          "Não foi possível interpretar os XMLs.",
+          "Não foi possível interpretar o XML do CT-e.",
       );
     } finally {
       setImporting(false);
@@ -405,17 +556,28 @@ export default function CiotGerarPage() {
   const removeCte = (chave: string) => {
     setForm((current) => {
       const ctes = current.ctes.filter((item) => item.chave !== chave);
+      const resumo = resumoDosCtes(ctes);
+      const contratadoPrincipal = resumo.contratadoPrincipal;
+
       return {
         ...current,
         ctes,
-        tipoOperacao: ctes.length > 1 ? "FRACIONADA" : "LOTACAO",
-        pesoKg: String(ctes.reduce((sum, item) => sum + item.pesoKg, 0)),
-        valorMercadoria: String(
-          ctes.reduce((sum, item) => sum + item.valorMercadoria, 0),
-        ),
-        valorFrete: String(
-          ctes.reduce((sum, item) => sum + item.valorFrete, 0),
-        ),
+        tipoOperacao: resumo.tipoOperacao,
+        cnpjsCargaFracionada:
+          resumo.tipoOperacao === "FRACIONADA" ? resumo.cnpjs.join(", ") : "",
+        pesoKg: decimalInput(resumo.pesoKg),
+        valorMercadoria: decimalInput(resumo.valorMercadoria),
+        valorFrete: decimalInput(resumo.valorFrete),
+        valorPedagio: decimalInput(resumo.valorPedagio),
+        naturezaCarga: resumo.naturezaCarga,
+        contratadoRazaoSocial: contratadoPrincipal?.destinatarioNome ?? "",
+        contratadoNomeFantasia: contratadoPrincipal?.destinatarioNomeFantasia ?? "",
+        contratadoCnpj: contratadoPrincipal?.destinatarioCnpj ?? "",
+        contratadoInscricaoEstadual:
+          contratadoPrincipal?.destinatarioInscricaoEstadual ?? "",
+        contratadoEndereco: contratadoPrincipal?.destinatarioEndereco ?? "",
+        contratadoCidade: contratadoPrincipal?.destinatarioCidade ?? contratadoPrincipal?.destinoCidade ?? "",
+        contratadoUf: contratadoPrincipal?.destinatarioUf ?? contratadoPrincipal?.destinoUf ?? "",
       };
     });
   };
@@ -438,7 +600,7 @@ export default function CiotGerarPage() {
     versao: "rascunho-radasa-1",
     operacao: {
       tipo: form.tipoOperacao,
-      rntrc: form.rntrc.trim(),
+      rntrc: (empresaContratante?.rntrc ?? form.rntrc).trim(),
       dataInicio: form.dataInicio,
       dataFim: form.dataFim || null,
       origem: {
@@ -451,10 +613,20 @@ export default function CiotGerarPage() {
       },
     },
     contratante: {
-      id: selectedCliente?.id,
-      razaoSocial: selectedCliente?.razaoSocial,
-      nomeFantasia: selectedCliente?.nomeFantasia,
-      cnpj: selectedCliente?.cnpj,
+      id: empresaContratante?.id,
+      razaoSocial: empresaContratante?.razaoSocial,
+      nomeFantasia: empresaContratante?.nomeFantasia,
+      cnpj: empresaContratante?.cnpj,
+      rntrc: empresaContratante?.rntrc,
+    },
+    contratado: {
+      razaoSocial: form.contratadoRazaoSocial,
+      nomeFantasia: form.contratadoNomeFantasia,
+      cnpj: form.contratadoCnpj,
+      inscricaoEstadual: form.contratadoInscricaoEstadual,
+      endereco: form.contratadoEndereco,
+      cidade: form.contratadoCidade,
+      uf: form.contratadoUf,
     },
     transportador: {
       motorista: {
@@ -505,12 +677,23 @@ export default function CiotGerarPage() {
 
     const payloadAntt = prepare ? buildPayload() : editing?.payloadAntt ?? null;
     const data = {
-      clienteId: form.clienteId,
+      clienteId: null,
+      empresaId: empresaContratante?.id ?? form.empresaId,
+      contratanteRazaoSocial: empresaContratante?.razaoSocial ?? editing?.contratanteRazaoSocial ?? "",
+      contratanteNomeFantasia: empresaContratante?.nomeFantasia ?? editing?.contratanteNomeFantasia ?? "",
+      contratanteCnpj: empresaContratante?.cnpj ?? editing?.contratanteCnpj ?? "",
+      contratadoRazaoSocial: form.contratadoRazaoSocial,
+      contratadoNomeFantasia: form.contratadoNomeFantasia,
+      contratadoCnpj: form.contratadoCnpj,
+      contratadoInscricaoEstadual: form.contratadoInscricaoEstadual,
+      contratadoEndereco: form.contratadoEndereco,
+      contratadoCidade: form.contratadoCidade,
+      contratadoUf: form.contratadoUf,
       motoristaId: form.motoristaId,
       veiculoId: form.veiculoId,
       tipoOperacao: form.tipoOperacao,
       status: prepare ? ("PRONTO_ENVIO" as const) : form.status,
-      rntrc: form.rntrc.trim(),
+      rntrc: (empresaContratante?.rntrc ?? form.rntrc).trim(),
       origemCidade: form.origemCidade.trim(),
       origemUf: form.origemUf.toUpperCase(),
       destinoCidade: form.destinoCidade.trim(),
@@ -567,19 +750,6 @@ export default function CiotGerarPage() {
     }
   };
 
-  const Field = ({
-    label,
-    children,
-  }: {
-    label: string;
-    children: React.ReactNode;
-  }) => (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      {children}
-    </div>
-  );
-
   return (
     <Layout>
       <div className="mx-auto max-w-[1800px] space-y-8 px-6">
@@ -613,6 +783,7 @@ export default function CiotGerarPage() {
             <table className="w-full min-w-[900px] text-sm">
               <thead className="border-b bg-muted/50">
                 <tr>
+                  <th className="px-4 py-3 text-left">ID</th>
                   <th className="px-4 py-3 text-left">Cliente</th>
                   <th className="px-4 py-3 text-left">CT-es</th>
                   <th className="px-4 py-3 text-left">Rota</th>
@@ -625,7 +796,7 @@ export default function CiotGerarPage() {
                 {filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
                       Nenhum CIOT em preparação.
@@ -633,19 +804,17 @@ export default function CiotGerarPage() {
                   </tr>
                 ) : (
                   filtered.map((item) => {
-                    const cliente = clientes.find(
-                      (c) => c.id === item.clienteId,
-                    );
                     return (
                       <tr key={item.id} className="border-b last:border-0">
+                        <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums">#{item.idSequencial}</td>
                         <td className="px-4 py-3">
                           <p className="font-medium">
-                            {cliente?.razaoSocial ||
-                              cliente?.nomeFantasia ||
+                            {item.contratadoRazaoSocial ||
+                              item.contratadoNomeFantasia ||
                               "—"}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {cliente?.cnpj || "CNPJ não informado"}
+                            {item.contratadoCnpj || "CNPJ não informado"}
                           </p>
                         </td>
                         <td className="px-4 py-3">
@@ -689,6 +858,14 @@ export default function CiotGerarPage() {
         </div>
       </div>
 
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xml,text/xml,application/xml"
+        className="hidden"
+        onChange={(event) => void importFiles(event.target.files)}
+      />
+
       <Dialog open={choiceOpen} onOpenChange={setChoiceOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -719,31 +896,23 @@ export default function CiotGerarPage() {
               )}
               <p className="font-semibold">Importar XML do CT-e</p>
               <p className="mt-2 text-sm text-muted-foreground">
-                Importe um ou vários documentos para preencher automaticamente.
+                Selecione um arquivo XML autorizado do CT-e para preencher automaticamente.
               </p>
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xml,text/xml,application/xml"
-              multiple
-              className="hidden"
-              onChange={(event) => void importFiles(event.target.files)}
-            />
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
-        <DialogContent className="h-[96vh] w-[97vw] max-w-[1900px] overflow-y-auto p-8">
+        <DialogContent className="flex h-[96vh] w-[97vw] max-w-[1900px] flex-col overflow-hidden p-8">
           <DialogHeader>
             <DialogTitle>
               {editing ? "Editar CIOT" : "Emissão de CIOT"}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-8">
-            <div className="grid grid-cols-5 overflow-hidden rounded-xl border">
+          <div className="flex min-h-0 flex-1 flex-col gap-6">
+            <div className="grid shrink-0 grid-cols-5 overflow-hidden rounded-xl border">
               {stepLabels.map((item) => {
                 const active = step === item.id;
                 const done = completedSteps.has(item.id);
@@ -775,6 +944,7 @@ export default function CiotGerarPage() {
               })}
             </div>
 
+            <div className="min-h-0 flex-1 overflow-y-auto pr-2">
             {step === 1 && (
               <div className="space-y-8">
                 <div>
@@ -784,56 +954,59 @@ export default function CiotGerarPage() {
                   </p>
                 </div>
 
-                <Field label="Cliente contratante">
-                  <Select
-                    value={form.clienteId}
-                    onValueChange={(value) =>
-                      setForm((current) => ({
-                        ...current,
-                        clienteId: value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clientes.map((cliente) => (
-                        <SelectItem key={cliente.id} value={cliente.id}>
-                          {cliente.razaoSocial || cliente.nomeFantasia}
-                          {cliente.cnpj ? ` • ${cliente.cnpj}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-
-                {selectedCliente && (
-                  <div className="grid gap-6 rounded-xl border bg-muted/20 p-6 md:grid-cols-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        Razão social
-                      </p>
-                      <p className="font-medium">
-                        {selectedCliente.razaoSocial || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        Nome fantasia
-                      </p>
-                      <p className="font-medium">
-                        {selectedCliente.nomeFantasia || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">CNPJ</p>
-                      <p className="font-medium">
-                        {selectedCliente.cnpj || "—"}
-                      </p>
-                    </div>
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <div className="rounded-xl border bg-muted/20 p-6">
+                    <p className="mb-4 font-semibold">Contratante</p>
+                    {empresaContratante ? (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Razão social</p>
+                          <p className="font-medium">{empresaContratante.razaoSocial}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">CNPJ</p>
+                          <p className="font-medium">{empresaContratante.cnpj}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">RNTRC</p>
+                          <p className="font-medium">{empresaContratante.rntrc || "Não informado"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Certificado</p>
+                          <p className="font-medium text-emerald-600">Digital ativo</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-destructive">Nenhuma empresa ativa com certificado digital foi encontrada.</p>
+                    )}
                   </div>
-                )}
+
+                  <div className="rounded-xl border bg-muted/20 p-6">
+                    <p className="mb-4 font-semibold">Contratado (destinatário do CT-e)</p>
+                    {form.contratadoCnpj ? (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Razão social</p>
+                          <p className="font-medium">{form.contratadoRazaoSocial || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">CNPJ</p>
+                          <p className="font-medium">{form.contratadoCnpj}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Inscrição estadual</p>
+                          <p className="font-medium">{form.contratadoInscricaoEstadual || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Cidade/UF</p>
+                          <p className="font-medium">{form.contratadoCidade || "—"}/{form.contratadoUf || "—"}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Importe um XML para carregar os dados do contratado.</p>
+                    )}
+                  </div>
+                </div>
 
                 <div className="rounded-xl border p-6">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -850,7 +1023,7 @@ export default function CiotGerarPage() {
                       onClick={() => fileInputRef.current?.click()}
                     >
                       <Plus className="mr-2 h-4 w-4" />
-                      Adicionar XML
+                      Importar outro XML
                     </Button>
                   </div>
                   {form.ctes.length === 0 ? (
@@ -964,13 +1137,9 @@ export default function CiotGerarPage() {
                   </Field>
                   <Field label="RNTRC">
                     <Input
-                      value={form.rntrc}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          rntrc: event.target.value,
-                        }))
-                      }
+                      value={empresaContratante?.rntrc ?? form.rntrc}
+                      readOnly
+                      className="bg-muted/40"
                     />
                   </Field>
                   <Field label="Data de início">
@@ -1323,17 +1492,22 @@ export default function CiotGerarPage() {
                   })}
                 </div>
 
-                <div className="grid gap-6 rounded-xl border p-6 md:grid-cols-3">
+                <div className="grid gap-6 rounded-xl border p-6 md:grid-cols-4">
                   <div>
-                    <p className="text-xs text-muted-foreground">Cliente</p>
+                    <p className="text-xs text-muted-foreground">Contratante</p>
                     <p className="font-medium">
-                      {selectedCliente?.razaoSocial ||
-                        selectedCliente?.nomeFantasia ||
+                      {empresaContratante?.razaoSocial ||
+                        editing?.contratanteRazaoSocial ||
                         "—"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {selectedCliente?.cnpj || "—"}
+                      {empresaContratante?.cnpj || editing?.contratanteCnpj || "—"}
                     </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Contratado</p>
+                    <p className="font-medium">{form.contratadoRazaoSocial || "—"}</p>
+                    <p className="text-xs text-muted-foreground">{form.contratadoCnpj || "—"}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Motorista</p>
@@ -1421,7 +1595,9 @@ export default function CiotGerarPage() {
               </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-4 border-t pt-6">
+            </div>
+
+            <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 border-t bg-background pt-6">
               <div>
                 {step > 1 && (
                   <Button variant="outline" onClick={goBack}>

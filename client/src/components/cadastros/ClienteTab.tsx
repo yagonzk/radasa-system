@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import * as XLSX from "xlsx";
 import { useClientes, type Cliente } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -174,6 +174,13 @@ function spreadsheetErrorMessage(error: unknown) {
     : "Não foi possível ler a planilha.";
 }
 
+function normalizeSearch(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+}
+
 export default function ClienteTab() {
   const { items, create, update, remove } = useClientes();
   const [open, setOpen] = useState(false);
@@ -185,6 +192,13 @@ export default function ClienteTab() {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
+
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = normalizeSearch(query).trim();
+    if (!normalizedQuery) return items;
+    return items.filter((item) => normalizeSearch([item.nomeFantasia,item.razaoSocial,item.codigoInterno,item.cnpj,item.email,item.telefone,item.enderecoFiscal].join(" ")).includes(normalizedQuery));
+  }, [items, query]);
 
   const handleOpenCreate = () => {
     setForm(emptyForm);
@@ -531,11 +545,10 @@ export default function ClienteTab() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {items.length} cliente(s) cadastrado(s)
-        </p>
-        <div className="flex items-center gap-2">
+      <div className="mb-4 flex flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">{items.length} cliente(s) cadastrado(s)</p>
+          <div className="flex items-center gap-2">
           <Button onClick={handleOpenImport} size="sm" variant="outline">
             <Upload className="mr-1.5 h-4 w-4" />
             Importar
@@ -544,15 +557,17 @@ export default function ClienteTab() {
             <Plus className="mr-1.5 h-4 w-4" />
             Novo Cliente
           </Button>
+          </div>
         </div>
+        <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por nome, razão social, código, CNPJ, e-mail, telefone ou endereço..." />
       </div>
 
       <DataTable
         columns={columns}
-        data={items}
+        data={filteredItems}
         onEdit={handleOpenEdit}
         onDelete={(item) => remove(item.id)}
-        emptyMessage="Nenhum cliente cadastrado. Clique em 'Novo Cliente' para começar."
+        emptyMessage="Nenhum cliente encontrado para a pesquisa informada."
       />
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>

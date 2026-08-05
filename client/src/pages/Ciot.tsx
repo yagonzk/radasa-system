@@ -156,7 +156,7 @@ export default function CiotPage() {
     return items.filter((item) => {
       if (statusFilter !== "TODOS" && item.status !== statusFilter) return false;
 
-      const cliente = clienteMap.get(item.clienteId);
+      const cliente = item.clienteId ? clienteMap.get(item.clienteId) : undefined;
       const motorista = motoristaMap.get(item.motoristaId);
       const veiculo = veiculoMap.get(item.veiculoId);
 
@@ -212,7 +212,7 @@ export default function CiotPage() {
   const openEdit = (item: Ciot) => {
     setEditing(item);
     setForm({
-      clienteId: item.clienteId,
+      clienteId: item.clienteId ?? "",
       motoristaId: item.motoristaId,
       veiculoId: item.veiculoId,
       tipoOperacao: item.tipoOperacao,
@@ -439,7 +439,7 @@ export default function CiotPage() {
                   </tr>
                 ) : (
                   filteredItems.map((item) => {
-                    const cliente = clienteMap.get(item.clienteId);
+                    const cliente = item.clienteId ? clienteMap.get(item.clienteId) : undefined;
                     const motorista = motoristaMap.get(item.motoristaId);
                     const veiculo = veiculoMap.get(item.veiculoId);
 

@@ -53,6 +53,9 @@ model User {
   name         String
   username     String     @unique
   email        String     @unique
+  telefone     String     @default("")
+  cpf          String?    @unique
+  fotoPerfil   String?    @db.Text
   passwordHash String
   role         UserRole   @default(VISUALIZACAO)
   active       Boolean    @default(true)
@@ -248,7 +251,19 @@ model ManifestoProduto {
 
 model Ciot {
   id                   String           @id @default(cuid())
-  clienteId            String
+  idSequencial         Int              @unique @default(autoincrement())
+  clienteId            String?
+  empresaId            String?
+  contratanteRazaoSocial String          @default("")
+  contratanteNomeFantasia String         @default("")
+  contratanteCnpj       String           @default("")
+  contratadoRazaoSocial String           @default("")
+  contratadoNomeFantasia String          @default("")
+  contratadoCnpj       String           @default("")
+  contratadoInscricaoEstadual String     @default("")
+  contratadoEndereco   String           @default("") @db.Text
+  contratadoCidade     String           @default("")
+  contratadoUf         String           @default("")
   motoristaId          String
   veiculoId            String
   tipoOperacao         TipoOperacaoCiot
@@ -280,12 +295,14 @@ model Ciot {
   cnpjsCargaFracionada String           @default("") @db.Text
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
-  cliente              Cliente          @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  cliente              Cliente?         @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  empresa              Empresa?         @relation(fields: [empresaId], references: [id], onDelete: SetNull)
   motorista            Motorista        @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
   veiculo              Veiculo          @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
   ctes                 CiotCte[]
 
   @@index([clienteId])
+  @@index([empresaId])
   @@index([motoristaId])
   @@index([veiculoId])
   @@index([status])
@@ -301,6 +318,11 @@ model CiotCte {
   serie            String   @default("")
   emitenteCnpj     String   @default("")
   emitenteNome     String   @default("")
+  emitenteNomeFantasia String @default("")
+  emitenteInscricaoEstadual String @default("")
+  emitenteEndereco String @default("") @db.Text
+  emitenteCidade   String @default("")
+  emitenteUf       String @default("")
   remetenteCnpj    String   @default("")
   remetenteNome    String   @default("")
   destinatarioCnpj String   @default("")
@@ -316,7 +338,10 @@ model CiotCte {
   pesoKg           Decimal  @default(0) @db.Decimal(14, 3)
   valorMercadoria  Decimal  @default(0) @db.Decimal(14, 2)
   valorFrete       Decimal  @default(0) @db.Decimal(14, 2)
+  valorPedagio      Decimal  @default(0) @db.Decimal(14, 2)
   xmlUrl           String?  @db.Text
+  arquivoNome      String   @default("")
+  dataEmissao      DateTime? @db.Date
   createdAt        DateTime @default(now())
   ciot             Ciot     @relation(fields: [ciotId], references: [id], onDelete: Cascade)
 
@@ -713,6 +738,7 @@ model Empresa {
   empresaPadrao       Boolean   @default(false)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
+  ciots               Ciot[]
 
   @@index([cnpj])
   @@index([empresaPadrao])

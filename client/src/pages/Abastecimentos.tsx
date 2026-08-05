@@ -380,7 +380,13 @@ function BatchXmlDialog({
     label: `${veiculo.placa}${veiculo.modelo ? ` - ${veiculo.modelo}` : ""}`,
   }));
 
-  const produtoOptions = produtos.map((produto) => ({
+  const produtosCombustivel = produtos.filter(
+    (produto) =>
+      normalize(String(produto.categoriaEstoque ?? "")).trim() ===
+      "combustivel",
+  );
+
+  const produtoOptions = produtosCombustivel.map((produto) => ({
     value: produto.id,
     label: `${produto.nome} - ${produto.codigoInterno}`,
     keywords: `${produto.nome} ${produto.codigoInterno}`,
@@ -1300,7 +1306,17 @@ function AbastecimentoForm({
     label: formatClienteResumo(cliente),
     keywords: clienteSearchText(cliente),
   }));
-  const produtoOptions = produtos.map((produto) => ({
+  const produtosCombustivel = useMemo(
+    () =>
+      produtos.filter(
+        (produto) =>
+          normalize(String(produto.categoriaEstoque ?? "")).trim() ===
+          "combustivel",
+      ),
+    [produtos],
+  );
+
+  const produtoOptions = produtosCombustivel.map((produto) => ({
     value: produto.id,
     label: `${produto.nome} - ${produto.codigoInterno}`,
   }));
@@ -1344,7 +1360,7 @@ function AbastecimentoForm({
   const matchProduto = (item: DocumentoProdutoInterpretado) => {
     const description = normalizeText(item.descricao);
     const code = normalizeText(item.codigo ?? "");
-    return produtos.find((produto) => {
+    return produtosCombustivel.find((produto) => {
       const productName = normalizeText(produto.nome);
       const productCode = normalizeText(produto.codigoInterno);
       return (
@@ -1357,7 +1373,7 @@ function AbastecimentoForm({
 
   const applyDocumentResult = (result: DocumentoAbastecimentoInterpretado) => {
     const cliente = matchCliente(result);
-    const veiculo = matchVeiculo(result.placa);
+    const veiculo = matchVeiculo(result.placa ?? undefined);
     const matchedProducts = result.produtos
       .map((item) => {
         const produto = matchProduto(item);
@@ -1441,6 +1457,18 @@ function AbastecimentoForm({
     const quantidadeLitros = parseNumber(draft.quantidadeLitros);
     const valorUnitario = parseNumber(draft.valorUnitario);
     if (!draft.produtoId) return toast.error("Selecione o produto.");
+
+    const produtoSelecionado = produtosCombustivel.find(
+      (produto) => produto.id === draft.produtoId,
+    );
+
+    if (!produtoSelecionado) {
+      toast.error(
+        "Somente produtos da categoria Combustível podem ser utilizados.",
+      );
+      return;
+    }
+
     if (quantidadeLitros <= 0) return toast.error("Informe uma quantidade de litros maior que zero.");
     if (valorUnitario < 0 || !draft.valorUnitario.trim()) return toast.error("Informe um valor unitário válido.");
 
@@ -1478,6 +1506,20 @@ function AbastecimentoForm({
     if (!form.veiculoId) return toast.error("Selecione a placa.");
     const hodometro = parseNumber(form.hodometro);
     if (hodometro < 0 || !form.hodometro.trim()) return toast.error("Informe o odômetro.");
+
+    const possuiProdutoInvalido = form.produtos.some(
+      (item) =>
+        !produtosCombustivel.some(
+          (produto) => produto.id === item.produtoId,
+        ),
+    );
+
+    if (possuiProdutoInvalido) {
+      toast.error(
+        "Existe um produto que não pertence à categoria Combustível.",
+      );
+      return;
+    }
 
     setSaving(true);
     try {
@@ -1978,7 +2020,7 @@ export default function Abastecimentos() {
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4" /> Total de litros</p>
-            <p className="mt-2 text-2xl font-bold">{formatLitros(totals.litros)}</p>
+            <p className="mt-2 whitespace-nowrap text-2xl font-bold tabular-nums">{formatLitros(totals.litros)}</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Banknote className="h-4 w-4" /> Valor total</p>
@@ -2076,7 +2118,7 @@ export default function Abastecimentos() {
                       <td className="px-4 py-3"><ClienteIdentity cliente={cliente} /></td>
                       <td className="px-4 py-3 text-muted-foreground">{formatDate(item.dataEmissao)}</td>
                       <td className="px-4 py-3 font-medium">{item.produtos.length} produto(s)</td>
-                      <td className="px-4 py-3 text-right">{formatLitros(litros)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatLitros(litros)}</td>
                       <td className="px-4 py-3 text-right">{formatBRL(litros > 0 ? bruto / litros : 0)}</td>
                       <td className="px-4 py-3 text-right text-muted-foreground">{formatBRL(item.valorDesconto)}</td>
                       <td className="px-4 py-3 text-right font-bold text-primary">{formatBRL(item.valorTotal)}</td>

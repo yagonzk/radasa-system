@@ -13,7 +13,6 @@ import {
   type Ciot,
   type StatusCiot,
   useCiots,
-  useClientes,
   useMotoristas,
   useVeiculos,
 } from "@/lib/store";
@@ -48,7 +47,7 @@ function printCiot(item: Ciot) {
   printWindow.document.write(`
     <html>
       <head>
-        <title>CIOT ${item.numeroCiot ?? item.id}</title>
+        <title>CIOT #${item.idSequencial}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 32px; color: #111827; }
           h1 { margin-bottom: 8px; }
@@ -63,10 +62,13 @@ function printCiot(item: Ciot) {
         <h1>Comprovante CIOT</h1>
         <p class="muted">Documento interno do Radasa System</p>
         <div class="grid">
-          <div class="field"><span class="label">Número CIOT</span><span class="value">${item.numeroCiot ?? "—"}</span></div>
+          <div class="field"><span class="label">ID interno</span><span class="value">#${item.idSequencial}</span></div>
+          <div class="field"><span class="label">Número CIOT ANTT</span><span class="value">${item.numeroCiot ?? "—"}</span></div>
           <div class="field"><span class="label">Código verificador</span><span class="value">${item.codigoVerificador ?? "—"}</span></div>
           <div class="field"><span class="label">Protocolo</span><span class="value">${item.protocolo ?? "—"}</span></div>
           <div class="field"><span class="label">Status</span><span class="value">${labels[item.status]}</span></div>
+          <div class="field"><span class="label">Contratante</span><span class="value">${item.contratanteRazaoSocial || "—"} • ${item.contratanteCnpj || "—"}</span></div>
+          <div class="field"><span class="label">Contratado</span><span class="value">${item.contratadoRazaoSocial || "—"} • ${item.contratadoCnpj || "—"}</span></div>
           <div class="field"><span class="label">Origem</span><span class="value">${item.origemCidade}/${item.origemUf}</span></div>
           <div class="field"><span class="label">Destino</span><span class="value">${item.destinoCidade}/${item.destinoUf}</span></div>
           <div class="field"><span class="label">Valor do frete</span><span class="value">${formatMoney(item.valorFrete)}</span></div>
@@ -83,10 +85,13 @@ function printCiot(item: Ciot) {
 function downloadCiot(item: Ciot) {
   const text = [
     "COMPROVANTE CIOT",
-    `Número CIOT: ${item.numeroCiot ?? "—"}`,
+    `ID interno: #${item.idSequencial}`,
+    `Número CIOT ANTT: ${item.numeroCiot ?? "—"}`,
     `Código verificador: ${item.codigoVerificador ?? "—"}`,
     `Protocolo: ${item.protocolo ?? "—"}`,
     `Status: ${labels[item.status]}`,
+    `Contratante: ${item.contratanteRazaoSocial || "—"} • ${item.contratanteCnpj || "—"}`,
+    `Contratado: ${item.contratadoRazaoSocial || "—"} • ${item.contratadoCnpj || "—"}`,
     `Origem: ${item.origemCidade}/${item.origemUf}`,
     `Destino: ${item.destinoCidade}/${item.destinoUf}`,
     `RNTRC: ${item.rntrc}`,
@@ -97,22 +102,17 @@ function downloadCiot(item: Ciot) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `ciot-${item.numeroCiot ?? item.id}.txt`;
+  anchor.download = `ciot-${item.idSequencial}.txt`;
   anchor.click();
   URL.revokeObjectURL(url);
 }
 
 export default function CiotGeradosPage() {
   const { items } = useCiots();
-  const { items: clientes } = useClientes();
   const { items: motoristas } = useMotoristas();
   const { items: veiculos } = useVeiculos();
   const [query, setQuery] = useState("");
 
-  const clienteMap = useMemo(
-    () => new Map(clientes.map((item) => [item.id, item])),
-    [clientes],
-  );
   const motoristaMap = useMemo(
     () => new Map(motoristas.map((item) => [item.id, item])),
     [motoristas],
@@ -132,17 +132,20 @@ export default function CiotGeradosPage() {
     return items.filter((item) => {
       if (!generatedStatuses.includes(item.status)) return false;
 
-      const cliente = clienteMap.get(item.clienteId);
       const motorista = motoristaMap.get(item.motoristaId);
       const veiculo = veiculoMap.get(item.veiculoId);
 
       const haystack = [
+        String(item.idSequencial),
         item.numeroCiot,
         item.codigoVerificador,
         item.protocolo,
-        cliente?.razaoSocial,
-        cliente?.nomeFantasia,
-        cliente?.cnpj,
+        item.contratanteRazaoSocial,
+        item.contratanteNomeFantasia,
+        item.contratanteCnpj,
+        item.contratadoRazaoSocial,
+        item.contratadoNomeFantasia,
+        item.contratadoCnpj,
         motorista?.nome,
         motorista?.cpf,
         veiculo?.placa,
@@ -158,7 +161,7 @@ export default function CiotGeradosPage() {
 
       return !normalized || haystack.includes(normalized);
     });
-  }, [clienteMap, items, motoristaMap, query, veiculoMap]);
+  }, [items, motoristaMap, query, veiculoMap]);
 
   return (
     <Layout>
@@ -178,7 +181,7 @@ export default function CiotGeradosPage() {
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Pesquisar por CIOT, cliente, motorista, placa, protocolo ou rota..."
+              placeholder="Pesquisar por CIOT, contratante, contratado, motorista, placa, protocolo ou rota..."
               className="pl-9"
             />
           </div>
@@ -189,8 +192,8 @@ export default function CiotGeradosPage() {
             <table className="w-full min-w-[1050px] text-sm">
               <thead className="border-b bg-muted/50">
                 <tr>
-                  <th className="px-4 py-3 text-left">CIOT</th>
-                  <th className="px-4 py-3 text-left">Cliente</th>
+                  <th className="px-4 py-3 text-left">ID / CIOT</th>
+                  <th className="px-4 py-3 text-left">Contratado</th>
                   <th className="px-4 py-3 text-left">Motorista / veículo</th>
                   <th className="px-4 py-3 text-left">Rota</th>
                   <th className="px-4 py-3 text-left">Frete</th>
@@ -210,15 +213,15 @@ export default function CiotGeradosPage() {
                   </tr>
                 ) : (
                   generated.map((item) => {
-                    const cliente = clienteMap.get(item.clienteId);
-                    const motorista = motoristaMap.get(item.motoristaId);
+                                  const motorista = motoristaMap.get(item.motoristaId);
                     const veiculo = veiculoMap.get(item.veiculoId);
 
                     return (
                       <tr key={item.id} className="border-b last:border-0">
                         <td className="px-4 py-3">
-                          <p className="font-semibold">
-                            {item.numeroCiot ?? "Sem número"}
+                          <p className="font-semibold tabular-nums">#{item.idSequencial}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.numeroCiot ? `CIOT ANTT ${item.numeroCiot}` : "CIOT ANTT sem número"}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {item.protocolo
@@ -228,12 +231,12 @@ export default function CiotGeradosPage() {
                         </td>
                         <td className="px-4 py-3">
                           <p className="font-medium">
-                            {cliente?.razaoSocial ||
-                              cliente?.nomeFantasia ||
-                              "Cliente não encontrado"}
+                            {item.contratadoRazaoSocial ||
+                              item.contratadoNomeFantasia ||
+                              "Contratado não informado"}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {cliente?.cnpj || "CNPJ não informado"}
+                            {item.contratadoCnpj || "CNPJ não informado"}
                           </p>
                         </td>
                         <td className="px-4 py-3">

@@ -3,7 +3,7 @@ import { rateLimit } from "express-rate-limit";
 import { authController } from "../controllers/auth.controller";
 import { authenticate } from "../middlewares/auth";
 import { validate } from "../middlewares/validate";
-import { changePasswordSchema, loginSchema, registerSchema } from "../validators/schemas";
+import { changePasswordSchema, loginSchema, registerSchema, updateProfileSchema } from "../validators/schemas";
 import { asyncHandler } from "../utils/async-handler";
 
 export const authRoutes = Router();
@@ -19,4 +19,5 @@ const authRateLimit = rateLimit({
 authRoutes.post("/login", authRateLimit, validate(loginSchema), asyncHandler(authController.login));
 authRoutes.post("/register", authRateLimit, validate(registerSchema), asyncHandler(authController.register));
 authRoutes.get("/me", authenticate, asyncHandler(authController.me));
+authRoutes.put("/profile", authenticate, validate(updateProfileSchema), asyncHandler(authController.updateProfile));
 authRoutes.put("/change-password", authenticate, validate(changePasswordSchema), asyncHandler(authController.changePassword));

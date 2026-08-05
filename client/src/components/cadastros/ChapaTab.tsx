@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useChapas, type Chapa } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,13 @@ export default function ChapaTab() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [query, setQuery] = useState("");
+
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = normalizeSearch(query).trim();
+    if (!normalizedQuery) return items;
+    return items.filter((item) => normalizeSearch([item.nome, item.cpf, item.telefone, item.cidade, item.valorFixo].join(" ")).includes(normalizedQuery));
+  }, [items, query]);
 
   const handleOpenCreate = () => {
     setForm(emptyForm);
@@ -90,10 +97,11 @@ export default function ChapaTab() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {items.length} chapa(s) cadastrada(s)
-        </p>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex w-full flex-col gap-3 sm:max-w-xl">
+          <p className="text-sm text-muted-foreground">{items.length} chapa(s) cadastrado(s)</p>
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por nome, CPF, telefone ou cidade..." />
+        </div>
         <Button onClick={handleOpenCreate} size="sm">
           <Plus className="mr-1.5 h-4 w-4" />
           Nova Chapa
@@ -102,10 +110,10 @@ export default function ChapaTab() {
 
       <DataTable
         columns={columns}
-        data={items}
+        data={filteredItems}
         onEdit={handleOpenEdit}
         onDelete={(item) => remove(item.id)}
-        emptyMessage="Nenhuma chapa cadastrada. Clique em 'Nova Chapa' para começar."
+        emptyMessage="Nenhum chapa encontrado para a pesquisa informada."
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -144,6 +152,13 @@ export default function ChapaTab() {
       </Dialog>
     </div>
   );
+}
+
+function normalizeSearch(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
 }
 
 function FormField({ label, children }: { label: string; children: ReactNode }) {

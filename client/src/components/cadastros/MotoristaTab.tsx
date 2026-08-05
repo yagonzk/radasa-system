@@ -37,14 +37,16 @@ export default function MotoristaTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("TODOS");
+  const [query, setQuery] = useState("");
 
-  const filteredItems = useMemo(
-    () =>
-      statusFilter === "TODOS"
-        ? items
-        : items.filter((item) => item.status === statusFilter),
-    [items, statusFilter]
-  );
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = normalizeSearch(query).trim();
+    return items.filter((item) => {
+      const matchesStatus = statusFilter === "TODOS" || item.status === statusFilter;
+      const matchesQuery = !normalizedQuery || normalizeSearch([item.nome, item.cpf, item.salarioBase, item.status].join(" ")).includes(normalizedQuery);
+      return matchesStatus && matchesQuery;
+    });
+  }, [items, query, statusFilter]);
 
   const ativos = items.filter((item) => item.status === "ATIVO").length;
   const demitidos = items.length - ativos;
@@ -192,6 +194,10 @@ export default function MotoristaTab() {
               {items.length} motorista(s): {ativos} ativo(s) e {demitidos} demitido(s)
             </p>
           </div>
+          <div className="w-full sm:w-72">
+            <Label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pesquisar</Label>
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nome, CPF ou status..." />
+          </div>
           <div className="w-full sm:w-44">
             <Label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Filtrar status
@@ -222,7 +228,7 @@ export default function MotoristaTab() {
         columns={columns}
         data={filteredItems}
         onEdit={handleOpenEdit}
-        emptyMessage="Nenhum motorista encontrado para o filtro selecionado."
+        emptyMessage="Nenhum motorista encontrado para a pesquisa ou filtro selecionado."
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -268,6 +274,13 @@ export default function MotoristaTab() {
       </Dialog>
     </div>
   );
+}
+
+function normalizeSearch(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
 }
 
 function FormField({ label, children }: { label: string; children: ReactNode }) {

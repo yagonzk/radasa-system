@@ -12,6 +12,7 @@ import Fechamentos from "./pages/Fechamentos";
 import Manifestos from "./pages/Manifestos";
 import Auth from "./pages/Auth";
 import ChangePassword from "./pages/ChangePassword";
+import Perfil from "./pages/Perfil";
 import Logs from "./pages/Logs";
 import Abastecimentos from "./pages/Abastecimentos";
 import Pneus from "./pages/Pneus";
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/ciot" component={CiotGerar} />
       <Route path="/pneus" component={Pneus} />
       <Route path="/estoque" component={Estoque} />
+      <Route path="/perfil" component={Perfil} />
       <Route path="/alterar-senha" component={ChangePassword} />
       <Route path="/logs" component={Logs} />
       <Route path="/404" component={NotFound} />

@@ -13,4 +13,7 @@ export const authController = {
 
   me: async (req: Request, res: Response) =>
     res.json(await authService.me(req.user!.id)),
+
+  updateProfile: async (req: Request, res: Response) =>
+    res.json(await authService.updateProfile(req.user!.id, req.body)),
 };

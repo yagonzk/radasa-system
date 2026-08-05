@@ -101,10 +101,20 @@ export interface CiotCte {
   serie: string;
   emitenteCnpj: string;
   emitenteNome: string;
+  emitenteNomeFantasia: string;
+  emitenteInscricaoEstadual: string;
+  emitenteEndereco: string;
+  emitenteCidade: string;
+  emitenteUf: string;
   remetenteCnpj: string;
   remetenteNome: string;
   destinatarioCnpj: string;
   destinatarioNome: string;
+  destinatarioNomeFantasia?: string;
+  destinatarioInscricaoEstadual?: string;
+  destinatarioEndereco?: string;
+  destinatarioCidade?: string;
+  destinatarioUf?: string;
   tomadorCnpj: string;
   tomadorNome: string;
   origemCidade: string;
@@ -116,12 +126,25 @@ export interface CiotCte {
   pesoKg: number;
   valorMercadoria: number;
   valorFrete: number;
+  valorPedagio?: number;
   xmlUrl?: string | null;
 }
 
 export interface Ciot {
   id: string;
-  clienteId: string;
+  idSequencial?: number;
+  clienteId?: string | null;
+  empresaId?: string | null;
+  contratanteRazaoSocial?: string;
+  contratanteNomeFantasia?: string;
+  contratanteCnpj?: string;
+  contratadoRazaoSocial?: string;
+  contratadoNomeFantasia?: string;
+  contratadoCnpj?: string;
+  contratadoInscricaoEstadual?: string;
+  contratadoEndereco?: string;
+  contratadoCidade?: string;
+  contratadoUf?: string;
   motoristaId: string;
   veiculoId: string;
   tipoOperacao: TipoOperacaoCiot;

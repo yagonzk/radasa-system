@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useVeiculos, type Veiculo } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,13 @@ export default function VeiculoTab() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [query, setQuery] = useState("");
+
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = normalizeSearch(query).trim();
+    if (!normalizedQuery) return items;
+    return items.filter((item) => normalizeSearch([item.placa, item.modelo].join(" ")).includes(normalizedQuery));
+  }, [items, query]);
 
   const handleOpenCreate = () => {
     setForm(emptyForm);
@@ -80,10 +87,11 @@ export default function VeiculoTab() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {items.length} veículo(s) cadastrado(s)
-        </p>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex w-full flex-col gap-3 sm:max-w-xl">
+          <p className="text-sm text-muted-foreground">{items.length} veículo(s) cadastrado(s)</p>
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por placa ou modelo..." />
+        </div>
         <Button onClick={handleOpenCreate} size="sm">
           <Plus className="mr-1.5 h-4 w-4" />
           Novo Veículo
@@ -92,10 +100,10 @@ export default function VeiculoTab() {
 
       <DataTable
         columns={columns}
-        data={items}
+        data={filteredItems}
         onEdit={handleOpenEdit}
         onDelete={(item) => remove(item.id)}
-        emptyMessage="Nenhum veículo cadastrado. Clique em 'Novo Veículo' para começar."
+        emptyMessage="Nenhum veículo encontrado para a pesquisa informada."
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -131,6 +139,13 @@ export default function VeiculoTab() {
       </Dialog>
     </div>
   );
+}
+
+function normalizeSearch(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
 }
 
 function FormField({ label, children }: { label: string; children: ReactNode }) {

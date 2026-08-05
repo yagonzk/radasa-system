@@ -191,10 +191,20 @@ export const ciotCteBody = z.object({
   serie: z.string().trim().max(20).default(""),
   emitenteCnpj: z.string().trim().max(20).default(""),
   emitenteNome: z.string().trim().max(255).default(""),
+  emitenteNomeFantasia: z.string().trim().max(255).default(""),
+  emitenteInscricaoEstadual: z.string().trim().max(30).default(""),
+  emitenteEndereco: z.string().trim().max(1000).default(""),
+  emitenteCidade: z.string().trim().max(160).default(""),
+  emitenteUf: z.string().trim().max(2).default(""),
   remetenteCnpj: z.string().trim().max(20).default(""),
   remetenteNome: z.string().trim().max(255).default(""),
   destinatarioCnpj: z.string().trim().max(20).default(""),
   destinatarioNome: z.string().trim().max(255).default(""),
+  destinatarioNomeFantasia: z.string().trim().max(255).optional().default(""),
+  destinatarioInscricaoEstadual: z.string().trim().max(30).optional().default(""),
+  destinatarioEndereco: z.string().trim().max(1000).optional().default(""),
+  destinatarioCidade: z.string().trim().max(160).optional().default(""),
+  destinatarioUf: z.string().trim().max(2).optional().default(""),
   tomadorCnpj: z.string().trim().max(20).default(""),
   tomadorNome: z.string().trim().max(255).default(""),
   origemCidade: z.string().trim().max(160).default(""),
@@ -206,12 +216,24 @@ export const ciotCteBody = z.object({
   pesoKg: z.coerce.number().finite().min(0).default(0),
   valorMercadoria: z.coerce.number().finite().min(0).default(0),
   valorFrete: z.coerce.number().finite().min(0).default(0),
+  valorPedagio: z.coerce.number().finite().min(0).default(0),
   xmlUrl: z.string().max(20_000_000).optional().nullable().or(z.literal("")),
 });
 
 export const ciotBody = z.object({
   id: id.optional(),
-  clienteId: id,
+  clienteId: id.optional().nullable().or(z.literal("")),
+  empresaId: id.optional().nullable().or(z.literal("")),
+  contratanteRazaoSocial: z.string().trim().max(255).default(""),
+  contratanteNomeFantasia: z.string().trim().max(255).default(""),
+  contratanteCnpj: z.string().trim().max(20).default(""),
+  contratadoRazaoSocial: z.string().trim().max(255).default(""),
+  contratadoNomeFantasia: z.string().trim().max(255).default(""),
+  contratadoCnpj: z.string().trim().max(20).default(""),
+  contratadoInscricaoEstadual: z.string().trim().max(30).default(""),
+  contratadoEndereco: z.string().trim().max(1000).default(""),
+  contratadoCidade: z.string().trim().max(160).default(""),
+  contratadoUf: z.string().trim().max(2).default(""),
   motoristaId: id,
   veiculoId: id,
   tipoOperacao: tipoOperacaoCiot,
@@ -267,6 +289,15 @@ const password = z.string().min(8, "A senha deve ter pelo menos 8 caracteres").m
 export const loginSchema = bodySchema(z.object({ identifier: z.string().trim().min(3).max(255), password }));
 export const registerSchema = bodySchema(z.object({ name: text(120), username, email: z.string().trim().email().transform(v => v.toLowerCase()), password }));
 export const changePasswordSchema = bodySchema(z.object({ currentPassword: password, newPassword: password }));
+const cpfProfile = z.string().trim().max(14).transform((value) => value.replace(/\D/g, "")).refine((value) => !value || value.length === 11, "CPF deve possuir 11 dígitos.");
+export const updateProfileSchema = bodySchema(z.object({
+  name: text(120),
+  email: z.string().trim().email("Informe um e-mail válido.").transform((value) => value.toLowerCase()),
+  telefone: z.string().trim().max(20).transform((value) => value.replace(/\D/g, "")),
+  cpf: cpfProfile,
+  fotoPerfil: z.string().max(7_000_000, "A foto de perfil é muito grande.").nullable().optional(),
+}));
+
 export const createUserSchema = bodySchema(z.object({ name: text(), username, email: z.string().email().transform(v => v.toLowerCase()), password, role: z.enum(["ADMIN", "GERENTE", "BORRACHARIA", "MANUTENCAO", "VISUALIZACAO", "USER"]).default("VISUALIZACAO") }));
 
 export const migrationSchema = bodySchema(z.object({

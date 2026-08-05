@@ -9,6 +9,9 @@ function publicUser(user: {
   name: string;
   username: string;
   email: string;
+  telefone: string;
+  cpf: string | null;
+  fotoPerfil: string | null;
   role: "ADMIN" | "GERENTE" | "BORRACHARIA" | "MANUTENCAO" | "VISUALIZACAO" | "USER";
 }) {
   return {
@@ -16,6 +19,9 @@ function publicUser(user: {
     name: user.name,
     username: user.username,
     email: user.email,
+    telefone: user.telefone,
+    cpf: user.cpf,
+    fotoPerfil: user.fotoPerfil,
     role: user.role,
   };
 }
@@ -94,6 +100,57 @@ export const authService = {
       prisma.auditLog.create({ data: { userId, action: "Alterou a própria senha", method: "PUT", path: "/api/auth/change-password" } }),
     ]);
     return { message: "Senha alterada com sucesso." };
+  },
+
+  async updateProfile(userId: string, input: {
+    name: string;
+    email: string;
+    telefone: string;
+    cpf: string;
+    fotoPerfil?: string | null;
+  }) {
+    const email = input.email.trim().toLowerCase();
+    const cpf = input.cpf.replace(/\D/g, "") || null;
+
+    const duplicate = await prisma.user.findFirst({
+      where: {
+        id: { not: userId },
+        OR: [
+          { email },
+          ...(cpf ? [{ cpf }] : []),
+        ],
+      },
+      select: { email: true, cpf: true },
+    });
+
+    if (duplicate?.email === email) {
+      throw new AppError(409, "Este e-mail já está cadastrado.");
+    }
+    if (cpf && duplicate?.cpf === cpf) {
+      throw new AppError(409, "Este CPF já está cadastrado.");
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: input.name.trim(),
+        email,
+        telefone: input.telefone.replace(/\D/g, ""),
+        cpf,
+        ...(input.fotoPerfil !== undefined ? { fotoPerfil: input.fotoPerfil } : {}),
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: "Atualizou o próprio perfil",
+        method: "PUT",
+        path: "/api/auth/profile",
+      },
+    });
+
+    return publicUser(user);
   },
 
   async me(userId: string) {

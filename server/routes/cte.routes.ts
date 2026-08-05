@@ -5,8 +5,8 @@ import { interpretarCteXml } from "../services/cte-documento.service";
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024,
-    files: 200,
+    fileSize: 15 * 1024 * 1024,
+    files: 1,
   },
 });
 
@@ -14,64 +14,74 @@ export const cteRoutes = Router();
 
 cteRoutes.post(
   "/interpretar",
-  upload.array("arquivos", 200),
+  upload.array("arquivos", 1),
   async (req, res, next) => {
     try {
       const files = (req.files ?? []) as Express.Multer.File[];
+      const file = files[0];
 
-      if (!files.length) {
-        res.status(400).json({ message: "Selecione pelo menos um XML de CT-e." });
+      if (!file) {
+        res.status(400).json({ message: "Selecione um arquivo XML de CT-e." });
         return;
       }
 
-      const parsed = files.map((file) => {
-        if (!file.originalname.toLowerCase().endsWith(".xml")) {
-          throw new Error(`${file.originalname} não é um arquivo XML.`);
-        }
+      const lowerName = file.originalname.toLowerCase();
+      const isXml = lowerName.endsWith(".xml") || file.mimetype.includes("xml");
 
-        const xml = file.buffer.toString("utf8");
-        const result = interpretarCteXml(xml);
-
-        return {
-          ...result,
-          fileName: file.originalname,
-          xmlUrl: `data:${file.mimetype || "application/xml"};base64,${file.buffer.toString("base64")}`,
-        };
-      });
-
-      const duplicateKeys = new Set<string>();
-      for (const item of parsed) {
-        if (!item.chave) {
-          throw new Error(`Não foi possível identificar a chave do CT-e ${item.fileName}.`);
-        }
-        if (duplicateKeys.has(item.chave)) {
-          throw new Error(`O CT-e ${item.numero || item.chave} está duplicado no lote.`);
-        }
-        duplicateKeys.add(item.chave);
+      if (!isXml) {
+        res.status(415).json({
+          message: "Apenas arquivos XML do CT-e são suportados.",
+        });
+        return;
       }
 
+      let result;
+      try {
+        result = interpretarCteXml(file.buffer.toString("utf8"));
+      } catch (error) {
+        res.status(422).json({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Não foi possível interpretar o XML do CT-e.",
+        });
+        return;
+      }
+
+      if (!result.chave) {
+        res.status(422).json({
+          message: "Não foi possível identificar a chave do CT-e no XML.",
+        });
+        return;
+      }
+
+      const cte = {
+        ...result,
+        fileName: file.originalname,
+        xmlUrl: `data:${file.mimetype || "application/xml"};base64,${file.buffer.toString("base64")}`,
+      };
+
       res.json({
-        ctes: parsed,
+        ctes: [cte],
+        erros: [],
         resumo: {
-          quantidade: parsed.length,
-          tipoOperacao: parsed.length > 1 ? "FRACIONADA" : "LOTACAO",
-          pesoKg: parsed.reduce((sum, item) => sum + item.pesoKg, 0),
-          valorMercadoria: parsed.reduce(
-            (sum, item) => sum + item.valorMercadoria,
-            0,
-          ),
-          valorFrete: parsed.reduce((sum, item) => sum + item.valorFrete, 0),
-          valorPedagio: parsed.reduce((sum, item) => sum + item.valorPedagio, 0),
-          cnpjs: Array.from(
-            new Set(
-              parsed
-                .flatMap((item) => [
-                  item.remetenteCnpj,
-                  item.destinatarioCnpj,
-                ])
-                .filter(Boolean),
-            ),
-          ),
+          quantidade: 1,
+          tipoOperacao: "LOTACAO",
+          pesoKg: cte.pesoKg,
+          valorMercadoria: cte.valorMercadoria,
+          valorFrete: cte.valorFrete,
+          valorPedagio: cte.valorPedagio,
+          cnpjs: cte.destinatarioCnpj ? [cte.destinatarioCnpj] : [],
+          contratadoPrincipal: {
+            cnpj: cte.destinatarioCnpj,
+            razaoSocial: cte.destinatarioNome,
+            nomeFantasia: cte.destinatarioNomeFantasia,
+            inscricaoEstadual: cte.destinatarioInscricaoEstadual,
+            endereco: cte.destinatarioEndereco,
+            cidade: cte.destinatarioCidade,
+            uf: cte.destinatarioUf,
+            valorMercadoria: cte.valorMercadoria,
+          },
         },
       });
     } catch (error) {

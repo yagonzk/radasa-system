@@ -57,10 +57,20 @@ export interface CteInterpretado {
   serie: string;
   emitenteCnpj: string;
   emitenteNome: string;
+  emitenteNomeFantasia: string;
+  emitenteInscricaoEstadual: string;
+  emitenteEndereco: string;
+  emitenteCidade: string;
+  emitenteUf: string;
   remetenteCnpj: string;
   remetenteNome: string;
   destinatarioCnpj: string;
   destinatarioNome: string;
+  destinatarioNomeFantasia: string;
+  destinatarioInscricaoEstadual: string;
+  destinatarioEndereco: string;
+  destinatarioCidade: string;
+  destinatarioUf: string;
   tomadorCnpj: string;
   tomadorNome: string;
   origemCidade: string;
@@ -137,10 +147,32 @@ export function interpretarCteXml(xml: string): CteInterpretado {
     serie: String(ide.serie ?? ""),
     emitenteCnpj: digits(emit.CNPJ ?? emit.CPF),
     emitenteNome: firstText(emit.xNome, emit.xFant),
+    emitenteNomeFantasia: firstText(emit.xFant),
+    emitenteInscricaoEstadual: firstText(emit.IE),
+    emitenteEndereco: [
+      firstText(emit.enderEmit?.xLgr),
+      firstText(emit.enderEmit?.nro),
+      firstText(emit.enderEmit?.xCpl),
+      firstText(emit.enderEmit?.xBairro),
+      firstText(emit.enderEmit?.CEP),
+    ].filter(Boolean).join(", "),
+    emitenteCidade: firstText(emit.enderEmit?.xMun),
+    emitenteUf: firstText(emit.enderEmit?.UF).toUpperCase(),
     remetenteCnpj: digits(rem.CNPJ ?? rem.CPF),
     remetenteNome: firstText(rem.xNome, rem.xFant),
     destinatarioCnpj: digits(dest.CNPJ ?? dest.CPF),
     destinatarioNome: firstText(dest.xNome, dest.xFant),
+    destinatarioNomeFantasia: firstText(dest.xFant),
+    destinatarioInscricaoEstadual: firstText(dest.IE),
+    destinatarioEndereco: [
+      firstText(dest.enderDest?.xLgr),
+      firstText(dest.enderDest?.nro),
+      firstText(dest.enderDest?.xCpl),
+      firstText(dest.enderDest?.xBairro),
+      firstText(dest.enderDest?.CEP),
+    ].filter(Boolean).join(", "),
+    destinatarioCidade: firstText(dest.enderDest?.xMun),
+    destinatarioUf: firstText(dest.enderDest?.UF).toUpperCase(),
     tomadorCnpj: digits(tomador.CNPJ ?? tomador.CPF),
     tomadorNome: firstText(tomador.xNome, tomador.xFant),
     origemCidade: firstText(ide.xMunIni, rem.enderReme?.xMun),

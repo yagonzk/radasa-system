@@ -1,6 +1,6 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes, FileBadge2, ChevronDown, ChevronRight, FilePlus2, History } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes, FileBadge2, ChevronDown, ChevronRight, FilePlus2, History, UserRound } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useState } from "react";
@@ -180,9 +180,10 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button type="button" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground transition hover:ring-2 hover:ring-primary/30" aria-label="Abrir opções do perfil">{initials}</button>
+                <button type="button" className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground transition hover:ring-2 hover:ring-primary/30" aria-label="Abrir opções do perfil">{user?.fotoPerfil ? <img src={user.fotoPerfil} alt="Foto de perfil" className="h-full w-full object-cover" /> : initials}</button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-48">
+                <DropdownMenuItem asChild><Link href="/perfil" className="flex cursor-pointer items-center gap-2"><UserRound className="h-4 w-4"/>Meu perfil</Link></DropdownMenuItem>
                 <DropdownMenuItem asChild><Link href="/alterar-senha" className="flex cursor-pointer items-center gap-2"><KeyRound className="h-4 w-4"/>Alterar senha</Link></DropdownMenuItem>
                 <DropdownMenuItem asChild><Link href="/logs" className="flex cursor-pointer items-center gap-2"><ScrollText className="h-4 w-4"/>Ver logs</Link></DropdownMenuItem>
               </DropdownMenuContent>

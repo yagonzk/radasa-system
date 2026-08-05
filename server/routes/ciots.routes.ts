@@ -22,6 +22,10 @@ function serializeCiot(ciot: any) {
           pesoKg: decimal(cte.pesoKg),
           valorMercadoria: decimal(cte.valorMercadoria),
           valorFrete: decimal(cte.valorFrete),
+          valorPedagio: decimal(cte.valorPedagio),
+          dataEmissao: cte.dataEmissao instanceof Date
+            ? cte.dataEmissao.toISOString().slice(0, 10)
+            : cte.dataEmissao,
         }))
       : ciot.ctes,
     dataInicio:
@@ -37,7 +41,18 @@ function serializeCiot(ciot: any) {
 
 function toCreateData(input: ReturnType<typeof ciotBody.parse>) {
   return {
-    clienteId: input.clienteId,
+    clienteId: input.clienteId || null,
+    empresaId: input.empresaId || null,
+    contratanteRazaoSocial: input.contratanteRazaoSocial,
+    contratanteNomeFantasia: input.contratanteNomeFantasia,
+    contratanteCnpj: input.contratanteCnpj,
+    contratadoRazaoSocial: input.contratadoRazaoSocial,
+    contratadoNomeFantasia: input.contratadoNomeFantasia,
+    contratadoCnpj: input.contratadoCnpj,
+    contratadoInscricaoEstadual: input.contratadoInscricaoEstadual,
+    contratadoEndereco: input.contratadoEndereco,
+    contratadoCidade: input.contratadoCidade,
+    contratadoUf: input.contratadoUf,
     motoristaId: input.motoristaId,
     veiculoId: input.veiculoId,
     tipoOperacao: input.tipoOperacao,
@@ -77,6 +92,11 @@ function toCreateData(input: ReturnType<typeof ciotBody.parse>) {
             serie: cte.serie,
             emitenteCnpj: cte.emitenteCnpj,
             emitenteNome: cte.emitenteNome,
+            emitenteNomeFantasia: cte.emitenteNomeFantasia,
+            emitenteInscricaoEstadual: cte.emitenteInscricaoEstadual,
+            emitenteEndereco: cte.emitenteEndereco,
+            emitenteCidade: cte.emitenteCidade,
+            emitenteUf: cte.emitenteUf,
             remetenteCnpj: cte.remetenteCnpj,
             remetenteNome: cte.remetenteNome,
             destinatarioCnpj: cte.destinatarioCnpj,
@@ -92,7 +112,10 @@ function toCreateData(input: ReturnType<typeof ciotBody.parse>) {
             pesoKg: cte.pesoKg,
             valorMercadoria: cte.valorMercadoria,
             valorFrete: cte.valorFrete,
+            valorPedagio: cte.valorPedagio,
             xmlUrl: cte.xmlUrl || null,
+            arquivoNome: cte.arquivoNome || "",
+            dataEmissao: cte.dataEmissao ? new Date(`${cte.dataEmissao}T00:00:00.000Z`) : null,
           })),
         }
       : undefined,
@@ -140,6 +163,7 @@ ciotsRoutes.post("/", async (req, res, next) => {
         id: parsed.id,
         createdAt: parsed.createdAt ? new Date(parsed.createdAt) : undefined,
       },
+      include: { ctes: true },
     });
     res.status(201).json(serializeCiot(item));
   } catch (error) {
@@ -180,6 +204,11 @@ ciotsRoutes.put("/:id", async (req, res, next) => {
           serie: cte.serie,
           emitenteCnpj: cte.emitenteCnpj,
           emitenteNome: cte.emitenteNome,
+          emitenteNomeFantasia: cte.emitenteNomeFantasia,
+          emitenteInscricaoEstadual: cte.emitenteInscricaoEstadual,
+          emitenteEndereco: cte.emitenteEndereco,
+          emitenteCidade: cte.emitenteCidade,
+          emitenteUf: cte.emitenteUf,
           remetenteCnpj: cte.remetenteCnpj,
           remetenteNome: cte.remetenteNome,
           destinatarioCnpj: cte.destinatarioCnpj,
@@ -195,7 +224,10 @@ ciotsRoutes.put("/:id", async (req, res, next) => {
           pesoKg: cte.pesoKg,
           valorMercadoria: cte.valorMercadoria,
           valorFrete: cte.valorFrete,
+          valorPedagio: cte.valorPedagio,
           xmlUrl: cte.xmlUrl || null,
+          arquivoNome: cte.arquivoNome || "",
+          dataEmissao: cte.dataEmissao ? new Date(`${cte.dataEmissao}T00:00:00.000Z`) : null,
         })),
       };
     }
@@ -231,6 +263,7 @@ ciotsRoutes.put("/:id", async (req, res, next) => {
     const item = await prisma.ciot.update({
       where: { id: req.params.id },
       data,
+      include: { ctes: true },
     });
 
     res.json(serializeCiot(item));
