@@ -229,6 +229,11 @@ interface DocumentoAbastecimentoInterpretado {
 
 type BatchStatus = "COMPLETO" | "PENDENTE" | "INVALIDO" | "IMPORTADO" | "ERRO";
 
+const MAX_XML_FILES = 1000;
+const XML_READ_BATCH_SIZE = 20;
+const XML_IMPORT_BATCH_SIZE = 50;
+const XML_REQUEST_TIMEOUT_MS = 600_000;
+
 interface XmlProdutoInterpretado {
   codigo: string;
   ean: string;
@@ -503,73 +508,106 @@ function BatchXmlDialog({
       return;
     }
 
-    if (files.length > 500) {
-      toast.error("Selecione no máximo 500 XMLs por lote.");
+    if (files.length > MAX_XML_FILES) {
+      toast.error(`Selecione no máximo ${MAX_XML_FILES} XMLs.`);
       return;
     }
 
     setReading(true);
+    setItems([]);
     setProgress({ current: 0, total: files.length });
 
+    const allRows: BatchXmlRow[] = [];
+    let totalCompletos = 0;
+    let totalPendentes = 0;
+    let totalInvalidos = 0;
+    let totalJaCadastrados = 0;
+    const produtosCriadosAutomaticamente = new Set<string>();
+
     try {
-      const formData = new FormData();
-      formData.append(
-        "modoDuplicidade",
-        correcaoSincronizacao ? "SINCRONIZAR" : "OCULTAR",
-      );
-      files.forEach((file) => formData.append("arquivos", file));
+      for (
+        let batchStart = 0;
+        batchStart < files.length;
+        batchStart += XML_READ_BATCH_SIZE
+      ) {
+        const batchFiles = files.slice(
+          batchStart,
+          batchStart + XML_READ_BATCH_SIZE,
+        );
 
-      const response = await api.post<{
-        arquivos: BatchXmlApiItem[];
-        resumo: {
-          quantidade: number;
-          completos: number;
-          pendentes: number;
-          invalidos: number;
-          jaCadastrados: number;
-          litros: number;
-          valor: number;
-        };
-      }>("/abastecimentos/xml/interpretar", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        onUploadProgress: (event) => {
-          if (!event.total) return;
-          const current = Math.max(
-            1,
-            Math.round((event.loaded / event.total) * files.length),
-          );
-          setProgress({ current, total: files.length });
-        },
-      });
+        const formData = new FormData();
+        formData.append(
+          "modoDuplicidade",
+          correcaoSincronizacao ? "SINCRONIZAR" : "OCULTAR",
+        );
+        batchFiles.forEach((file) => formData.append("arquivos", file));
 
-      const rows = response.data.arquivos.map(convertApiItem);
-      setItems(rows);
-      setProgress({ current: files.length, total: files.length });
+        const response = await api.post<{
+          arquivos: BatchXmlApiItem[];
+          resumo: {
+            quantidade: number;
+            completos: number;
+            pendentes: number;
+            invalidos: number;
+            jaCadastrados: number;
+            litros: number;
+            valor: number;
+          };
+        }>("/abastecimentos/xml/interpretar", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+          timeout: XML_REQUEST_TIMEOUT_MS,
+        });
 
-      const criadosAutomaticamente = new Set(
-        rows.flatMap((row) =>
+        const rows = response.data.arquivos.map((item, index) =>
+          convertApiItem(item, batchStart + index),
+        );
+
+        allRows.push(...rows);
+        setItems([...allRows]);
+
+        totalCompletos += response.data.resumo.completos;
+        totalPendentes += response.data.resumo.pendentes;
+        totalInvalidos += response.data.resumo.invalidos;
+        totalJaCadastrados += response.data.resumo.jaCadastrados;
+
+        rows.forEach((row) => {
           row.produtos
             .filter((produto) => produto.criadoAutomaticamente)
-            .map((produto) => produto.produtoId),
-        ),
-      ).size;
+            .forEach((produto) =>
+              produtosCriadosAutomaticamente.add(produto.produtoId),
+            );
+        });
+
+        setProgress({
+          current: Math.min(batchStart + batchFiles.length, files.length),
+          total: files.length,
+        });
+      }
 
       const duplicatesMessage = correcaoSincronizacao
-        ? `${response.data.resumo.jaCadastrados} correção(ões) de sincronização encontrada(s).`
-        : `${response.data.resumo.jaCadastrados} já cadastrado(s) ocultado(s).`;
+        ? `${totalJaCadastrados} correção(ões) de sincronização encontrada(s).`
+        : `${totalJaCadastrados} já cadastrado(s) ocultado(s).`;
 
       toast.success(
-        `${response.data.resumo.completos} pronto(s), ${response.data.resumo.pendentes} pendente(s), ${response.data.resumo.invalidos} inválido(s) e ${duplicatesMessage}${
-          criadosAutomaticamente
-            ? ` ${criadosAutomaticamente} produto(s) de combustível cadastrado(s) automaticamente.`
+        `${totalCompletos} pronto(s), ${totalPendentes} pendente(s), ${totalInvalidos} inválido(s) e ${duplicatesMessage}${
+          produtosCriadosAutomaticamente.size
+            ? ` ${produtosCriadosAutomaticamente.size} produto(s) de combustível cadastrado(s) automaticamente.`
             : ""
         }`,
       );
     } catch (error: any) {
       console.error(error);
+
+      const processed = allRows.length;
+      const timeoutMessage =
+        error?.code === "ECONNABORTED"
+          ? `O lote excedeu o tempo máximo de 10 minutos. ${processed} XML(s) já processado(s) foram mantidos na conferência.`
+          : null;
+
       toast.error(
-        error?.response?.data?.message ??
-          "Não foi possível interpretar o lote de XMLs.",
+        timeoutMessage ??
+          error?.response?.data?.message ??
+          `Não foi possível interpretar um dos lotes. ${processed} XML(s) já processado(s) foram mantidos.`,
       );
     } finally {
       setReading(false);
@@ -665,68 +703,98 @@ function BatchXmlDialog({
         })),
       }));
 
-      const response = await api.post<{
-        resultados: Array<{
-          indice: number;
-          chaveNfe: string;
-          acao: "CRIADO" | "ATUALIZADO" | "IGNORADO" | "ERRO";
-          erro?: string;
-        }>;
-        resumo: {
-          total: number;
-          criados: number;
-          atualizados: number;
-          ignorados: number;
-          erros: number;
-        };
-      }>("/abastecimentos/xml/importar-lote", {
-        politicaDuplicidade: correcaoSincronizacao ? "ATUALIZAR" : "IGNORAR",
-        itens: payload,
-      });
+      const failedIds = new Set<string>();
+      const successfulIds = new Set<string>();
+      const summary = {
+        criados: 0,
+        atualizados: 0,
+        ignorados: 0,
+        erros: 0,
+      };
 
-      const failedIds = new Set(
-        response.data.resultados
-          .filter((result) => result.acao === "ERRO")
-          .map((result) => validItems[result.indice]?.id)
-          .filter((id): id is string => Boolean(id)),
-      );
+      for (
+        let batchStart = 0;
+        batchStart < payload.length;
+        batchStart += XML_IMPORT_BATCH_SIZE
+      ) {
+        const batchPayload = payload.slice(
+          batchStart,
+          batchStart + XML_IMPORT_BATCH_SIZE,
+        );
+        const batchItems = validItems.slice(
+          batchStart,
+          batchStart + XML_IMPORT_BATCH_SIZE,
+        );
+
+        const response = await api.post<{
+          resultados: Array<{
+            indice: number;
+            chaveNfe: string;
+            acao: "CRIADO" | "ATUALIZADO" | "IGNORADO" | "ERRO";
+            erro?: string;
+          }>;
+          resumo: {
+            total: number;
+            criados: number;
+            atualizados: number;
+            ignorados: number;
+            erros: number;
+          };
+        }>("/abastecimentos/xml/importar-lote", {
+          politicaDuplicidade: correcaoSincronizacao ? "ATUALIZAR" : "IGNORAR",
+          itens: batchPayload,
+        }, {
+          timeout: XML_REQUEST_TIMEOUT_MS,
+        });
+
+        summary.criados += response.data.resumo.criados;
+        summary.atualizados += response.data.resumo.atualizados;
+        summary.ignorados += response.data.resumo.ignorados;
+        summary.erros += response.data.resumo.erros;
+
+        response.data.resultados.forEach((result) => {
+          const item = batchItems[result.indice];
+          if (!item) return;
+
+          if (result.acao === "ERRO") {
+            failedIds.add(item.id);
+          } else {
+            successfulIds.add(item.id);
+          }
+        });
+
+        setProgress({
+          current: Math.min(batchStart + batchPayload.length, payload.length),
+          total: payload.length,
+        });
+      }
 
       setItems((current) =>
         current
-          .filter((item) => {
-            const wasSubmitted = validItems.some((valid) => valid.id === item.id);
-            return !wasSubmitted || failedIds.has(item.id);
-          })
+          .filter((item) => !successfulIds.has(item.id))
           .map((item) =>
             failedIds.has(item.id)
               ? {
                   ...item,
                   status: "ERRO" as const,
-                  importMessage:
-                    response.data.resultados.find(
-                      (result) => validItems[result.indice]?.id === item.id,
-                    )?.erro || "Falha na importação.",
+                  importMessage: "Falha na importação deste XML.",
                 }
               : item,
           ),
       );
 
-      setProgress({
-        current: validItems.length,
-        total: validItems.length,
-      });
-
       await onImported();
 
-      const resumo = response.data.resumo;
       toast.success(
-        `${resumo.criados} novo(s), ${resumo.atualizados} sincronizado(s) e ${resumo.erros} com erro. Os concluídos foram removidos da conferência; permaneceram apenas os incompletos ou com falha.`,
+        `${summary.criados} novo(s), ${summary.atualizados} sincronizado(s), ${summary.ignorados} ignorado(s) e ${summary.erros} com erro. Os concluídos foram removidos da conferência.`,
       );
     } catch (error: any) {
       console.error(error);
       toast.error(
-        error?.response?.data?.message ??
-          "Não foi possível importar os abastecimentos.",
+        error?.code === "ECONNABORTED"
+          ? "Um lote excedeu o tempo máximo de 10 minutos. Os lotes anteriores foram mantidos."
+          : error?.response?.data?.message ??
+              "Não foi possível importar os abastecimentos.",
       );
     } finally {
       setImporting(false);

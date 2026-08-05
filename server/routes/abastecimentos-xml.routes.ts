@@ -14,7 +14,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 8 * 1024 * 1024,
-    files: 500,
+    files: 1000,
   },
 });
 
@@ -22,7 +22,7 @@ export const abastecimentosXmlRoutes = Router();
 
 abastecimentosXmlRoutes.post(
   "/interpretar",
-  upload.array("arquivos", 500),
+  upload.array("arquivos", 1000),
   async (req, res, next) => {
     try {
       const files = (req.files ?? []) as Express.Multer.File[];

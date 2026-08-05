@@ -337,8 +337,8 @@ export const abastecimentosService = {
       throw new AppError(400, "Nenhum abastecimento foi enviado para importação.");
     }
 
-    if (inputs.length > 500) {
-      throw new AppError(400, "Importe no máximo 500 abastecimentos por lote.");
+    if (inputs.length > 1000) {
+      throw new AppError(400, "Importe no máximo 1000 abastecimentos por lote.");
     }
 
     const repeatedInBatch = new Set<string>();
