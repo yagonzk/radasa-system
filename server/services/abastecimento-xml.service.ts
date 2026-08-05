@@ -102,22 +102,47 @@ function noteTexts(infNfe: any) {
 }
 
 function parseOdometerCandidate(raw: string) {
-  const cleaned = raw.trim().replace(/\s/g, "");
+  const cleaned = raw
+    .trim()
+    .replace(/\s/g, "")
+    .replace(/[^0-9.,]/g, "");
+
   if (!cleaned) return null;
 
-  // O número após o rótulo KM/ODÔMETRO pode vir como 231.481,0.
-  // Para hodômetro, a parte decimal não é relevante.
-  const integerPart = cleaned.split(",")[0];
-  const digits = onlyDigits(integerPart || cleaned);
-  const value = Number(digits);
+  let value: number;
+
+  if (cleaned.includes(",")) {
+    // Formatos brasileiros:
+    // 485.869,8 -> 485869
+    // 485869,8  -> 485869
+    const integerPart = cleaned.split(",")[0];
+    value = Number(onlyDigits(integerPart));
+  } else if (cleaned.includes(".")) {
+    const parts = cleaned.split(".");
+    const decimalPart = parts.at(-1) ?? "";
+
+    if (parts.length === 2 && decimalPart.length <= 2) {
+      // Formato decimal usado por alguns XMLs:
+      // 485869.8 -> 485869
+      value = Math.trunc(Number(cleaned));
+    } else {
+      // Ponto como separador de milhar:
+      // 485.869 -> 485869
+      value = Number(onlyDigits(cleaned));
+    }
+  } else {
+    value = Number(cleaned);
+  }
 
   if (!Number.isFinite(value)) return null;
 
   // 0 e 1 são usados por vários postos como preenchimento genérico.
   if (value < 100) return null;
-  if (value > 99_999_999) return null;
 
-  return value;
+  // Evita aceitar valores claramente incompatíveis com odômetros de frota.
+  if (value > 1_999_999) return null;
+
+  return Math.trunc(value);
 }
 
 function normalizePlate(value: unknown) {

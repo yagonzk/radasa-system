@@ -208,7 +208,7 @@ async function importarItem(
       where: { abastecimentoId: existing.id },
     });
 
-    const updated = await tx.abastecimento.update({
+    const updatedItem = await tx.abastecimento.update({
       where: { id: existing.id },
       data: {
         ...data,
@@ -219,7 +219,7 @@ async function importarItem(
 
     return {
       acao: "ATUALIZADO" as const,
-      item: serialize(updated),
+      item: serialize(updatedItem),
     };
   }
 

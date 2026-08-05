@@ -319,6 +319,13 @@ interface BatchXmlApiItem {
   documento: XmlDocumentoInterpretado | null;
   sugestoes: XmlSugestoes | null;
   xmlUrl: string | null;
+  jaCadastrado?: boolean;
+  existente?: {
+    id: string;
+    clienteId: string;
+    veiculoId: string;
+    hodometro: number;
+  } | null;
 }
 
 interface BatchXmlRow {
@@ -329,6 +336,7 @@ interface BatchXmlRow {
   pendencias: string[];
   documento: XmlDocumentoInterpretado | null;
   xmlUrl: string | null;
+  jaCadastrado: boolean;
   clienteId: string;
   veiculoId: string;
   hodometro: string;
@@ -363,8 +371,7 @@ function BatchXmlDialog({
   const [reading, setReading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [duplicatePolicy, setDuplicatePolicy] =
-    useState<"IGNORAR" | "ATUALIZAR">("IGNORAR");
+  const [correcaoSincronizacao, setCorrecaoSincronizacao] = useState(false);
   const [batchSearch, setBatchSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
     "TODOS" | "COMPLETO" | "PENDENTE" | "INVALIDO" | "IMPORTADO" | "ERRO"
@@ -379,6 +386,7 @@ function BatchXmlDialog({
       setReading(false);
       setImporting(false);
       setDragging(false);
+      setCorrecaoSincronizacao(false);
       setBatchSearch("");
       setStatusFilter("TODOS");
       setProgress({ current: 0, total: 0 });
@@ -457,11 +465,16 @@ function BatchXmlDialog({
       pendencias: item.pendencias,
       documento: item.documento,
       xmlUrl: item.xmlUrl,
-      clienteId: item.sugestoes?.cliente?.id ?? "",
-      veiculoId: item.sugestoes?.veiculo?.id ?? "",
+      jaCadastrado: item.jaCadastrado ?? false,
+      clienteId:
+        item.sugestoes?.cliente?.id ?? item.existente?.clienteId ?? "",
+      veiculoId:
+        item.sugestoes?.veiculo?.id ?? item.existente?.veiculoId ?? "",
       hodometro: item.documento?.hodometro
         ? String(item.documento.hodometro)
-        : "",
+        : item.existente?.hodometro
+          ? String(item.existente.hodometro)
+          : "",
       produtos:
         item.sugestoes?.produtos.map((produto) => ({
           produtoXml: produto.produto,
@@ -500,6 +513,10 @@ function BatchXmlDialog({
 
     try {
       const formData = new FormData();
+      formData.append(
+        "modoDuplicidade",
+        correcaoSincronizacao ? "SINCRONIZAR" : "OCULTAR",
+      );
       files.forEach((file) => formData.append("arquivos", file));
 
       const response = await api.post<{
@@ -509,6 +526,7 @@ function BatchXmlDialog({
           completos: number;
           pendentes: number;
           invalidos: number;
+          jaCadastrados: number;
           litros: number;
           valor: number;
         };
@@ -536,8 +554,12 @@ function BatchXmlDialog({
         ),
       ).size;
 
+      const duplicatesMessage = correcaoSincronizacao
+        ? `${response.data.resumo.jaCadastrados} correção(ões) de sincronização encontrada(s).`
+        : `${response.data.resumo.jaCadastrados} já cadastrado(s) ocultado(s).`;
+
       toast.success(
-        `${response.data.resumo.completos} pronto(s), ${response.data.resumo.pendentes} pendente(s) e ${response.data.resumo.invalidos} inválido(s).${
+        `${response.data.resumo.completos} pronto(s), ${response.data.resumo.pendentes} pendente(s), ${response.data.resumo.invalidos} inválido(s) e ${duplicatesMessage}${
           criadosAutomaticamente
             ? ` ${criadosAutomaticamente} produto(s) de combustível cadastrado(s) automaticamente.`
             : ""
@@ -572,26 +594,16 @@ function BatchXmlDialog({
   };
 
   const importAll = async () => {
-    const invalidOdometers = items.filter(
-      (item) =>
-        item.documento &&
-        item.status !== "IMPORTADO" &&
-        (!item.hodometro.trim() || parseNumber(item.hodometro) <= 0),
-    );
-
-    if (invalidOdometers.length) {
-      toast.error(
-        `${invalidOdometers.length} item(ns) ainda precisam de um odômetro válido.`,
-      );
-      return;
-    }
-
     const validItems = items.filter(
-      (item) => item.status === "COMPLETO" && item.documento,
+      (item) =>
+        item.status === "COMPLETO" &&
+        item.documento &&
+        item.hodometro.trim() &&
+        parseNumber(item.hodometro) > 0,
     );
 
     if (!validItems.length) {
-      toast.error("Nenhum XML está completo para importação.");
+      toast.error("Nenhum XML completo está pronto para importação.");
       return;
     }
 
@@ -668,33 +680,35 @@ function BatchXmlDialog({
           erros: number;
         };
       }>("/abastecimentos/xml/importar-lote", {
-        politicaDuplicidade: duplicatePolicy,
+        politicaDuplicidade: correcaoSincronizacao ? "ATUALIZAR" : "IGNORAR",
         itens: payload,
       });
 
+      const failedIds = new Set(
+        response.data.resultados
+          .filter((result) => result.acao === "ERRO")
+          .map((result) => validItems[result.indice]?.id)
+          .filter((id): id is string => Boolean(id)),
+      );
+
       setItems((current) =>
-        current.map((item) => {
-          const index = validItems.findIndex((valid) => valid.id === item.id);
-          if (index < 0) return item;
-
-          const result = response.data.resultados.find(
-            (entry) => entry.indice === index,
-          );
-          if (!result) return item;
-
-          return {
-            ...item,
-            status: result.acao === "ERRO" ? "ERRO" : "IMPORTADO",
-            importMessage:
-              result.acao === "CRIADO"
-                ? "Abastecimento criado."
-                : result.acao === "ATUALIZADO"
-                  ? "Abastecimento atualizado."
-                  : result.acao === "IGNORADO"
-                    ? "NF-e já existente; registro ignorado."
-                    : result.erro || "Falha na importação.",
-          };
-        }),
+        current
+          .filter((item) => {
+            const wasSubmitted = validItems.some((valid) => valid.id === item.id);
+            return !wasSubmitted || failedIds.has(item.id);
+          })
+          .map((item) =>
+            failedIds.has(item.id)
+              ? {
+                  ...item,
+                  status: "ERRO" as const,
+                  importMessage:
+                    response.data.resultados.find(
+                      (result) => validItems[result.indice]?.id === item.id,
+                    )?.erro || "Falha na importação.",
+                }
+              : item,
+          ),
       );
 
       setProgress({
@@ -706,7 +720,7 @@ function BatchXmlDialog({
 
       const resumo = response.data.resumo;
       toast.success(
-        `${resumo.criados} criado(s), ${resumo.atualizados} atualizado(s), ${resumo.ignorados} ignorado(s) e ${resumo.erros} erro(s).`,
+        `${resumo.criados} novo(s), ${resumo.atualizados} sincronizado(s) e ${resumo.erros} com erro. Os concluídos foram removidos da conferência; permaneceram apenas os incompletos ou com falha.`,
       );
     } catch (error: any) {
       console.error(error);
@@ -834,7 +848,6 @@ function BatchXmlDialog({
   const invalidCount = items.filter(
     (item) => item.status === "INVALIDO" || item.status === "ERRO",
   ).length;
-  const importedCount = items.filter((item) => item.status === "IMPORTADO").length;
 
   const totalLiters = items.reduce(
     (sum, item) =>
@@ -879,8 +892,39 @@ function BatchXmlDialog({
           <Layers3 className="mb-3 h-10 w-10 text-primary" />
           <p className="font-semibold">Arraste os XMLs para esta área</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            O sistema lerá a nota completa, os produtos, a placa e o odômetro.
+            {correcaoSincronizacao
+              ? "XMLs já cadastrados serão exibidos e atualizarão o registro existente pela mesma chave da NF-e."
+              : "Notas já cadastradas serão ocultadas. Somente as completas serão importadas; as pendentes permanecerão para correção."}
           </p>
+
+          <button
+            type="button"
+            onClick={() => setCorrecaoSincronizacao((current) => !current)}
+            disabled={reading || importing}
+            className={`mt-4 flex w-full max-w-xl items-start gap-3 rounded-lg border p-3 text-left transition ${
+              correcaoSincronizacao
+                ? "border-primary bg-primary/10"
+                : "border-border bg-background/50 hover:border-primary/50"
+            }`}
+          >
+            <span
+              className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                correcaoSincronizacao
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-muted-foreground"
+              }`}
+            >
+              {correcaoSincronizacao ? <Check className="h-3.5 w-3.5" /> : null}
+            </span>
+            <span>
+              <span className="block text-sm font-semibold">
+                Correção de sincronização
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Ao reenviar a mesma chave, atualiza a nota existente sem criar duplicidade.
+              </span>
+            </span>
+          </button>
 
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <Button
@@ -957,34 +1001,6 @@ function BatchXmlDialog({
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
-              <div>
-                <p className="text-sm font-medium">NF-e já cadastrada</p>
-                <p className="text-xs text-muted-foreground">
-                  Escolha o comportamento para chaves de acesso duplicadas.
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={duplicatePolicy === "IGNORAR" ? "default" : "outline"}
-                  onClick={() => setDuplicatePolicy("IGNORAR")}
-                >
-                  Ignorar
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={duplicatePolicy === "ATUALIZAR" ? "default" : "outline"}
-                  onClick={() => setDuplicatePolicy("ATUALIZAR")}
-                >
-                  Atualizar
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                 <div className="relative min-w-[260px] flex-1">
                   <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1027,7 +1043,14 @@ function BatchXmlDialog({
                 <div key={item.id} className="rounded-xl border bg-card p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-semibold">{item.fileName}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-semibold">{item.fileName}</p>
+                        {item.jaCadastrado && (
+                          <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[11px] font-semibold text-blue-400">
+                            Correção de sincronização
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {item.documento
                           ? `NF ${item.documento.numero || "—"} • Série ${
@@ -1215,16 +1238,12 @@ function BatchXmlDialog({
                 Importando...
               </>
             ) : (
-              `Importar ${completeCount} abastecimento(s)`
+              correcaoSincronizacao
+                ? `Sincronizar ${completeCount} completo(s)`
+                : `Importar ${completeCount} completo(s)`
             )}
           </Button>
         </div>
-
-        {importedCount > 0 && (
-          <p className="text-right text-xs text-muted-foreground">
-            {importedCount} item(ns) processado(s) neste lote.
-          </p>
-        )}
       </DialogContent>
     </Dialog>
   );

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { prisma } from "../lib/prisma";
 import multer from "multer";
 import {
   interpretarAbastecimentoXml,
@@ -25,6 +26,11 @@ abastecimentosXmlRoutes.post(
   async (req, res, next) => {
     try {
       const files = (req.files ?? []) as Express.Multer.File[];
+      const modoDuplicidade =
+        String(req.body?.modoDuplicidade ?? "OCULTAR").toUpperCase() ===
+        "SINCRONIZAR"
+          ? "SINCRONIZAR"
+          : "OCULTAR";
 
       if (!files.length) {
         res.status(400).json({
@@ -33,8 +39,9 @@ abastecimentosXmlRoutes.post(
         return;
       }
 
-      const results = [];
+      const results: any[] = [];
       const keys = new Set<string>();
+      let jaCadastrados = 0;
 
       for (const file of files) {
         try {
@@ -56,6 +63,21 @@ abastecimentosXmlRoutes.post(
 
           keys.add(document.chaveNfe);
 
+          const existente = await prisma.abastecimento.findUnique({
+            where: { chaveNfe: document.chaveNfe },
+            select: {
+              id: true,
+              clienteId: true,
+              veiculoId: true,
+              hodometro: true,
+            },
+          });
+
+          if (existente) {
+            jaCadastrados += 1;
+            if (modoDuplicidade === "OCULTAR") continue;
+          }
+
           const sugestoes = await sugerirVinculosAbastecimento(document);
 
           const missing: string[] = [];
@@ -73,6 +95,15 @@ abastecimentosXmlRoutes.post(
             pendencias: Array.from(new Set(missing)),
             documento: document,
             sugestoes,
+            jaCadastrado: Boolean(existente),
+            existente: existente
+              ? {
+                  id: existente.id,
+                  clienteId: existente.clienteId,
+                  veiculoId: existente.veiculoId,
+                  hodometro: Number(existente.hodometro),
+                }
+              : null,
             xmlUrl: `data:${
               file.mimetype || "application/xml"
             };base64,${file.buffer.toString("base64")}`,
@@ -104,12 +135,15 @@ abastecimentosXmlRoutes.post(
             .length,
           invalidos: results.filter((item) => item.status === "INVALIDO")
             .length,
+          jaCadastrados,
           litros: results.reduce(
-            (sum, item) =>
+            (sum: number, item: any) =>
               sum +
               (item.documento?.produtos ?? []).reduce(
-                (productSum, product) =>
-                  productSum + Number(product.quantidade || 0),
+                (
+                  productSum: number,
+                  product: { quantidade?: number | string | null },
+                ) => productSum + Number(product.quantidade ?? 0),
                 0,
               ),
             0,
@@ -134,8 +168,7 @@ abastecimentosXmlRoutes.post("/importar-lote", async (req, res, next) => {
 
     if (!["IGNORAR", "ATUALIZAR"].includes(politica)) {
       res.status(400).json({
-        message:
-          "politicaDuplicidade deve ser IGNORAR ou ATUALIZAR.",
+        message: "politicaDuplicidade deve ser IGNORAR ou ATUALIZAR.",
       });
       return;
     }
