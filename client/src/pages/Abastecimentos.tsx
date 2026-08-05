@@ -2115,6 +2115,8 @@ export default function Abastecimentos() {
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [activeFilter, setActiveFilter] = useState<keyof Filters | null>(null);
   const [filterSearch, setFilterSearch] = useState("");
+  const [pageSize, setPageSize] = useState(15);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filteredItems = useMemo(() => {
     return [...items]
@@ -2151,6 +2153,23 @@ export default function Abastecimentos() {
       })
       .sort((a, b) => b.hodometro - a.hodometro || b.dataEmissao.localeCompare(a.dataEmissao));
   }, [clientes, filters, items, produtos, veiculos]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredItems.slice(start, start + pageSize);
+  }, [currentPage, filteredItems, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, pageSize]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const totals = useMemo(() => {
     const litros = filteredItems.reduce(
@@ -2351,7 +2370,7 @@ export default function Abastecimentos() {
               <tbody>
                 {filteredItems.length === 0 ? (
                   <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">Nenhum abastecimento encontrado.</td></tr>
-                ) : filteredItems.map((item) => {
+                ) : paginatedItems.map((item) => {
                   const cliente = clientes.find((entry) => entry.id === item.clienteId);
                   const veiculo = veiculos.find((entry) => entry.id === item.veiculoId);
                   const litros = (item.produtos ?? []).reduce((sum, produto) => sum + produto.quantidadeLitros, 0);
@@ -2381,7 +2400,54 @@ export default function Abastecimentos() {
             </table>
           </div>
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">{filteredItems.length} abastecimento(s) encontrado(s).</p>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <span>{filteredItems.length} abastecimento(s) encontrado(s).</span>
+
+            <label className="flex items-center gap-2">
+              <span>Notas por página</span>
+              <select
+                value={pageSize}
+                onChange={(event) => setPageSize(Number(event.target.value))}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+              >
+                {[15, 30, 60, 120, 240].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            >
+              Anterior
+            </Button>
+
+            <span className="min-w-[110px] text-center text-sm text-muted-foreground">
+              Página {currentPage} de {totalPages}
+            </span>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={currentPage >= totalPages}
+              onClick={() =>
+                setCurrentPage((page) => Math.min(totalPages, page + 1))
+              }
+            >
+              Próxima
+            </Button>
+          </div>
+        </div>
       </div>
 
       <BatchXmlDialog
