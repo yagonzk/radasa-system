@@ -218,6 +218,62 @@ function formFromItem(item: Ciot): FormState {
   };
 }
 
+
+function apiValidationMessage(error: any) {
+  const data = error?.response?.data;
+  const fallback = "Não foi possível salvar o CIOT.";
+
+  if (!data) return error?.message || fallback;
+
+  const details =
+    data.errors ??
+    data.erros ??
+    data.issues ??
+    data.details ??
+    data.error?.issues;
+
+  if (Array.isArray(details) && details.length) {
+    const messages = details
+      .map((item: any) => {
+        const path = Array.isArray(item?.path)
+          ? item.path.join(".")
+          : item?.campo ?? item?.field ?? item?.path ?? "";
+
+        const message =
+          item?.message ??
+          item?.mensagem ??
+          item?.erro ??
+          item?.reason ??
+          "valor inválido";
+
+        return path ? `${path}: ${message}` : String(message);
+      })
+      .filter(Boolean);
+
+    if (messages.length) {
+      return `${data.message ?? "Dados inválidos"} — ${messages.join(" | ")}`;
+    }
+  }
+
+  if (details && typeof details === "object") {
+    const messages = Object.entries(details)
+      .flatMap(([field, value]) => {
+        if (Array.isArray(value)) {
+          return value.map((message) => `${field}: ${String(message)}`);
+        }
+
+        return [`${field}: ${String(value)}`];
+      })
+      .filter(Boolean);
+
+    if (messages.length) {
+      return `${data.message ?? "Dados inválidos"} — ${messages.join(" | ")}`;
+    }
+  }
+
+  return data.message ?? data.error ?? fallback;
+}
+
 export default function CiotGerarPage() {
   const { items, create, update, remove } = useCiots();
   const { items: empresas } = useEmpresa();
@@ -675,31 +731,41 @@ export default function CiotGerarPage() {
       return;
     }
 
-    const payloadAntt = prepare ? buildPayload() : editing?.payloadAntt ?? null;
-    const data = {
-      clienteId: null,
+    const payloadAntt = prepare ? buildPayload() : editing?.payloadAntt ?? undefined;
+
+    // Não envie `null` em campos opcionais. Alguns validadores do backend
+    // aceitam string/objeto ausente, mas rejeitam explicitamente `null`.
+    const data: any = {
       empresaId: empresaContratante?.id ?? form.empresaId,
-      contratanteRazaoSocial: empresaContratante?.razaoSocial ?? editing?.contratanteRazaoSocial ?? "",
-      contratanteNomeFantasia: empresaContratante?.nomeFantasia ?? editing?.contratanteNomeFantasia ?? "",
-      contratanteCnpj: empresaContratante?.cnpj ?? editing?.contratanteCnpj ?? "",
-      contratadoRazaoSocial: form.contratadoRazaoSocial,
-      contratadoNomeFantasia: form.contratadoNomeFantasia,
-      contratadoCnpj: form.contratadoCnpj,
-      contratadoInscricaoEstadual: form.contratadoInscricaoEstadual,
-      contratadoEndereco: form.contratadoEndereco,
-      contratadoCidade: form.contratadoCidade,
-      contratadoUf: form.contratadoUf,
+      contratanteRazaoSocial:
+        empresaContratante?.razaoSocial ??
+        editing?.contratanteRazaoSocial ??
+        "",
+      contratanteNomeFantasia:
+        empresaContratante?.nomeFantasia ??
+        editing?.contratanteNomeFantasia ??
+        "",
+      contratanteCnpj: digits(
+        empresaContratante?.cnpj ?? editing?.contratanteCnpj ?? "",
+      ),
+      contratadoRazaoSocial: form.contratadoRazaoSocial.trim(),
+      contratadoNomeFantasia: form.contratadoNomeFantasia.trim(),
+      contratadoCnpj: digits(form.contratadoCnpj),
+      contratadoInscricaoEstadual:
+        form.contratadoInscricaoEstadual.trim(),
+      contratadoEndereco: form.contratadoEndereco.trim(),
+      contratadoCidade: form.contratadoCidade.trim(),
+      contratadoUf: form.contratadoUf.trim().toUpperCase(),
       motoristaId: form.motoristaId,
       veiculoId: form.veiculoId,
       tipoOperacao: form.tipoOperacao,
       status: prepare ? ("PRONTO_ENVIO" as const) : form.status,
-      rntrc: (empresaContratante?.rntrc ?? form.rntrc).trim(),
+      rntrc: digits(empresaContratante?.rntrc ?? form.rntrc),
       origemCidade: form.origemCidade.trim(),
-      origemUf: form.origemUf.toUpperCase(),
+      origemUf: form.origemUf.trim().toUpperCase(),
       destinoCidade: form.destinoCidade.trim(),
-      destinoUf: form.destinoUf.toUpperCase(),
+      destinoUf: form.destinoUf.trim().toUpperCase(),
       dataInicio: form.dataInicio,
-      dataFim: form.dataFim || null,
       naturezaCarga: form.naturezaCarga.trim(),
       pesoKg: decimal(form.pesoKg),
       valorMercadoria: decimal(form.valorMercadoria),
@@ -713,14 +779,24 @@ export default function CiotGerarPage() {
       cnpjsCargaFracionada: uniqueCnpjs(
         form.cnpjsCargaFracionada,
       ).join(", "),
-      observacoes: form.observacoes.trim() || null,
-      numeroCiot: editing?.numeroCiot ?? null,
-      codigoVerificador: editing?.codigoVerificador ?? null,
-      protocolo: editing?.protocolo ?? null,
-      mensagemRetorno: editing?.mensagemRetorno ?? null,
-      payloadAntt,
-      preparadoEm: prepare ? new Date().toISOString() : null,
       ctes: form.ctes,
+
+      ...(form.dataFim ? { dataFim: form.dataFim } : {}),
+      ...(form.observacoes.trim()
+        ? { observacoes: form.observacoes.trim() }
+        : {}),
+      ...(editing?.numeroCiot
+        ? { numeroCiot: editing.numeroCiot }
+        : {}),
+      ...(editing?.codigoVerificador
+        ? { codigoVerificador: editing.codigoVerificador }
+        : {}),
+      ...(editing?.protocolo ? { protocolo: editing.protocolo } : {}),
+      ...(editing?.mensagemRetorno
+        ? { mensagemRetorno: editing.mensagemRetorno }
+        : {}),
+      ...(payloadAntt !== undefined ? { payloadAntt } : {}),
+      ...(prepare ? { preparadoEm: new Date().toISOString() } : {}),
     };
 
     setSaving(true);
@@ -742,9 +818,16 @@ export default function CiotGerarPage() {
         setWizardOpen(false);
       }
     } catch (error: any) {
-      toast.error(
-        error?.response?.data?.message ?? "Não foi possível salvar o CIOT.",
-      );
+      console.error("Erro ao salvar/preparar CIOT:", {
+        status: error?.response?.status,
+        response: error?.response?.data,
+        requestData: data,
+        error,
+      });
+
+      toast.error(apiValidationMessage(error), {
+        duration: 12000,
+      });
     } finally {
       setSaving(false);
     }
