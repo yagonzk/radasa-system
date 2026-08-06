@@ -401,6 +401,7 @@ export default function Romaneios() {
         toast.error(`Nenhuma linha foi identificada pelo parser ${response.data.documento.parserVersion}.`);
         return;
       }
+      setManualOpen(false);
       setReview({ result: response.data, file });
       const criados = response.data.sugestoes.clientesCriados + response.data.sugestoes.produtosCriados;
       toast.success(
@@ -631,10 +632,6 @@ export default function Romaneios() {
           <div className="flex flex-wrap gap-2">
             <input ref={importInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={(event) => void handleImport(event.target.files?.[0])} />
             <input ref={bulkImportInputRef} type="file" accept=".pdf,application/pdf" multiple className="hidden" onChange={(event) => void handleBulkImport(event.target.files)} />
-            <Button variant="outline" disabled={importing} onClick={() => importInputRef.current?.click()}>
-              {importing ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-              {importing ? "Lendo PDF..." : "Importar PDF"}
-            </Button>
             <Button variant="outline" disabled={bulkImporting} onClick={() => bulkImportInputRef.current?.click()}>
               {bulkImporting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Files className="mr-2 h-4 w-4" />}
               {bulkImporting ? "Lendo arquivos..." : "Importar em massa"}
@@ -1008,6 +1005,18 @@ export default function Romaneios() {
       <Dialog open={manualOpen} onOpenChange={(open) => !open && setManualOpen(false)}>
         <DialogContent className="max-h-[94vh] max-w-5xl overflow-y-auto">
           <DialogHeader><DialogTitle>{editing ? "Editar Romaneio" : "Novo Romaneio"}</DialogTitle></DialogHeader>
+          {!editing && (
+            <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold">Preencher pelo PDF do romaneio</p>
+                <p className="text-sm text-muted-foreground">Importe o arquivo para identificar automaticamente clientes, produtos, notas fiscais, valores e cobranças.</p>
+              </div>
+              <Button type="button" variant="outline" className="shrink-0" disabled={importing} onClick={() => importInputRef.current?.click()}>
+                {importing ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                {importing ? "Lendo PDF..." : "Importar PDF"}
+              </Button>
+            </div>
+          )}
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1"><Label>Data *</Label><Input type="date" value={manual.data} onChange={(e) => setManual((c) => ({ ...c, data: e.target.value }))} /></div>
             <div className="space-y-1"><Label>Placa</Label><Input value={manual.placa} onChange={(e) => setManual((c) => ({ ...c, placa: e.target.value.toUpperCase() }))} /></div>
