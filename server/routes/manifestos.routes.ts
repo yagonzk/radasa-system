@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { crudRoutes } from "./crud.routes";
 import { manifestosController } from "../controllers/manifestos.controller";
+import { manifestosService } from "../services/manifestos.service";
 import { manifestoBody } from "../validators/schemas";
 import {
   interpretarManifestoPdf,
@@ -37,14 +38,34 @@ manifestosRoutes.post(
       const sugestoes = await sugerirVinculosManifestoPdf(documento);
       const pendencias: string[] = [];
 
-      if (!documento.dataEmissao) pendencias.push("data do manifesto");
-      if (!sugestoes.cliente) pendencias.push("cliente");
-      if (!documento.produtos.length) pendencias.push("produtos");
-      if (sugestoes.produtos.some((item) => !item.cadastro)) {
-        pendencias.push("associação de produtos");
+      if (!documento.dataEmissao) pendencias.push("data do romaneio");
+      if (!documento.produtos.length) pendencias.push("itens do romaneio");
+      if (documento.produtos.some((item) => !item.clienteCodigo || !item.clienteNome)) {
+        pendencias.push("cliente de um ou mais itens");
       }
 
       res.json({ documento, sugestoes, pendencias });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+manifestosRoutes.patch(
+  "/:id/produtos/:produtoId/pagamento",
+  async (req, res, next) => {
+    try {
+      if (typeof req.body?.pago !== "boolean") {
+        res.status(400).json({ message: "Informe se o item foi pago." });
+        return;
+      }
+      res.json(
+        await manifestosService.updatePagamentoCliente(
+          req.params.id,
+          req.params.produtoId,
+          req.body.pago,
+        ),
+      );
     } catch (error) {
       next(error);
     }

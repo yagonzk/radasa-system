@@ -41,7 +41,7 @@ export interface Fechamento { id: string; motoristaId: string; dataInicio: strin
 export interface Veiculo { id: string; placa: string; modelo?: string; quantidadePneus?: number; quantidadeEstepes?: number; createdAt: string; }
 export interface Viagem { id: string; placa: string; motoristaId: string; valorFrete: number; dataManifesto: string; cidadeEntrega: string; distanciaKm: number; valorPedagio: number; valorDiaria: number; valorAbastecimento: number; valorChapa: number; createdAt: string; }
 export type TipoManifesto = "Bonificação - Lebrinha" | "Acertar c/ Lebrinha" | "Receber c/ Cliente";
-export interface ManifestoProduto { produtoId: string; quantidade: number; valorUnitario: number; valorTotal: number; tipoManifesto?: TipoManifesto; }
+export interface ManifestoProduto { id?: string; produtoId: string; clienteId?: string | null; romaneio?: string; notaFiscal?: string; serieNf?: string; instrucaoCobranca?: string; quantidade: number; valorUnitario: number; valorTotal: number; tipoManifesto?: TipoManifesto; pagoCliente?: boolean | null; }
 export interface ManifestoMetadata {
   transportadoraCodigo?: string;
   transportadoraNome?: string;
@@ -52,6 +52,8 @@ export interface ManifestoMetadata {
   notasFiscais?: string;
 }
 export interface Manifesto extends ManifestoMetadata { id: string; clienteId: string; dataManifesto: string; produtos: ManifestoProduto[]; tipoManifesto: TipoManifesto; pdfUrl?: string; createdAt: string; }
+export type RomaneioItem = ManifestoProduto;
+export type Romaneio = Manifesto;
 export interface AbastecimentoProduto { produtoId: string; quantidadeLitros: number; valorUnitario: number; valorTotal: number; }
 export interface Abastecimento {
   id: string;
@@ -306,12 +308,14 @@ export function useFechamentos() {
   return { ...crud, create, update };
 }
 
-export function useManifestos() {
-  const crud = useApiCrud<Manifesto>("manifestos", "Manifesto");
+export function useRomaneios() {
+  const crud = useApiCrud<Manifesto>("romaneios", "Romaneio");
   const create = useCallback((clienteId: string, dataManifesto: string, produtos: ManifestoProduto[], tipoManifesto: TipoManifesto, pdfUrl?: string, metadata: ManifestoMetadata = {}) => crud.create({ clienteId, dataManifesto, produtos, tipoManifesto, pdfUrl, ...metadata }), [crud.create]);
   const update = useCallback((id: string, clienteId: string, dataManifesto: string, produtos: ManifestoProduto[], tipoManifesto: TipoManifesto, pdfUrl?: string, metadata: ManifestoMetadata = {}) => crud.update(id, { clienteId, dataManifesto, produtos, tipoManifesto, pdfUrl, ...metadata }), [crud.update]);
   return { ...crud, create, update };
 }
+
+export const useManifestos = useRomaneios;
 
 
 export function useEstoque() {

@@ -110,6 +110,7 @@ model Cliente {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   manifestos     Manifesto[]
+  manifestoProdutos ManifestoProduto[]
   abastecimentos Abastecimento[]
   ciots          Ciot[]
 
@@ -244,15 +245,23 @@ model ManifestoProduto {
   id            String         @id @default(cuid())
   manifestoId   String
   produtoId     String
+  clienteId     String?
+  romaneio      String         @default("")
+  notaFiscal    String         @default("")
+  serieNf       String         @default("")
+  instrucaoCobranca String     @default("") @db.Text
   quantidade    Decimal        @db.Decimal(14, 3)
   valorUnitario Decimal        @db.Decimal(14, 2)
   valorTotal    Decimal        @db.Decimal(14, 2)
   tipoManifesto TipoManifesto?
+  pagoCliente   Boolean?
   manifesto     Manifesto      @relation(fields: [manifestoId], references: [id], onDelete: Cascade)
   produto       Produto        @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  cliente       Cliente?       @relation(fields: [clienteId], references: [id], onDelete: Restrict)
 
   @@index([manifestoId])
   @@index([produtoId])
+  @@index([clienteId])
   @@map("manifesto_produtos")
 }
 

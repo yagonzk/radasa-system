@@ -11,6 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus, FileDown, FileText, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import FechamentoForm from "@/components/fechamentos/FechamentoForm";
@@ -26,6 +33,7 @@ export default function Fechamentos() {
   const [detalheFechamento, setDetalheFechamento] = useState<Fechamento | null>(null);
 
   // Filters
+  const [filterMotorista, setFilterMotorista] = useState("todos");
   const [filterInicio, setFilterInicio] = useState("");
   const [filterFim, setFilterFim] = useState("");
 
@@ -36,11 +44,12 @@ export default function Fechamentos() {
 
   const filteredFechamentos = useMemo(() => {
     return fechamentos.filter((f) => {
+      if (filterMotorista !== "todos" && f.motoristaId !== filterMotorista) return false;
       if (filterInicio && f.dataInicio < filterInicio) return false;
       if (filterFim && f.dataFim > filterFim) return false;
       return true;
     });
-  }, [fechamentos, filterInicio, filterFim]);
+  }, [fechamentos, filterMotorista, filterInicio, filterFim]);
 
   const handleOpenCreate = () => {
     if (motoristasAtivos.length === 0) {
@@ -85,6 +94,7 @@ export default function Fechamentos() {
   };
 
   const handleClearFilters = () => {
+    setFilterMotorista("todos");
     setFilterInicio("");
     setFilterFim("");
   };
@@ -115,6 +125,26 @@ export default function Fechamentos() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Motorista
+                </Label>
+                <Select value={filterMotorista} onValueChange={setFilterMotorista}>
+                  <SelectTrigger className="w-56">
+                    <SelectValue placeholder="Todos os motoristas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os motoristas</SelectItem>
+                    {[...motoristas]
+                      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+                      .map((motorista) => (
+                        <SelectItem key={motorista.id} value={motorista.id}>
+                          {motorista.nome}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Filtrar de
                 </Label>
                 <DatePicker
@@ -135,7 +165,7 @@ export default function Fechamentos() {
                   placeholder="Selecione uma data"
                 />
               </div>
-              {(filterInicio || filterFim) && (
+              {(filterMotorista !== "todos" || filterInicio || filterFim) && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -240,7 +270,7 @@ export default function Fechamentos() {
 
         {filteredFechamentos.length > 0 && (
           <p className="mt-3 text-sm text-muted-foreground">
-            {filteredFechamentos.length} fechamento(s) no período selecionado.
+            {filteredFechamentos.length} fechamento(s) nos filtros selecionados.
           </p>
         )}
       </div>

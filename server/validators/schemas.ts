@@ -117,13 +117,13 @@ export const fechamentoBody = z.object({
 });
 export const tipoManifesto = z.enum(["Bonificação - Lebrinha", "Acertar c/ Lebrinha", "Receber c/ Cliente"]);
 export const manifestoProdutoBody = z.object({
-  produtoId: id, quantidade: money, valorUnitario: money, valorTotal: money, tipoManifesto: tipoManifesto.optional(),
+  id: id.optional(), produtoId: id, clienteId: id.optional().nullable(), romaneio: z.string().max(80).optional().default(""), notaFiscal: z.string().max(80).optional().default(""), serieNf: z.string().max(30).optional().default(""), instrucaoCobranca: z.string().max(2000).optional().default(""), quantidade: money, valorUnitario: money, valorTotal: money, tipoManifesto: tipoManifesto.optional(), pagoCliente: z.boolean().nullable().optional().default(null),
 });
 export const manifestoBody = z.object({
   id: id.optional(),
   clienteId: id,
   dataManifesto: dateOnly,
-  produtos: z.array(manifestoProdutoBody),
+  produtos: z.array(manifestoProdutoBody).min(1, "Adicione pelo menos um item ao romaneio."),
   tipoManifesto,
   pdfUrl: z.string().max(30_000_000).optional().or(z.literal("")),
   transportadoraCodigo: z.string().max(80).optional().default(""),

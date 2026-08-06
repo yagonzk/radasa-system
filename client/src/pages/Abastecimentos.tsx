@@ -2446,8 +2446,6 @@ export default function Abastecimentos() {
                     const options = filterOptions(key).filter((option) => normalize(option).includes(normalize(filterSearch)));
                     return (
                       <th key={key} className={`px-4 py-3 font-semibold text-muted-foreground ${column.align === "right" ? "text-right" : "text-left"}`}>
-                        <div className={`flex items-center gap-1 ${column.align === "right" ? "justify-end" : ""}`}>
-                          <span>{column.label}</span>
                           <Popover
                             open={activeFilter === key}
                             onOpenChange={(open) => {
@@ -2456,7 +2454,12 @@ export default function Abastecimentos() {
                             }}
                           >
                             <PopoverTrigger asChild>
-                              <button type="button" className={active ? "text-primary" : "text-muted-foreground"} title={`Filtrar por ${column.label}`}>
+                              <button
+                                type="button"
+                                className={`flex w-full items-center gap-1 rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary ${column.align === "right" ? "justify-end" : "justify-start"} ${active ? "text-primary" : "text-muted-foreground"}`}
+                                title={`Filtrar por ${column.label}`}
+                              >
+                                <span>{column.label}</span>
                                 <ChevronDown className="h-4 w-4" />
                               </button>
                             </PopoverTrigger>
@@ -2497,7 +2500,6 @@ export default function Abastecimentos() {
                               </div>
                             </PopoverContent>
                           </Popover>
-                        </div>
                       </th>
                     );
                   })}
