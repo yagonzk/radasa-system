@@ -241,7 +241,7 @@ export const abastecimentosService = {
   async list() {
     return (await prisma.abastecimento.findMany({
       include,
-      orderBy: [{ hodometro: "desc" }, { dataEmissao: "desc" }, { createdAt: "desc" }],
+      orderBy: [{ dataEmissao: "desc" }, { createdAt: "desc" }, { hodometro: "desc" }],
     })).map(serialize);
   },
 

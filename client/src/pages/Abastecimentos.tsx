@@ -2151,7 +2151,7 @@ export default function Abastecimentos() {
         if (filters.hodometro && !normalize(formatOdometro(item.hodometro)).includes(normalize(filters.hodometro))) return false;
         return true;
       })
-      .sort((a, b) => b.hodometro - a.hodometro || b.dataEmissao.localeCompare(a.dataEmissao));
+      .sort((a, b) => b.dataEmissao.localeCompare(a.dataEmissao) || b.hodometro - a.hodometro);
   }, [clientes, filters, items, produtos, veiculos]);
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
