@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -61,6 +61,68 @@ function Field({ label, children }: FieldProps) {
     </div>
   );
 }
+
+type AnttComplementaryFields = {
+  idOperacaoTransporte: string;
+  distanciaPercorrida: string;
+  codigoMunicipioOrigem: string;
+  codigoMunicipioDestino: string;
+  cepOrigem: string;
+  cepDestino: string;
+  codigoNaturezaCarga: string;
+  codigoTipoCarga: string;
+  numeroEixos: string;
+  tipoPagamento: string;
+  cpfCnpjCreditado: string;
+  codigoInstituicaoFinanceira: string;
+  numeroAgencia: string;
+  numeroConta: string;
+  chavePix: string;
+  identificadorPix: string;
+  indPagamento: "0" | "1";
+  indAltoDesempenho: boolean;
+  indRetornoVazio: boolean;
+  composicaoVeicular: boolean;
+};
+
+type AnttChecklistItem = { key: string; label: string; ok: boolean };
+type PisoMinimoUi = {
+  aplicavel: boolean;
+  tabela: "A" | "C" | null;
+  codigoTipoCarga: number | null;
+  numeroEixos: number | null;
+  distanciaKm: number;
+  ccd: number | null;
+  cc: number | null;
+  valorPiso: number | null;
+  valorFrete: number;
+  diferenca: number | null;
+  abaixoDoPiso: boolean;
+  fundamento: string;
+};
+
+const emptyAnttFields: AnttComplementaryFields = {
+  idOperacaoTransporte: "",
+  distanciaPercorrida: "",
+  codigoMunicipioOrigem: "",
+  codigoMunicipioDestino: "",
+  cepOrigem: "",
+  cepDestino: "",
+  codigoNaturezaCarga: "",
+  codigoTipoCarga: "",
+  numeroEixos: "",
+  tipoPagamento: "6",
+  cpfCnpjCreditado: "",
+  codigoInstituicaoFinanceira: "",
+  numeroAgencia: "",
+  numeroConta: "",
+  chavePix: "",
+  identificadorPix: "",
+  indPagamento: "0",
+  indAltoDesempenho: false,
+  indRetornoVazio: false,
+  composicaoVeicular: false,
+};
 
 type FormState = {
   empresaId: string;
@@ -169,6 +231,24 @@ function decimalInput(value: number | string | null | undefined) {
 
 function digits(value: string) {
   return value.replace(/\D/g, "");
+}
+
+function inferAxlesFromVehicle(
+  quantidadePneus?: number,
+  quantidadeEstepes?: number,
+) {
+  const roadTires = Math.max(
+    0,
+    Number(quantidadePneus ?? 0) - Number(quantidadeEstepes ?? 0),
+  );
+
+  if (roadTires <= 4) return "2";
+  if (roadTires <= 10) return "3";
+  if (roadTires <= 14) return "4";
+  if (roadTires <= 18) return "5";
+  if (roadTires <= 22) return "6";
+  if (roadTires <= 26) return "7";
+  return "9";
 }
 
 function uniqueCnpjs(value: string) {
@@ -290,6 +370,11 @@ export default function CiotGerarPage() {
   const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [preparedPayload, setPreparedPayload] = useState<Record<string, unknown> | null>(null);
+  const [anttFields, setAnttFields] = useState<AnttComplementaryFields>(emptyAnttFields);
+  const [anttSending, setAnttSending] = useState(false);
+  const [simulating, setSimulating] = useState(false);
+  const [anttChecklist, setAnttChecklist] = useState<AnttChecklistItem[]>([]);
+  const [pisoMinimo, setPisoMinimo] = useState<PisoMinimoUi | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeItems = useMemo(
@@ -344,6 +429,25 @@ export default function CiotGerarPage() {
     (item) => item.id === form.motoristaId,
   );
   const selectedVeiculo = veiculos.find((item) => item.id === form.veiculoId);
+
+  useEffect(() => {
+    if (!selectedVeiculo) return;
+
+    const numeroEixos = inferAxlesFromVehicle(
+      selectedVeiculo.quantidadePneus,
+      selectedVeiculo.quantidadeEstepes,
+    );
+
+    setAnttFields((current) =>
+      current.numeroEixos === numeroEixos
+        ? current
+        : { ...current, numeroEixos },
+    );
+  }, [
+    selectedVeiculo?.id,
+    selectedVeiculo?.quantidadePneus,
+    selectedVeiculo?.quantidadeEstepes,
+  ]);
 
   const valorLiquido = useMemo(
     () =>
@@ -434,6 +538,34 @@ export default function CiotGerarPage() {
     [stepErrors],
   );
 
+  const complementaryFromItem = (item: Ciot): AnttComplementaryFields => {
+    const raw = (item.payloadAntt ?? {}) as any;
+    const saved = raw?.antt?.camposComplementares ?? raw?.camposComplementares ?? {};
+    return {
+      ...emptyAnttFields,
+      idOperacaoTransporte: String(saved.idOperacaoTransporte ?? ""),
+      distanciaPercorrida: saved.distanciaPercorrida ? String(saved.distanciaPercorrida) : "",
+      codigoMunicipioOrigem: saved.codigoMunicipioOrigem ? String(saved.codigoMunicipioOrigem) : "",
+      codigoMunicipioDestino: saved.codigoMunicipioDestino ? String(saved.codigoMunicipioDestino) : "",
+      cepOrigem: String(saved.cepOrigem ?? ""),
+      cepDestino: String(saved.cepDestino ?? ""),
+      codigoNaturezaCarga: saved.codigoNaturezaCarga ? String(saved.codigoNaturezaCarga) : "",
+      codigoTipoCarga: saved.codigoTipoCarga ? String(saved.codigoTipoCarga) : "",
+      numeroEixos: saved.numeroEixos ? String(saved.numeroEixos) : "",
+      tipoPagamento: String(saved.tipoPagamento ?? (/pix/i.test(item.formaPagamento ?? "") ? 6 : 6)),
+      cpfCnpjCreditado: String(saved.cpfCnpjCreditado ?? item.contratanteCnpj ?? ""),
+      codigoInstituicaoFinanceira: saved.codigoInstituicaoFinanceira ? String(saved.codigoInstituicaoFinanceira) : "",
+      numeroAgencia: String(saved.numeroAgencia ?? ""),
+      numeroConta: String(saved.numeroConta ?? ""),
+      chavePix: String(saved.chavePix ?? item.favorecidoPix ?? ""),
+      identificadorPix: String(saved.identificadorPix ?? ""),
+      indPagamento: String(saved.indPagamento ?? 0) === "1" ? "1" : "0",
+      indAltoDesempenho: Boolean(saved.indAltoDesempenho),
+      indRetornoVazio: Boolean(saved.indRetornoVazio),
+      composicaoVeicular: Boolean(saved.composicaoVeicular),
+    };
+  };
+
   const openManual = () => {
     setEditing(null);
     setForm({
@@ -441,14 +573,47 @@ export default function CiotGerarPage() {
       empresaId: empresaContratante?.id ?? "",
       rntrc: empresaContratante?.rntrc ?? "",
     });
+    setAnttFields({
+      ...emptyAnttFields,
+      cpfCnpjCreditado: digits(empresaContratante?.cnpj ?? ""),
+    });
+    setAnttChecklist([]);
+    setPisoMinimo(null);
     setStep(1);
     setChoiceOpen(false);
     setWizardOpen(true);
   };
 
+  const deleteDraft = async (item: Ciot) => {
+    if (item.status !== "RASCUNHO") {
+      toast.error("Somente CIOTs em rascunho podem ser excluídos.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Excluir o CIOT #${item.idSequencial ?? item.id}? Esta ação não poderá ser desfeita.`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await remove(item.id);
+      toast.success("Rascunho de CIOT excluído com sucesso.");
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.message ??
+          "Não foi possível excluir o rascunho do CIOT.",
+      );
+    }
+  };
+
   const openEdit = (item: Ciot) => {
     setEditing(item);
     setForm(formFromItem(item));
+    setAnttFields(complementaryFromItem(item));
+    const raw = (item.payloadAntt ?? {}) as any;
+    setAnttChecklist(raw?.antt?.checklist ?? []);
+    setPisoMinimo(raw?.antt?.pisoMinimo ?? null);
     setStep(1);
     setWizardOpen(true);
   };
@@ -504,6 +669,82 @@ export default function CiotGerarPage() {
     };
   };
 
+  const completeAnttFieldsAutomatically = async (
+    cte: CiotCte & {
+      origemCodigoIbge?: string;
+      origemCep?: string;
+      destinoCodigoIbge?: string;
+      destinoCep?: string;
+    },
+    current: AnttComplementaryFields = anttFields,
+  ) => {
+    const response = await api.post<{
+      codigoMunicipioOrigem: string;
+      codigoMunicipioDestino: string;
+      cepOrigem: string;
+      cepDestino: string;
+      distanciaPercorrida: number;
+      codigoTipoCarga: number;
+      codigoNaturezaCarga: string;
+      warnings: string[];
+    }>(
+      "/cte/complementar-antt",
+      {
+        origemCidade: cte.origemCidade,
+        origemUf: cte.origemUf,
+        origemCodigoIbge: cte.origemCodigoIbge,
+        origemCep: cte.origemCep,
+        destinoCidade: cte.destinoCidade,
+        destinoUf: cte.destinoUf,
+        destinoCodigoIbge: cte.destinoCodigoIbge,
+        destinoCep: cte.destinoCep,
+        produto: cte.produto,
+        ncm: cte.ncm,
+      },
+      { timeout: 45_000 },
+    );
+
+    const numeroEixos = selectedVeiculo
+      ? inferAxlesFromVehicle(
+          selectedVeiculo.quantidadePneus,
+          selectedVeiculo.quantidadeEstepes,
+        )
+      : current.numeroEixos;
+
+    const companyDocument = digits(empresaContratante?.cnpj ?? "");
+
+    const completed: AnttComplementaryFields = {
+      ...current,
+      distanciaPercorrida:
+        response.data.distanciaPercorrida > 0
+          ? String(response.data.distanciaPercorrida)
+          : current.distanciaPercorrida,
+      codigoMunicipioOrigem:
+        response.data.codigoMunicipioOrigem || current.codigoMunicipioOrigem,
+      codigoMunicipioDestino:
+        response.data.codigoMunicipioDestino || current.codigoMunicipioDestino,
+      cepOrigem: response.data.cepOrigem || current.cepOrigem,
+      cepDestino: response.data.cepDestino || current.cepDestino,
+      codigoNaturezaCarga:
+        response.data.codigoNaturezaCarga || current.codigoNaturezaCarga,
+      codigoTipoCarga: String(
+        response.data.codigoTipoCarga || current.codigoTipoCarga || 5,
+      ),
+      numeroEixos,
+      tipoPagamento: current.tipoPagamento || "6",
+      cpfCnpjCreditado: current.cpfCnpjCreditado || companyDocument,
+      chavePix:
+        current.chavePix || form.favorecidoPix.trim() || companyDocument,
+      identificadorPix:
+        current.identificadorPix ||
+        form.favorecidoPix.trim() ||
+        companyDocument,
+    };
+
+    setAnttFields(completed);
+    return { fields: completed, warnings: response.data.warnings ?? [] };
+  };
+
   const importFiles = async (files?: FileList | null) => {
     if (!files?.length) return;
 
@@ -528,6 +769,10 @@ export default function CiotGerarPage() {
             fileName: string;
             valorPedagio: number;
             dataEmissao: string;
+            origemCodigoIbge?: string;
+            origemCep?: string;
+            destinoCodigoIbge?: string;
+            destinoCep?: string;
           }
         >;
         erros?: Array<{ fileName: string; message: string }>;
@@ -584,6 +829,18 @@ export default function CiotGerarPage() {
       });
 
       setEditing(null);
+      const autoResult = await completeAnttFieldsAutomatically(
+        primeiroCte,
+        {
+          ...emptyAnttFields,
+          tipoPagamento: "6",
+          cpfCnpjCreditado: digits(empresaContratante.cnpj),
+          chavePix: digits(empresaContratante.cnpj),
+          identificadorPix: digits(empresaContratante.cnpj),
+        },
+      );
+      setAnttChecklist([]);
+      setPisoMinimo(null);
       setStep(1);
       setChoiceOpen(false);
       setWizardOpen(true);
@@ -594,8 +851,15 @@ export default function CiotGerarPage() {
             .map((item) => `${item.fileName}: ${item.message}`)
             .join(", "),
         );
+      } else if (autoResult.warnings.length) {
+        toast.warning(
+          `CT-e importado. ${autoResult.warnings.join(" ")}`,
+          { duration: 10000 },
+        );
       } else {
-        toast.success("CT-e importado com sucesso.");
+        toast.success(
+          "CT-e importado e campos ANTT preenchidos automaticamente.",
+        );
       }
     } catch (error: any) {
       toast.error(
@@ -725,6 +989,34 @@ export default function CiotGerarPage() {
     observacoes: form.observacoes.trim() || null,
   });
 
+  const anttOverrides = (fields = anttFields) => ({
+    idOperacaoTransporte: digits(fields.idOperacaoTransporte),
+    distanciaPercorrida: decimal(fields.distanciaPercorrida),
+    codigoMunicipioOrigem:
+      Number(digits(fields.codigoMunicipioOrigem)) || undefined,
+    codigoMunicipioDestino:
+      Number(digits(fields.codigoMunicipioDestino)) || undefined,
+    cepOrigem: digits(fields.cepOrigem),
+    cepDestino: digits(fields.cepDestino),
+    codigoNaturezaCarga:
+      Number(digits(fields.codigoNaturezaCarga)) || undefined,
+    codigoTipoCarga:
+      Number(digits(fields.codigoTipoCarga)) || undefined,
+    numeroEixos: Number(digits(fields.numeroEixos)) || undefined,
+    tipoPagamento: Number(fields.tipoPagamento) || undefined,
+    cpfCnpjCreditado: digits(fields.cpfCnpjCreditado),
+    codigoInstituicaoFinanceira:
+      Number(digits(fields.codigoInstituicaoFinanceira)) || undefined,
+    numeroAgencia: fields.numeroAgencia.trim(),
+    numeroConta: fields.numeroConta.trim(),
+    chavePix: fields.chavePix.trim(),
+    identificadorPix: fields.identificadorPix.trim(),
+    indPagamento: Number(fields.indPagamento),
+    indAltoDesempenho: fields.indAltoDesempenho,
+    indRetornoVazio: fields.indRetornoVazio,
+    composicaoVeicular: fields.composicaoVeicular,
+  });
+
   const persist = async (prepare: boolean) => {
     if (prepare && stepErrors[5].length) {
       toast.error("Existem pendências obrigatórias na revisão.");
@@ -801,18 +1093,54 @@ export default function CiotGerarPage() {
 
     setSaving(true);
     try {
-      if (editing) {
-        const saved = await update(editing.id, data);
-        setEditing(saved);
-      } else {
-        const saved = await create(data);
-        setEditing(saved);
+      let effectiveAnttFields = anttFields;
+      if (prepare && form.ctes[0]) {
+        try {
+          const automatic = await completeAnttFieldsAutomatically(
+            form.ctes[0],
+            anttFields,
+          );
+          effectiveAnttFields = automatic.fields;
+          if (automatic.warnings.length) {
+            toast.warning(automatic.warnings.join(" "), { duration: 10000 });
+          }
+        } catch (automaticError) {
+          console.warn("Falha no preenchimento automático ANTT", automaticError);
+        }
       }
 
+      const saved = editing
+        ? await update(editing.id, data)
+        : await create(data);
+      setEditing(saved);
+
       if (prepare) {
-        setPreparedPayload(payloadAntt as Record<string, unknown>);
+        const official = await api.post<{
+          payload: Record<string, unknown>;
+          missing: string[];
+          fields: Record<string, unknown>;
+          pisoMinimo: PisoMinimoUi;
+          checklist: AnttChecklistItem[];
+        }>(`/ciots/${saved.id}/antt/preparar`, anttOverrides(effectiveAnttFields));
+
+        setAnttChecklist(official.data.checklist);
+        setPisoMinimo(official.data.pisoMinimo);
+        setPreparedPayload({
+          dcs: "PEF v1.1",
+          payload: official.data.payload,
+          pendencias: official.data.missing,
+          checklist: official.data.checklist,
+          pisoMinimo: official.data.pisoMinimo,
+        });
         setDebugOpen(true);
-        toast.success("CIOT validado e preparado para envio.");
+
+        if (official.data.missing.length) {
+          toast.warning(
+            `Estrutura ANTT preparada, mas ainda existem ${official.data.missing.length} pendência(s).`,
+          );
+        } else {
+          toast.success("Payload oficial DCS v1.1 pronto para homologação.");
+        }
       } else {
         toast.success("Rascunho salvo.");
         setWizardOpen(false);
@@ -830,6 +1158,76 @@ export default function CiotGerarPage() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const simulateEmission = async () => {
+    if (!editing) return;
+
+    setSimulating(true);
+    try {
+      const response = await api.post(
+        `/ciots/${editing.id}/antt/simular`,
+        anttOverrides(),
+        { timeout: 120_000 },
+      );
+
+      const report = response.data as Record<string, unknown>;
+      setPreparedPayload({
+        ...(preparedPayload ?? {}),
+        simulacao: report,
+      });
+
+      toast[Boolean(report.readyForHomologation) ? "success" : "warning"](
+        Boolean(report.readyForHomologation)
+          ? "Simulação concluída sem bloqueios."
+          : "Simulação concluída. Revise os bloqueios.",
+        { duration: 12000 },
+      );
+    } catch (error: any) {
+      toast.error(apiValidationMessage(error), { duration: 15000 });
+    } finally {
+      setSimulating(false);
+    }
+  };
+
+  const downloadSimulationReport = () => {
+    const simulation = preparedPayload?.simulacao;
+    if (!simulation) {
+      toast.error("Execute a simulação antes de baixar o relatório.");
+      return;
+    }
+
+    const blob = new Blob([JSON.stringify(simulation, null, 2)], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ciot-simulacao-${editing?.id ?? "rascunho"}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const emitInHomologation = async () => {
+    if (!editing) return;
+
+    setAnttSending(true);
+    try {
+      const response = await api.post(`/ciots/${editing.id}/antt/emitir`, anttOverrides(), {
+        timeout: 120_000,
+      });
+      toast.success("Solicitação enviada à ANTT em homologação.");
+      setPreparedPayload({
+        ...(preparedPayload ?? {}),
+        retornoAntt: response.data,
+      });
+    } catch (error: any) {
+      toast.error(apiValidationMessage(error), { duration: 15000 });
+    } finally {
+      setAnttSending(false);
     }
   };
 
@@ -922,9 +1320,12 @@ export default function CiotGerarPage() {
                             </Button>
                             {item.status === "RASCUNHO" && (
                               <Button
+                                type="button"
                                 size="icon"
                                 variant="ghost"
-                                onClick={() => void remove(item.id)}
+                                title="Excluir rascunho"
+                                aria-label={`Excluir CIOT #${item.idSequencial ?? item.id}`}
+                                onClick={() => void deleteDraft(item)}
                               >
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
@@ -1729,26 +2130,223 @@ export default function CiotGerarPage() {
 
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
             <p className="font-semibold text-emerald-700 dark:text-emerald-400">
-              CIOT pronto para a futura integração
+              Estrutura oficial DCS PEF v1.1
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Nenhuma chamada foi feita à ANTT. O JSON abaixo foi validado e
-              armazenado para a etapa de homologação.
+              O backend converteu o cadastro para o leiaute da ANTT e listou
+              abaixo tudo que ainda precisa ser preenchido antes da homologação.
             </p>
           </div>
+
+          <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
+            <div>
+              <p className="font-semibold">Campos complementares exigidos pela ANTT</p>
+              <p className="text-sm text-muted-foreground">
+                Os dados são preenchidos automaticamente pelo CT-e, empresa, veículo e rota. Revise somente as pendências. O ID oficial da operação continua dependendo do mecanismo oficial da ANTT.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="ID oficial da operação (12 dígitos)">
+                <Input value={anttFields.idOperacaoTransporte} maxLength={12} onChange={(e) => setAnttFields((v) => ({ ...v, idOperacaoTransporte: digits(e.target.value) }))} />
+              </Field>
+              <Field label="Distância percorrida (km)">
+                <Input value={anttFields.distanciaPercorrida} onChange={(e) => setAnttFields((v) => ({ ...v, distanciaPercorrida: e.target.value }))} />
+              </Field>
+              <Field label="Número de eixos carregados">
+                <Select
+                  value={anttFields.numeroEixos}
+                  onValueChange={(value) =>
+                    setAnttFields((current) => ({ ...current, numeroEixos: value }))
+                  }
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {[2, 3, 4, 5, 6, 7, 9].map((eixos) => (
+                      <SelectItem key={eixos} value={String(eixos)}>
+                        {eixos} eixos
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Código IBGE origem">
+                <Input value={anttFields.codigoMunicipioOrigem} maxLength={7} onChange={(e) => setAnttFields((v) => ({ ...v, codigoMunicipioOrigem: digits(e.target.value) }))} />
+              </Field>
+              <Field label="CEP origem">
+                <Input value={anttFields.cepOrigem} maxLength={8} onChange={(e) => setAnttFields((v) => ({ ...v, cepOrigem: digits(e.target.value) }))} />
+              </Field>
+              <Field label="Código IBGE destino">
+                <Input value={anttFields.codigoMunicipioDestino} maxLength={7} onChange={(e) => setAnttFields((v) => ({ ...v, codigoMunicipioDestino: digits(e.target.value) }))} />
+              </Field>
+              <Field label="CEP destino">
+                <Input value={anttFields.cepDestino} maxLength={8} onChange={(e) => setAnttFields((v) => ({ ...v, cepDestino: digits(e.target.value) }))} />
+              </Field>
+              <Field label="Código natureza da carga">
+                <Input value={anttFields.codigoNaturezaCarga} maxLength={4} onChange={(e) => setAnttFields((v) => ({ ...v, codigoNaturezaCarga: digits(e.target.value) }))} />
+              </Field>
+              <Field label="Tipo de carga para piso mínimo">
+                <Select
+                  value={anttFields.codigoTipoCarga}
+                  onValueChange={(value) =>
+                    setAnttFields((current) => ({
+                      ...current,
+                      codigoTipoCarga: value,
+                    }))
+                  }
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 - Granel sólido</SelectItem>
+                    <SelectItem value="2">2 - Granel líquido</SelectItem>
+                    <SelectItem value="3">3 - Frigorificada ou aquecida</SelectItem>
+                    <SelectItem value="4">4 - Conteinerizada</SelectItem>
+                    <SelectItem value="5">5 - Carga geral</SelectItem>
+                    <SelectItem value="6">6 - Neogranel</SelectItem>
+                    <SelectItem value="7">7 - Perigosa (granel sólido)</SelectItem>
+                    <SelectItem value="8">8 - Perigosa (granel líquido)</SelectItem>
+                    <SelectItem value="9">9 - Perigosa frigorificada/aquecida</SelectItem>
+                    <SelectItem value="10">10 - Perigosa conteinerizada</SelectItem>
+                    <SelectItem value="11">11 - Perigosa (carga geral)</SelectItem>
+                    <SelectItem value="12">12 - Granel pressurizada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Tipo de pagamento DCS">
+                <Select value={anttFields.tipoPagamento} onValueChange={(value) => setAnttFields((v) => ({ ...v, tipoPagamento: value }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 - Conta corrente</SelectItem>
+                    <SelectItem value="2">2 - Conta poupança</SelectItem>
+                    <SelectItem value="3">3 - Conta pagamento</SelectItem>
+                    <SelectItem value="4">4 - Outro identificador bancário</SelectItem>
+                    <SelectItem value="6">6 - PIX</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="CPF/CNPJ creditado">
+                <Input value={anttFields.cpfCnpjCreditado} maxLength={14} onChange={(e) => setAnttFields((v) => ({ ...v, cpfCnpjCreditado: digits(e.target.value) }))} />
+              </Field>
+              {anttFields.tipoPagamento === "6" ? (
+                <>
+                  <Field label="Chave PIX"><Input value={anttFields.chavePix} onChange={(e) => setAnttFields((v) => ({ ...v, chavePix: e.target.value }))} /></Field>
+                  <Field label="Identificador PIX"><Input value={anttFields.identificadorPix} maxLength={32} onChange={(e) => setAnttFields((v) => ({ ...v, identificadorPix: e.target.value }))} /></Field>
+                </>
+              ) : (
+                <>
+                  <Field label="Código instituição financeira"><Input value={anttFields.codigoInstituicaoFinanceira} onChange={(e) => setAnttFields((v) => ({ ...v, codigoInstituicaoFinanceira: digits(e.target.value) }))} /></Field>
+                  <Field label="Agência"><Input value={anttFields.numeroAgencia} onChange={(e) => setAnttFields((v) => ({ ...v, numeroAgencia: e.target.value }))} /></Field>
+                  <Field label="Conta"><Input value={anttFields.numeroConta} onChange={(e) => setAnttFields((v) => ({ ...v, numeroConta: e.target.value }))} /></Field>
+                </>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-5 text-sm">
+              {([
+                ["indAltoDesempenho", "Alto desempenho"],
+                ["indRetornoVazio", "Retorno vazio"],
+                ["composicaoVeicular", "Composição veicular"],
+              ] as const).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2">
+                  <input type="checkbox" checked={anttFields[key]} onChange={(e) => setAnttFields((v) => ({ ...v, [key]: e.target.checked }))} />
+                  {label}
+                </label>
+              ))}
+            </div>
+
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => void persist(true)} disabled={saving}>
+                Validar novamente
+              </Button>
+            </div>
+          </div>
+
+          {pisoMinimo?.aplicavel && (
+            <div className={`rounded-xl border p-4 ${
+              pisoMinimo.abaixoDoPiso
+                ? "border-red-500/40 bg-red-500/5"
+                : pisoMinimo.valorPiso !== null
+                  ? "border-emerald-500/40 bg-emerald-500/5"
+                  : "border-amber-500/40 bg-amber-500/5"
+            }`}>
+              <p className="font-semibold">Piso mínimo ANTT</p>
+              <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                <div><span className="text-muted-foreground">Tabela</span><p className="font-medium">{pisoMinimo.tabela ?? "-"}</p></div>
+                <div><span className="text-muted-foreground">Frete informado</span><p className="font-medium">{money(pisoMinimo.valorFrete)}</p></div>
+                <div><span className="text-muted-foreground">Piso calculado</span><p className="font-medium">{pisoMinimo.valorPiso === null ? "Dados incompletos" : money(pisoMinimo.valorPiso)}</p></div>
+                <div><span className="text-muted-foreground">Diferença</span><p className="font-medium">{pisoMinimo.diferenca === null ? "-" : money(pisoMinimo.diferenca)}</p></div>
+              </div>
+              {pisoMinimo.abaixoDoPiso && (
+                <p className="mt-3 text-sm font-semibold text-red-600 dark:text-red-400">
+                  Emissão bloqueada: o frete está abaixo do piso mínimo.
+                </p>
+              )}
+              <p className="mt-2 text-xs text-muted-foreground">{pisoMinimo.fundamento}</p>
+            </div>
+          )}
+
+          {anttChecklist.length > 0 && (
+            <div className="rounded-xl border p-4">
+              <p className="font-semibold">Checklist de emissão</p>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {anttChecklist.map((item) => (
+                  <div key={item.key} className="flex items-center gap-2 text-sm">
+                    {item.ok ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    )}
+                    <span>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <pre className="overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
             {JSON.stringify(preparedPayload, null, 2)}
           </pre>
 
-          <div className="flex justify-end">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button
+              variant="outline"
               onClick={() => {
                 setDebugOpen(false);
                 setWizardOpen(false);
               }}
             >
-              Concluir
+              Fechar
+            </Button>
+            {Boolean(preparedPayload?.simulacao) && (
+              <Button variant="outline" onClick={downloadSimulationReport}>
+                <FileText className="mr-2 h-4 w-4" />
+                Baixar relatório
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => void simulateEmission()}
+              disabled={simulating || saving}
+            >
+              {simulating ? (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Code2 className="mr-2 h-4 w-4" />
+              )}
+              Executar simulação
+            </Button>
+            <Button
+              onClick={() => void emitInHomologation()}
+              disabled={
+                anttSending ||
+                simulating ||
+                !Boolean((preparedPayload?.simulacao as any)?.readyForHomologation) ||
+                Boolean(pisoMinimo?.abaixoDoPiso) ||
+                anttChecklist.some((item) => !item.ok)
+              }
+            >
+              {anttSending && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
+              Enviar para homologação ANTT
             </Button>
           </div>
         </DialogContent>

@@ -75,8 +75,12 @@ export interface CteInterpretado {
   tomadorNome: string;
   origemCidade: string;
   origemUf: string;
+  origemCodigoIbge: string;
+  origemCep: string;
   destinoCidade: string;
   destinoUf: string;
+  destinoCodigoIbge: string;
+  destinoCep: string;
   produto: string;
   ncm: string;
   pesoKg: number;
@@ -177,8 +181,14 @@ export function interpretarCteXml(xml: string): CteInterpretado {
     tomadorNome: firstText(tomador.xNome, tomador.xFant),
     origemCidade: firstText(ide.xMunIni, rem.enderReme?.xMun),
     origemUf: firstText(ide.UFIni, rem.enderReme?.UF).toUpperCase(),
+    origemCodigoIbge: digits(firstText(ide.cMunIni, rem.enderReme?.cMun)),
+    origemCep: digits(
+      firstText(rem.enderReme?.CEP, emit.enderEmit?.CEP),
+    ).slice(0, 8),
     destinoCidade: firstText(ide.xMunFim, dest.enderDest?.xMun),
     destinoUf: firstText(ide.UFFim, dest.enderDest?.UF).toUpperCase(),
+    destinoCodigoIbge: digits(firstText(ide.cMunFim, dest.enderDest?.cMun)),
+    destinoCep: digits(firstText(dest.enderDest?.CEP)).slice(0, 8),
     produto: produtoPredominante,
     ncm: firstText(infCarga.infQ?.NCM, infCarga.NCM),
     pesoKg: numberValue(peso?.qCarga),

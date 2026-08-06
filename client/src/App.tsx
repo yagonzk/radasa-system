@@ -19,6 +19,7 @@ import Pneus from "./pages/Pneus";
 import Estoque from "./pages/Estoque";
 import CiotGerar from "./pages/CiotGerar";
 import CiotGerados from "./pages/CiotGerados";
+import CiotConfiguracao from "./pages/CiotConfiguracao";
 import { LoaderCircle } from "lucide-react";
 
 function Router() {
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/abastecimentos" component={Abastecimentos} />
       <Route path="/ciot/gerar" component={CiotGerar} />
       <Route path="/ciot/gerados" component={CiotGerados} />
+      <Route path="/ciot/configuracao" component={CiotConfiguracao} />
       <Route path="/ciot" component={CiotGerar} />
       <Route path="/pneus" component={Pneus} />
       <Route path="/estoque" component={Estoque} />

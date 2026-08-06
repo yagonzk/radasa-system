@@ -14,9 +14,13 @@ export interface DocumentoProdutoInterpretado {
 
 export interface DocumentoAbastecimentoInterpretado {
   origem: "XML" | "PDF";
+  chaveNfe: string | null;
   numeroNota: string | null;
+  numeroNotaLida?: string | null;
+  serieNota: string | null;
   dataEmissao: string | null;
   fornecedorCnpj: string | null;
+  fornecedorCnpjLido?: string | null;
   fornecedorNome: string | null;
   placa: string | null;
   hodometro: number | null;
@@ -92,13 +96,57 @@ function parseOdometer(text: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
   const match = normalized.match(
-    /(?:HODOMETRO|ODOMETRO|QUILOMETRAGEM|KM\s*ATUAL)\s*[:=\-]?\s*([0-9.]{3,12}(?:,[0-9]+)?)/i,
+    /(?:HODOMETRO|ODOMETRO|QUILOMETRAGEM|KM\s*ATUAL|(?:^|[\s;|])KM)\s*[:=\-]?\s*([0-9.]{3,12}(?:,[0-9]+)?)/i,
   );
   if (!match?.[1]) return null;
 
   const integer = match[1].split(",")[0].replace(/\D/g, "");
   const value = Number(integer);
   return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function extractAccessKey(text: string) {
+  const labeled = text.match(/CHAVE\s+DE\s+ACESSO\s*([\d\s.-]{44,100})/i)?.[1];
+  const labeledDigits = String(labeled ?? "").replace(/\D/g, "");
+  if (labeledDigits.length >= 44) return labeledDigits.slice(0, 44);
+
+  for (const candidate of text.match(/(?:\d[\s.-]?){44}/g) ?? []) {
+    const digits = candidate.replace(/\D/g, "");
+    if (digits.length === 44) return digits;
+  }
+  return null;
+}
+
+function extractIssuer(text: string) {
+  const cnpjs = text.match(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g) ?? [];
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const danfeHeader = text.match(/DANFE\s*([^\n]+)\n([^\n]+)\nDocumento\s+Auxiliar/i);
+  if (danfeHeader) {
+    return {
+      cnpj: cnpjs[0]?.replace(/\D/g, "") ?? null,
+      nome: `${danfeHeader[1]} ${danfeHeader[2]}`.replace(/\s+/g, " ").trim(),
+    };
+  }
+  const danfeIndex = lines.findIndex((line) => /^DANFE\b/i.test(line));
+  const nameLines = danfeIndex > 0
+    ? lines.slice(Math.max(0, danfeIndex - 3), danfeIndex)
+      .filter((line) => !/^(DOCUMENTO|NOTA\s+FISCAL|ENTRADA|SA[IÍ]DA|CHAVE\s+DE)/i.test(line))
+    : [];
+  return { cnpj: cnpjs[0]?.replace(/\D/g, "") ?? null, nome: nameLines.join(" ") || null };
+}
+
+function extractProducts(text: string): DocumentoProdutoInterpretado[] {
+  const section = text.match(/DADOS\s+DOS\s+PRODUTOS[\s\S]*?(?=DADOS\s+ADICIONAIS|$)/i)?.[0] ?? text;
+  const pattern = /^\s*(\d+)([A-Z][A-Z0-9 /.-]*?)(\d{8})(\d{3})(\d{4})([A-Z]{1,4})(\d+,\d{4})(\d+,\d{2})(\d+,\d{2})([\d.]+,\d{2})/gim;
+  const products: DocumentoProdutoInterpretado[] = [];
+  for (const match of section.matchAll(pattern)) {
+    const quantidadeLitros = parseBrazilianNumber(match[7]);
+    const valorUnitario = parseBrazilianNumber(match[8]);
+    const valorTotal = parseBrazilianNumber(match[10]);
+    if (quantidadeLitros === null || valorUnitario === null || valorTotal === null) continue;
+    products.push({ codigo: match[1], descricao: match[2].replace(/\s+/g, " ").trim(), quantidadeLitros, valorUnitario, valorTotal });
+  }
+  return products;
 }
 
 function xmlToDocument(
@@ -114,7 +162,9 @@ function xmlToDocument(
 
   return {
     origem: "XML",
+    chaveNfe: document.chaveNfe || null,
     numeroNota: document.numero || null,
+    serieNota: document.serie || null,
     dataEmissao: document.dataEmissao || null,
     fornecedorCnpj: document.emitente.cnpj || null,
     fornecedorNome:
@@ -158,25 +208,31 @@ export async function interpretarDocumentoAbastecimento(file: {
     }
 
     const plate = extractLabeledPlate(text) || extractAnyPlate(text);
+    const issuer = extractIssuer(text);
+    const products = extractProducts(text);
     const totalMatch = text.match(
       /(?:VALOR\s+TOTAL(?:\s+DA\s+NOTA)?|TOTAL\s+DA\s+NOTA)\s*[:=\-]?\s*R?\$?\s*([0-9.]+,[0-9]{2})/i,
     );
 
     return {
       origem: "PDF",
-      numeroNota:
+      chaveNfe: extractAccessKey(text),
+      serieNota: text.match(/S[ÉE]RIE\s*0*(\d{1,6})/i)?.[1] ?? null,
+      numeroNotaLida:
         text.match(/(?:NF[-\s]?E|NOTA\s+FISCAL)\s*(?:N[º°O.]*)?\s*[:=\-]?\s*(\d{1,12})/i)?.[1] ??
         null,
       dataEmissao: parseDate(text),
-      fornecedorCnpj:
+      numeroNota: text.match(/N[º°o.]?\s*([\d.]{1,20})/i)?.[1]?.replace(/\D/g, "") ?? null,
+      fornecedorCnpjLido:
         text.match(/CNPJ\s*[:=\-]?\s*([0-9./-]{14,18})/i)?.[1]?.replace(/\D/g, "") ??
         null,
-      fornecedorNome: null,
+      fornecedorNome: issuer.nome,
+      fornecedorCnpj: issuer.cnpj,
       placa: plate || null,
       hodometro: parseOdometer(text),
       valorTotal: parseBrazilianNumber(totalMatch?.[1]),
       valorDesconto: 0,
-      produtos: [],
+      produtos: products,
       avisos: [
         "A leitura de PDF é auxiliar. Confira os dados antes de cadastrar.",
         ...(!plate ? ["A placa não foi encontrada no PDF."] : []),

@@ -15,6 +15,18 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("8h"),
   AUTH_REQUIRED: booleanFromString,
   LOG_LEVEL: z.string().default("info"),
+  ANTT_CIOT_ENVIRONMENT: z.enum(["homologacao", "producao"]).default("homologacao"),
+  ANTT_CIOT_BASE_URL: z.string().url().default("https://appservices-hml.antt.gov.br/pefServices"),
+  ANTT_CIOT_ENABLE_NETWORK: booleanFromString,
+  ANTT_CIOT_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
+  ANTT_CIOT_PATH_TRANSPORTER: z.string().default("ConsultarSituacaoTransportador"),
+  ANTT_CIOT_PATH_FLEET: z.string().default("ConsultarFrotaTransportador"),
+  ANTT_CIOT_PATH_DECLARE: z.string().default("DeclaracaoOperacaoTransporte"),
+  ANTT_CIOT_PATH_CANCEL: z.string().default("CancelamentoOperacaoTransporte"),
+  ANTT_CIOT_PATH_RECTIFY: z.string().default("RetificacaoOperacaoTransporte"),
+  ANTT_CIOT_PATH_CLOSE: z.string().default("EncerramentoOperacaoTransporte"),
+  ANTT_CIOT_PATH_QUERY: z.string().default("ConsultarCIOTGerado"),
+  ANTT_CIOT_PATH_EXCEPTION: z.string().default("ConsultarExcecao"),
 });
 
 const parsed = envSchema.safeParse(process.env);

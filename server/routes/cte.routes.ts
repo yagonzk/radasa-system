@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { interpretarCteXml } from "../services/cte-documento.service";
+import { completarDadosAnttCte } from "../services/cte-antt-auto.service";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -89,3 +90,13 @@ cteRoutes.post(
     }
   },
 );
+
+
+cteRoutes.post("/complementar-antt", async (req, res, next) => {
+  try {
+    const result = await completarDadosAnttCte(req.body ?? {});
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});

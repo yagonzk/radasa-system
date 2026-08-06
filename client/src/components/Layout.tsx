@@ -1,6 +1,6 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes, FileBadge2, ChevronDown, ChevronRight, FilePlus2, History, UserRound } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes, FileBadge2, ChevronDown, ChevronRight, FilePlus2, History, UserRound, Settings2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useState } from "react";
@@ -169,6 +169,19 @@ export default function Layout({ children }: { children: ReactNode }) {
                 >
                   <History className="h-4 w-4" />
                   CIOTs gerados
+                </Link>
+
+                <Link
+                  href="/ciot/configuracao"
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors",
+                    location.startsWith("/ciot/configuracao")
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                  )}
+                >
+                  <Settings2 className="h-4 w-4" />
+                  Configuração ANTT
                 </Link>
               </div>
             )}

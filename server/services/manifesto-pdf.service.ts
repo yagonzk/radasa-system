@@ -141,9 +141,23 @@ export async function interpretarManifestoPdf(
     if (!clientes.some((cliente) => cliente.codigo === item.codigo)) clientes.push(item);
   }
 
-  const produtos = lines
+  // Alguns leitores de PDF quebram uma linha de romaneio em duas ou três
+  // linhas. Tenta também as combinações adjacentes antes de desistir.
+  const productCandidates = lines.flatMap((line, index) => [
+    line,
+    lines.slice(index, index + 2).join(" "),
+    lines.slice(index, index + 3).join(" "),
+  ]);
+  const produtos = productCandidates
     .map(parseProductLine)
-    .filter((item): item is ManifestoPdfProduto => Boolean(item));
+    .filter((item): item is ManifestoPdfProduto => Boolean(item))
+    .filter((item, index, all) =>
+      all.findIndex((candidate) =>
+        candidate.romaneio === item.romaneio &&
+        candidate.item === item.item &&
+        candidate.codigo === item.codigo,
+      ) === index,
+    );
 
   const totalMatch = compact.match(/TOTAL\.{0,}:?([\d.]+,\d{2})(?:$|\D)/i);
   const valorTotal = totalMatch

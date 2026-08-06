@@ -1406,6 +1406,7 @@ interface AbastecimentoFormProps {
   abastecimentos: ReturnType<typeof useAbastecimentos>["items"];
   onClose: () => void;
   onCreate: ReturnType<typeof useAbastecimentos>["create"];
+  onCreateCliente: ReturnType<typeof useClientes>["create"];
   onUpdate: ReturnType<typeof useAbastecimentos>["update"];
   onPreviewPdf: (url: string, title: string) => void;
 }
@@ -1419,6 +1420,7 @@ function AbastecimentoForm({
   abastecimentos,
   onClose,
   onCreate,
+  onCreateCliente,
   onUpdate,
   onPreviewPdf,
 }: AbastecimentoFormProps) {
@@ -1639,8 +1641,25 @@ function AbastecimentoForm({
     return best.produto;
   };
 
-  const applyDocumentResult = (result: DocumentoAbastecimentoInterpretado) => {
-    const cliente = matchCliente(result);
+  const applyDocumentResult = async (result: DocumentoAbastecimentoInterpretado) => {
+    let cliente = matchCliente(result);
+    const supplierName = String(result.fornecedorNome ?? "").trim();
+    const supplierCnpj = digits(result.fornecedorCnpj ?? "");
+    if (!cliente && supplierName) {
+      try {
+        cliente = await onCreateCliente({
+          nomeFantasia: supplierName,
+          razaoSocial: supplierName,
+          codigoInterno: `AUTO-${supplierCnpj || normalizeText(supplierName).replace(/[^a-z0-9]/g, "").slice(0, 20) || Date.now()}`,
+          cnpj: supplierCnpj,
+          email: "",
+          telefone: "",
+          enderecoFiscal: "",
+        });
+      } catch (error) {
+        console.error("Falha ao cadastrar automaticamente o fornecedor.", error);
+      }
+    }
     const veiculo = matchVeiculo(result.placa ?? undefined);
     const matchedProducts = result.produtos
       .map((item) => {
@@ -1708,7 +1727,7 @@ function AbastecimentoForm({
 
       if (extension === "pdf") setPdfFile(file);
       if (extension === "xml") setXmlFile(file);
-      applyDocumentResult(response.data);
+      await applyDocumentResult(response.data);
       toast.success(
         extension === "xml"
           ? "XML interpretado. Confira os dados antes de salvar."
@@ -2159,16 +2178,43 @@ const emptyFilters: Filters = {
   hodometro: "",
 };
 
+interface RelatorioAbastecimentoOpcoes {
+  mediaKmLitro: boolean;
+  custoLitro: boolean;
+  postos: boolean;
+  totalLitros: boolean;
+  totalGasto: boolean;
+}
+
+const relatorioPadrao: RelatorioAbastecimentoOpcoes = {
+  mediaKmLitro: true,
+  custoLitro: true,
+  postos: true,
+  totalLitros: true,
+  totalGasto: true,
+};
+
+function escapeReportText(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export default function Abastecimentos() {
   const { items, create, update, remove } = useAbastecimentos();
-  const { items: clientes } = useClientes();
+  const { items: clientes, create: createCliente } = useClientes();
   const { items: produtos } = useProdutos();
   const { items: veiculos } = useVeiculos();
   const [formOpen, setFormOpen] = useState(false);
   const [batchXmlOpen, setBatchXmlOpen] = useState(false);
   const [editing, setEditing] = useState<Abastecimento | null>(null);
   const [viewing, setViewing] = useState<Abastecimento | null>(null);
+  const [downloadTarget, setDownloadTarget] = useState<Abastecimento | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string } | null>(null);
+  const [relatorioOpen, setRelatorioOpen] = useState(false);
+  const [relatorioOpcoes, setRelatorioOpcoes] = useState<RelatorioAbastecimentoOpcoes>(relatorioPadrao);
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [activeFilter, setActiveFilter] = useState<keyof Filters | null>(null);
   const [filterSearch, setFilterSearch] = useState("");
@@ -2313,6 +2359,34 @@ export default function Abastecimentos() {
     link.click();
   };
 
+  const gerarRelatorioPdf = () => {
+    // Deve ser a primeira ação do clique para que o navegador associe a abertura
+    // ao gesto do usuário e mostre o pedido de permissão de pop-up, se necessário.
+    const reportWindow = window.open("", "_blank");
+    if (!reportWindow) {
+      toast.error("Permita pop-ups no navegador para gerar o relatório.");
+      return;
+    }
+
+    const metricas = [
+      relatorioOpcoes.totalLitros && ["Total de litros", formatLitros(totals.litros)],
+      relatorioOpcoes.totalGasto && ["Valor total", formatBRL(totals.valor)],
+      relatorioOpcoes.custoLitro && ["Custo médio por litro", formatBRL(totals.media)],
+      relatorioOpcoes.mediaKmLitro && ["Média de KM/L", `${mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L`],
+      relatorioOpcoes.postos && ["Postos no período", String(new Set(filteredItems.map((item) => item.clienteId)).size)],
+    ].filter(Boolean) as Array<[string, string]>;
+    const linhas = filteredItems.map((item) => {
+      const cliente = clientes.find((entry) => entry.id === item.clienteId);
+      const veiculo = veiculos.find((entry) => entry.id === item.veiculoId);
+      const litros = (item.produtos ?? []).reduce((sum, produto) => sum + produto.quantidadeLitros, 0);
+      return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia ?? "Não identificado")}</td><td>${escapeReportText(veiculo?.placa ?? "-")}</td><td>${escapeReportText(formatLitros(litros))}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`;
+    }).join("");
+
+    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Abastecimentos</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:9px;border:1px solid #dbe3f0}td:nth-child(5),td:nth-child(6){text-align:right}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}}</style></head><body><h1>Relatório de Abastecimentos</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${filteredItems.length} registro(s) conforme os filtros ativos.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Notas fiscais</h2><table><thead><tr><th>NF</th><th>Emissão</th><th>Posto/Cliente</th><th>Placa</th><th>Litros</th><th>Valor total</th></tr></thead><tbody>${linhas}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
+    reportWindow.document.close();
+    setRelatorioOpen(false);
+  };
+
   return (
     <Layout>
       <div className="mx-auto max-w-7xl">
@@ -2353,6 +2427,12 @@ export default function Abastecimentos() {
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Gauge className="h-4 w-4" /> Média de KM/L</p>
             <p className="mt-2 text-2xl font-bold">{mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L</p>
           </div>
+        </div>
+
+        <div className="mb-3 flex justify-end">
+          <Button type="button" variant="outline" onClick={() => setRelatorioOpen(true)}>
+            <FileText className="mr-2 h-4 w-4" /> Gerar relatório PDF
+          </Button>
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -2436,7 +2516,7 @@ export default function Abastecimentos() {
                     <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30">
                       <td className="px-4 py-3"><ClienteIdentity cliente={cliente} /></td>
                       <td className="px-4 py-3 text-muted-foreground">{formatDate(item.dataEmissao)}</td>
-                      <td className="px-4 py-3 font-medium">{item.produtos.length} produto(s)</td>
+                      <td className="whitespace-nowrap px-4 py-3 font-medium">{item.produtos.length} produto(s)</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatLitros(litros)}</td>
                       <td className="px-4 py-3 text-right">{formatBRL(litros > 0 ? bruto / litros : 0)}</td>
                       <td className="px-4 py-3 text-right text-muted-foreground">{formatBRL(item.valorDesconto)}</td>
@@ -2446,8 +2526,7 @@ export default function Abastecimentos() {
                       <td className="px-4 py-3">
                         <div className="flex justify-center gap-1">
                           <button type="button" onClick={() => setViewing(item)} className="flex h-8 w-8 items-center justify-center rounded-lg text-blue-500 hover:bg-blue-500/10" title="Visualizar"><Eye className="h-4 w-4" /></button>
-                          {item.pdfUrl && <button type="button" onClick={() => downloadAttachment(item.pdfUrl!, `abastecimento-${item.numeroNfe || item.id}.pdf`)} className="flex h-8 w-8 items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-500/10" title="Baixar PDF"><Download className="h-4 w-4" /></button>}
-                          {item.xmlUrl && <button type="button" onClick={() => downloadAttachment(item.xmlUrl!, `abastecimento-${item.numeroNfe || item.id}.xml`)} className="flex h-8 w-8 items-center justify-center rounded-lg text-violet-600 hover:bg-violet-500/10" title="Baixar XML"><FileCode2 className="h-4 w-4" /></button>}
+                          {(item.pdfUrl || item.xmlUrl) && <button type="button" onClick={() => setDownloadTarget(item)} className="flex h-8 w-8 items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-500/10" title="Baixar arquivos da nota"><Download className="h-4 w-4" /></button>}
                           <button type="button" onClick={() => { setEditing(item); setFormOpen(true); }} className="flex h-8 w-8 items-center justify-center rounded-lg text-amber-500 hover:bg-amber-500/10" title="Editar"><Pencil className="h-4 w-4" /></button>
                           <button type="button" onClick={() => void handleDelete(item)} className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10" title="Excluir"><Trash2 className="h-4 w-4" /></button>
                         </div>
@@ -2519,6 +2598,54 @@ export default function Abastecimentos() {
         onClose={() => setBatchXmlOpen(false)}
       />
 
+      <Dialog open={relatorioOpen} onOpenChange={setRelatorioOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Gerar relatório de abastecimentos</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Selecione as informações que devem aparecer no relatório. Os filtros aplicados na tabela também serão respeitados.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {([
+              ["totalLitros", "Total de litros"],
+              ["totalGasto", "Valor total gasto"],
+              ["custoLitro", "Custo médio por litro"],
+              ["mediaKmLitro", "Média de KM/L"],
+              ["postos", "Quantidade de postos"],
+            ] as Array<[keyof RelatorioAbastecimentoOpcoes, string]>).map(([key, label]) => (
+              <label key={key} className="flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm hover:bg-muted/40">
+                <input type="checkbox" checked={relatorioOpcoes[key]} onChange={(event) => setRelatorioOpcoes((current) => ({ ...current, [key]: event.target.checked }))} />
+                {label}
+              </label>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setRelatorioOpen(false)}>Cancelar</Button>
+            <Button type="button" onClick={gerarRelatorioPdf}><Download className="mr-2 h-4 w-4" /> Gerar PDF</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(downloadTarget)} onOpenChange={(open) => !open && setDownloadTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Baixar arquivos da nota</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Escolha o arquivo que deseja baixar.</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {downloadTarget?.xmlUrl && (
+              <Button type="button" variant="outline" onClick={() => downloadAttachment(downloadTarget.xmlUrl!, `abastecimento-${downloadTarget.numeroNfe || downloadTarget.id}.xml`)}>
+                <FileCode2 className="mr-2 h-4 w-4" /> Baixar XML
+              </Button>
+            )}
+            {downloadTarget?.pdfUrl && (
+              <Button type="button" onClick={() => downloadAttachment(downloadTarget.pdfUrl!, `abastecimento-${downloadTarget.numeroNfe || downloadTarget.id}.pdf`)}>
+                <FileText className="mr-2 h-4 w-4" /> Baixar PDF
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <AbastecimentoForm
         open={formOpen}
         editing={editing}
@@ -2528,6 +2655,7 @@ export default function Abastecimentos() {
         abastecimentos={items}
         onClose={() => { setFormOpen(false); setEditing(null); }}
         onCreate={create}
+        onCreateCliente={createCliente}
         onUpdate={update}
         onPreviewPdf={(url, title) => setPdfPreview({ url, title })}
       />

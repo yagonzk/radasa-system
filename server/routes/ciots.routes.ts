@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { ciotBody } from "../validators/schemas";
+import { anttCiotService } from "../services/antt-ciot.service";
 
 function decimal(value: unknown) {
   const parsed = Number(value);
@@ -123,6 +124,124 @@ function toCreateData(input: ReturnType<typeof ciotBody.parse>) {
 }
 
 export const ciotsRoutes = Router();
+
+ciotsRoutes.get("/antt/configuracao", async (req, res, next) => {
+  try {
+    const result = await anttCiotService.configuration(
+      typeof req.query.empresaId === "string" ? req.query.empresaId : undefined,
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+ciotsRoutes.get("/antt/certificado", async (req, res, next) => {
+  try {
+    const result = await anttCiotService.certificate(
+      typeof req.query.empresaId === "string" ? req.query.empresaId : undefined,
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+ciotsRoutes.get("/antt/diagnostico", async (req, res, next) => {
+  try {
+    const result = await anttCiotService.diagnostic(
+      typeof req.query.empresaId === "string" ? req.query.empresaId : undefined,
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+ciotsRoutes.post("/:id/antt/preparar", async (req, res, next) => {
+  try {
+    const result = await anttCiotService.prepare(req.params.id, req.body ?? {});
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+ciotsRoutes.post("/:id/antt/simular", async (req, res, next) => {
+  try {
+    const result = await anttCiotService.simulate(
+      req.params.id,
+      req.body ?? {},
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+ciotsRoutes.post("/:id/antt/emitir", async (req, res, next) => {
+  try {
+    const result = await anttCiotService.emit(req.params.id, req.body ?? {});
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+ciotsRoutes.post("/antt/frota", async (req, res, next) => {
+  try {
+    const result = await anttCiotService.fleet(
+      typeof req.body?.empresaId === "string" ? req.body.empresaId : undefined,
+      Array.isArray(req.body?.placas) ? req.body.placas : [],
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+ciotsRoutes.get("/antt/excecao", async (req, res, next) => {
+  try {
+    const result = await anttCiotService.exception(
+      typeof req.query.empresaId === "string" ? req.query.empresaId : undefined,
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+ciotsRoutes.post("/:id/antt/consultar", async (req, res, next) => {
+  try {
+    res.json(await anttCiotService.query(req.params.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
+ciotsRoutes.post("/:id/antt/cancelar", async (req, res, next) => {
+  try {
+    res.json(await anttCiotService.cancel(req.params.id, String(req.body?.motivo ?? "")));
+  } catch (error) {
+    next(error);
+  }
+});
+
+ciotsRoutes.post("/:id/antt/retificar", async (req, res, next) => {
+  try {
+    res.json(await anttCiotService.rectify(req.params.id, req.body ?? {}));
+  } catch (error) {
+    next(error);
+  }
+});
+
+ciotsRoutes.post("/:id/antt/encerrar", async (req, res, next) => {
+  try {
+    res.json(await anttCiotService.close(req.params.id, req.body ?? {}));
+  } catch (error) {
+    next(error);
+  }
+});
 
 ciotsRoutes.get("/", async (_req, res, next) => {
   try {
@@ -290,7 +409,16 @@ ciotsRoutes.delete("/:id", async (req, res, next) => {
       return;
     }
 
-    await prisma.ciot.delete({ where: { id: req.params.id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.ciotCte.deleteMany({
+        where: { ciotId: current.id },
+      });
+
+      await tx.ciot.delete({
+        where: { id: current.id },
+      });
+    });
+
     res.status(204).send();
   } catch (error) {
     next(error);

@@ -128,8 +128,12 @@ export interface CiotCte {
   tomadorNome: string;
   origemCidade: string;
   origemUf: string;
+  origemCodigoIbge?: string;
+  origemCep?: string;
   destinoCidade: string;
   destinoUf: string;
+  destinoCodigoIbge?: string;
+  destinoCep?: string;
   produto: string;
   ncm: string;
   pesoKg: number;
