@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently -k \"tsx watch server/index.ts\" \"vite --host\"",
     "build": "prisma generate && vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "start": "NODE_ENV=production node dist/index.js",
+    "start": "node scripts/start-production.mjs",
     "preview": "vite preview --host",
     "check": "prisma generate && tsc --noEmit",
     "format": "prettier --write .",
