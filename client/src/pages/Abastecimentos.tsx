@@ -65,6 +65,11 @@ interface FormState {
   hodometro: string;
   pdfUrl: string | null;
   xmlUrl: string | null;
+  chaveNfe: string;
+  numeroNfe: string;
+  serieNfe: string;
+  emitenteCnpj: string;
+  emitenteRazaoSocial: string;
 }
 
 interface ProdutoDraft {
@@ -82,6 +87,11 @@ const emptyForm: FormState = {
   hodometro: "",
   pdfUrl: null,
   xmlUrl: null,
+  chaveNfe: "",
+  numeroNfe: "",
+  serieNfe: "",
+  emitenteCnpj: "",
+  emitenteRazaoSocial: "",
 };
 
 const emptyProdutoDraft: ProdutoDraft = {
@@ -135,6 +145,15 @@ function fileToDataUrl(file: File) {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+function downloadAttachment(url: string, filename: string) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 interface SearchableOption {
@@ -215,7 +234,9 @@ interface DocumentoProdutoInterpretado {
 
 interface DocumentoAbastecimentoInterpretado {
   origem?: string | null;
+  chaveNfe?: string | null;
   numeroNota?: string | null;
+  serieNota?: string | null;
   dataEmissao?: string | null;
   fornecedorCnpj?: string | null;
   fornecedorNome?: string | null;
@@ -360,6 +381,7 @@ interface BatchXmlDialogProps {
   clientes: ReturnType<typeof useClientes>["items"];
   produtos: ReturnType<typeof useProdutos>["items"];
   veiculos: ReturnType<typeof useVeiculos>["items"];
+  abastecimentos: ReturnType<typeof useAbastecimentos>["items"];
   onClose: () => void;
   onImported: () => Promise<void> | void;
 }
@@ -369,6 +391,7 @@ function BatchXmlDialog({
   clientes,
   produtos,
   veiculos,
+  abastecimentos,
   onClose,
   onImported,
 }: BatchXmlDialogProps) {
@@ -1380,6 +1403,7 @@ interface AbastecimentoFormProps {
   clientes: ReturnType<typeof useClientes>["items"];
   produtos: ReturnType<typeof useProdutos>["items"];
   veiculos: ReturnType<typeof useVeiculos>["items"];
+  abastecimentos: ReturnType<typeof useAbastecimentos>["items"];
   onClose: () => void;
   onCreate: ReturnType<typeof useAbastecimentos>["create"];
   onUpdate: ReturnType<typeof useAbastecimentos>["update"];
@@ -1392,6 +1416,7 @@ function AbastecimentoForm({
   clientes,
   produtos,
   veiculos,
+  abastecimentos,
   onClose,
   onCreate,
   onUpdate,
@@ -1420,6 +1445,11 @@ function AbastecimentoForm({
         hodometro: String(editing.hodometro),
         pdfUrl: editing.pdfUrl ?? null,
         xmlUrl: (editing as typeof editing & { xmlUrl?: string | null }).xmlUrl ?? null,
+        chaveNfe: editing.chaveNfe ?? "",
+        numeroNfe: editing.numeroNfe ?? "",
+        serieNfe: editing.serieNfe ?? "",
+        emitenteCnpj: editing.emitenteCnpj ?? "",
+        emitenteRazaoSocial: editing.emitenteRazaoSocial ?? "",
       });
     } else {
       setForm(emptyForm);
@@ -1451,6 +1481,14 @@ function AbastecimentoForm({
       ),
     [produtos],
   );
+  const ultimoHodometro = useMemo(() => {
+    if (!form.veiculoId) return null;
+    const registros = abastecimentos
+      .filter((item) => item.veiculoId === form.veiculoId && item.id !== editing?.id)
+      .sort((a, b) => b.dataEmissao.localeCompare(a.dataEmissao) || b.hodometro - a.hodometro);
+    return registros[0]?.hodometro ?? null;
+  }, [abastecimentos, editing?.id, form.veiculoId]);
+  const odometroMenorQueUltimo = ultimoHodometro !== null && form.hodometro.trim() !== "" && parseNumber(form.hodometro) < ultimoHodometro;
 
   const produtoOptions = produtosCombustivel.map((produto) => ({
     value: produto.id,
@@ -1642,6 +1680,11 @@ function AbastecimentoForm({
           ? String(result.valorDesconto)
           : current.valorDesconto,
       produtos: matchedProducts.length ? matchedProducts : current.produtos,
+      chaveNfe: result.chaveNfe ?? current.chaveNfe,
+      numeroNfe: result.numeroNota ?? current.numeroNfe,
+      serieNfe: result.serieNota ?? current.serieNfe,
+      emitenteCnpj: result.fornecedorCnpj ?? current.emitenteCnpj,
+      emitenteRazaoSocial: result.fornecedorNome ?? current.emitenteRazaoSocial,
     }));
   };
 
@@ -1765,6 +1808,11 @@ function AbastecimentoForm({
         hodometro,
         pdfUrl,
         xmlUrl,
+        chaveNfe: form.chaveNfe,
+        numeroNfe: form.numeroNfe,
+        serieNfe: form.serieNfe,
+        emitenteCnpj: form.emitenteCnpj,
+        emitenteRazaoSocial: form.emitenteRazaoSocial,
       };
 
       if (editing) {
@@ -1903,7 +1951,10 @@ function AbastecimentoForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Odômetro *</Label>
+            <Label className="flex items-center gap-1.5">
+              Odômetro *
+              {odometroMenorQueUltimo && <AlertTriangle className="h-4 w-4 text-destructive" aria-label="Odômetro menor que o último cadastrado" />}
+            </Label>
             <Input
               type="number"
               min="0"
@@ -1912,6 +1963,12 @@ function AbastecimentoForm({
               onChange={(event) => setForm((current) => ({ ...current, hodometro: event.target.value }))}
               placeholder="0"
             />
+            {odometroMenorQueUltimo && (
+              <p className="flex items-center gap-1.5 text-sm font-medium text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                Odômetro menor que o último cadastrado ({formatOdometro(ultimoHodometro)})
+              </p>
+            )}
           </div>
 
           <div className="space-y-3 border-t border-border pt-4 sm:col-span-2">
@@ -1960,7 +2017,7 @@ function AbastecimentoForm({
                 {form.produtos.map((item, index) => {
                   const produto = produtos.find((entry) => entry.id === item.produtoId);
                   return (
-                    <div key={`${item.produtoId}-${index}`} className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
+                    <div key={`${item.produtoId}-${index}`} className="flex items-center justify-between gap-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">
                           {produto ? `${produto.nome} - ${produto.codigoInterno}` : "Produto removido"}
@@ -2389,6 +2446,8 @@ export default function Abastecimentos() {
                       <td className="px-4 py-3">
                         <div className="flex justify-center gap-1">
                           <button type="button" onClick={() => setViewing(item)} className="flex h-8 w-8 items-center justify-center rounded-lg text-blue-500 hover:bg-blue-500/10" title="Visualizar"><Eye className="h-4 w-4" /></button>
+                          {item.pdfUrl && <button type="button" onClick={() => downloadAttachment(item.pdfUrl!, `abastecimento-${item.numeroNfe || item.id}.pdf`)} className="flex h-8 w-8 items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-500/10" title="Baixar PDF"><Download className="h-4 w-4" /></button>}
+                          {item.xmlUrl && <button type="button" onClick={() => downloadAttachment(item.xmlUrl!, `abastecimento-${item.numeroNfe || item.id}.xml`)} className="flex h-8 w-8 items-center justify-center rounded-lg text-violet-600 hover:bg-violet-500/10" title="Baixar XML"><FileCode2 className="h-4 w-4" /></button>}
                           <button type="button" onClick={() => { setEditing(item); setFormOpen(true); }} className="flex h-8 w-8 items-center justify-center rounded-lg text-amber-500 hover:bg-amber-500/10" title="Editar"><Pencil className="h-4 w-4" /></button>
                           <button type="button" onClick={() => void handleDelete(item)} className="flex h-8 w-8 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10" title="Excluir"><Trash2 className="h-4 w-4" /></button>
                         </div>
@@ -2455,6 +2514,7 @@ export default function Abastecimentos() {
         clientes={clientes}
         produtos={produtos}
         veiculos={veiculos}
+        abastecimentos={items}
         onImported={() => window.location.reload()}
         onClose={() => setBatchXmlOpen(false)}
       />
@@ -2465,6 +2525,7 @@ export default function Abastecimentos() {
         clientes={clientes}
         produtos={produtos}
         veiculos={veiculos}
+        abastecimentos={items}
         onClose={() => { setFormOpen(false); setEditing(null); }}
         onCreate={create}
         onUpdate={update}
