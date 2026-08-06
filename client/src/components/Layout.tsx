@@ -33,10 +33,10 @@ const navItems: NavItem[] = [
     matchPaths: ["/viagens"],
   },
   {
-    label: "Manifestos",
-    href: "/manifestos",
+    label: "Romaneios",
+    href: "/romaneios",
     icon: <ClipboardList className="h-[18px] w-[18px]" />,
-    matchPaths: ["/manifestos"],
+    matchPaths: ["/romaneios", "/manifestos"],
   },
   {
     label: "Comissões",

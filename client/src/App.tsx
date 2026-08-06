@@ -9,7 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Cadastros from "./pages/Cadastros";
 import Viagens from "./pages/Viagens";
 import Fechamentos from "./pages/Fechamentos";
-import Manifestos from "./pages/Manifestos";
+import Romaneios from "./pages/Romaneios";
 import Auth from "./pages/Auth";
 import ChangePassword from "./pages/ChangePassword";
 import Perfil from "./pages/Perfil";
@@ -29,7 +29,8 @@ function Router() {
       <Route path="/cadastros" component={Cadastros} />
       <Route path="/cadastros/:tab" component={Cadastros} />
       <Route path="/viagens" component={Viagens} />
-      <Route path="/manifestos" component={Manifestos} />
+      <Route path="/romaneios" component={Romaneios} />
+      <Route path="/manifestos" component={Romaneios} />
       <Route path="/fechamentos" component={Fechamentos} />
       <Route path="/abastecimentos" component={Abastecimentos} />
       <Route path="/ciot/gerar" component={CiotGerar} />

@@ -5,7 +5,7 @@ import { logger } from "../config/logger";
 const labels: Record<string, string> = {
   motoristas: "motorista", chapas: "chapa", clientes: "cliente", empresa: "empresa", produtos: "produto",
   locais: "local", veiculos: "veículo", viagens: "viagem", fechamentos: "comissão",
-  manifestos: "manifesto", abastecimentos: "abastecimento", pneus: "pneu", estoque: "movimentação de estoque", usuarios: "usuário",
+  manifestos: "romaneio", romaneios: "romaneio", abastecimentos: "abastecimento", pneus: "pneu", estoque: "movimentação de estoque", usuarios: "usuário",
 };
 
 function describe(method: string, path: string, body?: unknown) {

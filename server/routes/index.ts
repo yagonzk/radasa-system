@@ -42,6 +42,7 @@ apiRoutes.use("/veiculos", veiculosRoutes);
 apiRoutes.use("/viagens", viagensRoutes);
 apiRoutes.use("/fechamentos", fechamentosRoutes);
 apiRoutes.use("/manifestos", manifestosRoutes);
+apiRoutes.use("/romaneios", manifestosRoutes);
 apiRoutes.use("/abastecimentos", abastecimentosRoutes);
 apiRoutes.use("/abastecimentos/xml", abastecimentosXmlRoutes);
 apiRoutes.use("/ciots", ciotsRoutes);
@@ -49,3 +50,8 @@ apiRoutes.use("/cte", cteRoutes);
 
 apiRoutes.use("/pneus", pneusRoutes);
 apiRoutes.use("/estoque", estoqueRoutes);
+
+// Impede que uma rota /api desconhecida chegue ao fallback do frontend em produção.
+apiRoutes.use((_req, res) => {
+  res.status(404).json({ message: "Rota de API não encontrada." });
+});

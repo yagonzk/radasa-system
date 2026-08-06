@@ -218,11 +218,24 @@ type Entity = { id: string; createdAt: string };
 const eventName = (resource: string) => `radasa-api-change:${resource}`;
 const generateId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
 
+function requireCollection<T>(data: unknown, entityName: string): T[] {
+  if (Array.isArray(data)) return data as T[];
+  throw new Error(`Resposta inválida ao carregar ${entityName}: era esperada uma lista.`);
+}
+
+function requireEntity<T>(data: unknown, entityName: string): T {
+  if (data && typeof data === "object" && !Array.isArray(data)) return data as T;
+  throw new Error(`Resposta inválida ao salvar ${entityName}.`);
+}
+
 function useApiCrud<T extends Entity>(resource: string, entityName: string) {
   const [items, setItems] = useState<T[]>([]);
 
   const refresh = useCallback(async () => {
-    try { setItems((await api.get<T[]>(`/${resource}`)).data); }
+    try {
+      const response = await api.get<unknown>(`/${resource}`);
+      setItems(requireCollection<T>(response.data, entityName));
+    }
     catch (error) { console.error(`Falha ao carregar ${entityName}.`, error); }
   }, [resource, entityName]);
 
@@ -238,7 +251,8 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string) {
     setItems(current => [...current, newItem]);
 
     try {
-      const createdItem = (await api.post<T>(`/${resource}`, newItem)).data;
+      const response = await api.post<unknown>(`/${resource}`, newItem);
+      const createdItem = requireEntity<T>(response.data, entityName);
       setItems(current => current.map(item => item.id === newItem.id ? createdItem : item));
       window.dispatchEvent(new Event(eventName(resource)));
       return createdItem;
@@ -257,7 +271,8 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string) {
     }));
 
     try {
-      const updatedItem = (await api.put<T>(`/${resource}/${id}`, data)).data;
+      const response = await api.put<unknown>(`/${resource}/${id}`, data);
+      const updatedItem = requireEntity<T>(response.data, entityName);
       setItems(current => current.map(item => item.id === id ? updatedItem : item));
       window.dispatchEvent(new Event(eventName(resource)));
       return updatedItem;
@@ -309,7 +324,9 @@ export function useFechamentos() {
 }
 
 export function useRomaneios() {
-  const crud = useApiCrud<Manifesto>("romaneios", "Romaneio");
+  // O backend mantém "manifestos" como rota interna legada e estável.
+  // A interface continua usando o nome Romaneios para o usuário.
+  const crud = useApiCrud<Manifesto>("manifestos", "Romaneio");
   const create = useCallback((clienteId: string, dataManifesto: string, produtos: ManifestoProduto[], tipoManifesto: TipoManifesto, pdfUrl?: string, metadata: ManifestoMetadata = {}) => crud.create({ clienteId, dataManifesto, produtos, tipoManifesto, pdfUrl, ...metadata }), [crud.create]);
   const update = useCallback((id: string, clienteId: string, dataManifesto: string, produtos: ManifestoProduto[], tipoManifesto: TipoManifesto, pdfUrl?: string, metadata: ManifestoMetadata = {}) => crud.update(id, { clienteId, dataManifesto, produtos, tipoManifesto, pdfUrl, ...metadata }), [crud.update]);
   return { ...crud, create, update };

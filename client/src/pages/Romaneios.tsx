@@ -388,7 +388,7 @@ export default function Romaneios() {
     try {
       const payload = new FormData();
       payload.append("arquivo", file);
-      const response = await api.post<PdfResponse>("/romaneios/interpretar-pdf", payload, {
+      const response = await api.post<PdfResponse>("/manifestos/interpretar-pdf", payload, {
         headers: { "Content-Type": "multipart/form-data" },
         timeout: 120_000,
       });
@@ -434,7 +434,7 @@ export default function Romaneios() {
         try {
           const payload = new FormData();
           payload.append("arquivo", file);
-          const response = await api.post<PdfResponse>("/romaneios/interpretar-pdf", payload, {
+          const response = await api.post<PdfResponse>("/manifestos/interpretar-pdf", payload, {
             headers: { "Content-Type": "multipart/form-data" },
             timeout: 120_000,
           });
@@ -607,7 +607,7 @@ export default function Romaneios() {
     setUpdatingPaymentItem(item.id);
     try {
       const response = await api.patch<Romaneio>(
-        `/romaneios/${inspecting.id}/produtos/${item.id}/pagamento`,
+        `/manifestos/${inspecting.id}/produtos/${item.id}/pagamento`,
         { pago },
       );
       setInspecting(response.data);

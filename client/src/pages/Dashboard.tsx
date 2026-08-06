@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { useMotoristas, useChapas, useClientes, useLocais, useProdutos, useManifestos, usePneuGestao } from "@/lib/store";
+import { useMotoristas, useChapas, useClientes, useLocais, useProdutos, useRomaneios, usePneuGestao } from "@/lib/store";
 import { Link } from "wouter";
 import { Truck, Users, Building2, MapPin, ArrowRight, FileText, Package, ClipboardList, AlertTriangle } from "lucide-react";
 import { useEffect } from "react";
@@ -10,7 +10,7 @@ export default function Dashboard() {
   const { items: clientes } = useClientes();
   const { items: locais } = useLocais();
   const { items: produtos } = useProdutos();
-  const { items: manifestos } = useManifestos();
+  const { items: romaneios } = useRomaneios();
   const { alerts, loadAlerts } = usePneuGestao();
   useEffect(() => { void loadAlerts(); }, [loadAlerts]);
 
@@ -46,8 +46,8 @@ export default function Dashboard() {
       iconBg: "bg-yellow-100 text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-400",
     },
     {
-      label: "MANIFESTOS",
-      value: manifestos.length,
+      label: "ROMANEIOS",
+      value: romaneios.length,
       icon: <ClipboardList className="h-5 w-5" />,
       iconBg: "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400",
     },
@@ -67,7 +67,7 @@ export default function Dashboard() {
               Comissões claras. Operação no ritmo certo.
             </h1>
             <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
-              Centralize seus cadastros, organize cada rota, gerencie manifestos
+              Centralize seus cadastros, organize cada rota, gerencie romaneios
               e prepare fechamentos de comissão com uma visão objetiva da operação.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
@@ -79,10 +79,10 @@ export default function Dashboard() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
-                href="/manifestos"
+                href="/romaneios"
                 className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
               >
-                Novo manifesto
+                Novo romaneio
               </Link>
               <Link
                 href="/fechamentos"
