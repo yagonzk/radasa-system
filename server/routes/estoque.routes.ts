@@ -1,0 +1,10 @@
+import { Router } from "express";
+import { asyncHandler } from "../utils/async-handler.js";
+import { validate } from "../middlewares/validate.js";
+import { bodySchema, estoqueMovimentacaoBody, idParamsSchema } from "../validators/schemas.js";
+import { estoqueController } from "../controllers/estoque.controller.js";
+export const estoqueRoutes = Router();
+estoqueRoutes.get("/", asyncHandler(estoqueController.list));
+estoqueRoutes.get("/resumo", asyncHandler(estoqueController.resumo));
+estoqueRoutes.post("/", validate(bodySchema(estoqueMovimentacaoBody)), asyncHandler(estoqueController.create));
+estoqueRoutes.delete("/:id", validate(idParamsSchema), asyncHandler(estoqueController.remove));

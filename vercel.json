@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm run vercel-build",
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "{server/**,shared/**,prisma/**,node_modules/.prisma/client/**,node_modules/.pnpm/**/node_modules/.prisma/client/**}"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/health",
+      "destination": "/api/_health"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index?__path=:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
