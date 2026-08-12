@@ -5,7 +5,6 @@ import { defineConfig } from "vite";
 
 const PROJECT_ROOT = import.meta.dirname;
 const CLIENT_ROOT = path.resolve(PROJECT_ROOT, "client");
-const IS_VERCEL = process.env.VERCEL === "1";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -19,11 +18,8 @@ export default defineConfig({
   root: CLIENT_ROOT,
   publicDir: path.resolve(CLIENT_ROOT, "public"),
   build: {
-    // O framework Express da Vercel publica automaticamente arquivos em /public.
-    // Fora da Vercel preservamos o build Node tradicional em dist/public.
-    outDir: IS_VERCEL
-      ? path.resolve(PROJECT_ROOT, "public")
-      : path.resolve(PROJECT_ROOT, "dist", "public"),
+    // O Worker serve estes arquivos por meio do binding ASSETS.
+    outDir: path.resolve(PROJECT_ROOT, "dist", "public"),
     emptyOutDir: true,
   },
   server: {

@@ -769,7 +769,10 @@ export async function sugerirVinculosAbastecimento(
 
   // Processa em sequência para evitar criar produtos duplicados quando
   // o mesmo combustível aparece mais de uma vez no mesmo lote/documento.
-  const produtos = [];
+  const produtos: Array<{
+    produto: AbastecimentoXmlProduto;
+    cadastro: Awaited<ReturnType<typeof findProductSuggestion>>;
+  }> = [];
   for (const produto of document.produtos) {
     produtos.push({
       produto,

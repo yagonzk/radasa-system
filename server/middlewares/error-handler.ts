@@ -3,6 +3,31 @@ import { ZodError } from "zod";
 import { logger } from "../config/logger.js";
 import { AppError } from "../utils/app-error.js";
 
+function serializeError(error: unknown) {
+  if (error instanceof Error) {
+    const anyError = error as Error & { code?: unknown; cause?: unknown };
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      code: anyError.code,
+      cause: anyError.cause,
+    };
+  }
+
+  if (typeof error === "object" && error !== null) {
+    const value = error as Record<string, unknown>;
+    return {
+      name: String(value.name ?? ""),
+      message: String(value.message ?? error),
+      code: value.code,
+      cause: value.cause,
+    };
+  }
+
+  return { message: String(error) };
+}
+
 export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
   if (error instanceof ZodError) {
     return res.status(400).json({ message: "Dados inválidos", issues: error.issues });
@@ -28,10 +53,18 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
       : "";
 
   if (errorName === "PrismaClientInitializationError") {
-    logger.error({ error, method: req.method, url: req.originalUrl }, "Banco temporariamente indisponível");
-    return res.status(503).json({ message: "Banco de dados temporariamente indisponível. A importação tentará novamente." });
+    logger.error(
+      { error: serializeError(error), method: req.method, url: req.originalUrl },
+      "Banco temporariamente indisponível",
+    );
+    return res.status(503).json({
+      message: "Banco de dados temporariamente indisponível. Tente novamente em instantes.",
+    });
   }
 
-  logger.error({ error, method: req.method, url: req.originalUrl }, "Erro não tratado");
+  logger.error(
+    { error: serializeError(error), method: req.method, url: req.originalUrl },
+    "Erro não tratado",
+  );
   return res.status(500).json({ message: "Erro interno do servidor." });
 };

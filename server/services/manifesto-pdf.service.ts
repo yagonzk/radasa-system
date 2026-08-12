@@ -1975,7 +1975,11 @@ async function sugerirVinculosComSession(
     clientesPorCodigo.set(digits(clientePdf.codigo), await ensureCliente(clientePdf));
   }
 
-  const itens = [];
+  const itens: Array<{
+    produto: RomaneioPdfProduto;
+    cliente: Awaited<ReturnType<typeof ensureCliente>> & { criadoAutomaticamente: boolean };
+    cadastro: Awaited<ReturnType<typeof ensureProduto>> & { criadoAutomaticamente: boolean };
+  }> = [];
   for (const produtoPdf of documento.produtos) {
     const cliente = clientesPorCodigo.get(digits(produtoPdf.clienteCodigo)) ??
       await ensureCliente({ codigo: produtoPdf.clienteCodigo, nome: produtoPdf.clienteNome });
@@ -2020,7 +2024,7 @@ export async function sugerirVinculosManifestoPdf(documento: RomaneioPdfInterpre
  */
 export async function sugerirVinculosManifestosPdf(documentos: RomaneioPdfInterpretado[]) {
   const session = await criarVinculoSession();
-  const resultados = [];
+  const resultados: Awaited<ReturnType<typeof sugerirVinculosComSession>>[] = [];
   for (const documento of documentos) {
     resultados.push(await sugerirVinculosComSession(documento, session));
   }

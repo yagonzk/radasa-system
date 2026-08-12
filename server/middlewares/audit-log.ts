@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import { prisma, trackPrismaTask } from "../lib/prisma.js";
 import { logger } from "../config/logger.js";
+import { requestParam } from "../utils/request-param.js";
 
 const labels: Record<string, string> = {
   motoristas: "motorista", chapas: "chapa", clientes: "cliente", empresa: "empresa", produtos: "produto",
@@ -39,7 +40,7 @@ export const auditMutations: RequestHandler = (req, res, next) => {
     const auditTask = prisma.auditLog.create({
       data: {
         userId: req.user.id, action: describe(req.method, req.originalUrl, req.body), method: req.method,
-        path: req.originalUrl, entityId: req.params.id || null,
+        path: req.originalUrl, entityId: requestParam(req.params.id) || null,
       },
     }).catch(error => logger.error({ error }, "Falha ao registrar log de auditoria"));
     trackPrismaTask(auditTask);

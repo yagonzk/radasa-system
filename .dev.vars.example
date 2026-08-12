@@ -1,0 +1,4 @@
+# Use este arquivo apenas como modelo para `wrangler dev`.
+# Copie para `.dev.vars` e NÃO faça commit do arquivo real.
+DATABASE_URL="postgresql://usuario:senha@host/banco?sslmode=require"
+JWT_SECRET="troque-por-o-mesmo-jwt-secret-da-producao-com-32-ou-mais-caracteres"

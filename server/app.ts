@@ -8,6 +8,7 @@ import { sanitizeInputs } from "./middlewares/sanitize.js";
 import { notFound } from "./middlewares/not-found.js";
 import { errorHandler } from "./middlewares/error-handler.js";
 import { createRateLimiter } from "./middlewares/rate-limit.js";
+import { prismaRequestContext } from "./lib/prisma.js";
 
 export function createApp() {
   const app = express();
@@ -36,8 +37,7 @@ export function createApp() {
   // Aqui aceitamos:
   //   1) origens configuradas em CLIENT_ORIGIN;
   //   2) a mesma origem/host da requisição;
-  //   3) o domínio principal radasa.com.br e www.radasa.com.br;
-  //   4) aliases antigos da Vercel durante a transição.
+  //   3) o domínio principal radasa.com.br e www.radasa.com.br.
   // Origens desconhecidas simplesmente não recebem headers CORS; não geramos
   // exceção 500 no middleware.
   app.use(
@@ -67,16 +67,11 @@ export function createApp() {
         const customDomain =
           parsedOrigin.protocol === "https:" &&
           (originHostname === "radasa.com.br" || originHostname === "www.radasa.com.br");
-        const projectVercelDomain =
-          parsedOrigin.protocol === "https:" &&
-          (originHostname === "radasa-system-v1.vercel.app" ||
-            (originHostname.startsWith("radasa-system-v1-") &&
-              originHostname.endsWith(".vercel.app")));
         const localDevelopment =
           env.NODE_ENV !== "production" &&
           (originHostname === "localhost" || originHostname === "127.0.0.1");
 
-        allowed = allowed || sameHost || customDomain || projectVercelDomain || localDevelopment;
+        allowed = allowed || sameHost || customDomain || localDevelopment;
       } catch {
         allowed = false;
       }
@@ -89,8 +84,7 @@ export function createApp() {
     }),
   );
 
-  // A Vercel limita o corpo de Functions antes do Express. Mantemos um limite
-  // interno menor que o antigo 25 MB para falhar de forma previsível.
+  // Limite interno para falhar de forma previsível em uploads JSON grandes.
   app.use(express.json({ limit: "4mb" }));
   app.use(express.urlencoded({ extended: false, limit: "4mb" }));
   app.use(sanitizeInputs);
@@ -102,6 +96,8 @@ export function createApp() {
     res.setHeader("Expires", "0");
     next();
   });
+  // Prisma/pg não deve compartilhar sockets entre requests no runtime edge.
+  app.use("/api", prismaRequestContext);
   app.use("/api", createRateLimiter({ windowMs: 15 * 60 * 1000, limit: 1000, standardHeaders: "draft-7", legacyHeaders: false }), apiRoutes);
   return app;
 }
