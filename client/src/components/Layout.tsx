@@ -51,7 +51,7 @@ const navItems: NavItem[] = [
     matchPaths: ["/abastecimentos"],
   },
   {
-    label: "Estoque",
+    label: "Almoxarifado",
     href: "/estoque",
     icon: <Boxes className="h-[18px] w-[18px]" />,
     matchPaths: ["/estoque"],

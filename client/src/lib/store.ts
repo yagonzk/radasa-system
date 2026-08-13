@@ -363,7 +363,7 @@ export const useChapas = () => useApiCrud<Chapa>("chapas", "Chapa");
 export const useClientes = () => useApiCrud<Cliente>("clientes", "Cliente");
 export const useEmpresa = () => useApiCrud<Empresa>("empresa", "Empresa");
 export const useProdutos = () => useApiCrud<Produto>("produtos", "Produto");
-export const useEstoqueProdutos = () => useApiCrud<EstoqueProduto>("estoque/produtos", "Produto de estoque");
+export const useEstoqueProdutos = () => useApiCrud<EstoqueProduto>("estoque/produtos", "Produto do almoxarifado");
 export const useLocais = () => useApiCrud<Local>("locais", "Local");
 export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");
 export const useViagens = () => useApiCrud<Viagem>("viagens", "Viagem");

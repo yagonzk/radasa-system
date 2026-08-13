@@ -6,15 +6,15 @@ import { requestParam } from "../utils/request-param.js";
 const labels: Record<string, string> = {
   motoristas: "motorista", chapas: "chapa", clientes: "cliente", empresa: "empresa", produtos: "produto",
   locais: "local", veiculos: "veículo", viagens: "viagem", fechamentos: "comissão",
-  manifestos: "romaneio", romaneios: "romaneio", abastecimentos: "abastecimento", pneus: "pneu", estoque: "movimentação de estoque", usuarios: "usuário",
+  manifestos: "romaneio", romaneios: "romaneio", abastecimentos: "abastecimento", pneus: "pneu", estoque: "movimentação de almoxarifado", usuarios: "usuário",
 };
 
 function describe(method: string, path: string, body?: unknown) {
   if (path.includes("/auth/change-password")) return "Alterou a própria senha";
   if (path.includes("/estoque/produtos")) {
-    if (method === "POST") return "Cadastrou produto de estoque";
-    if (method === "PUT" || method === "PATCH") return "Editou produto de estoque";
-    if (method === "DELETE") return "Excluiu produto de estoque";
+    if (method === "POST") return "Cadastrou produto do almoxarifado";
+    if (method === "PUT" || method === "PATCH") return "Editou produto do almoxarifado";
+    if (method === "DELETE") return "Excluiu produto do almoxarifado";
   }
   const cleanPath = path.split("?")[0];
   if (

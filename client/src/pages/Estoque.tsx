@@ -145,28 +145,28 @@ export default function Estoque() {
     try {
       if (editingProduct) {
         await updateProduto(editingProduct.id, productForm);
-        toast.success("Produto de estoque atualizado.");
+        toast.success("Produto do almoxarifado atualizado.");
       } else {
         await createProduto(productForm);
-        toast.success("Produto criado no estoque.");
+        toast.success("Produto criado no almoxarifado.");
       }
       setCategoria(productForm.categoria);
       setProductOpen(false);
       setEditingProduct(null);
       await refreshEstoque();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Não foi possível salvar o produto de estoque.");
+      toast.error(error?.response?.data?.message || "Não foi possível salvar o produto do almoxarifado.");
     } finally {
       setSavingProduct(false);
     }
   };
 
   const deleteProduct = async (produto: EstoqueProduto) => {
-    if (!window.confirm(`Excluir o produto "${produto.nome}" do estoque?`)) return;
+    if (!window.confirm(`Excluir o produto "${produto.nome}" do almoxarifado?`)) return;
     try {
       await removeProduto(produto.id);
       await refreshEstoque();
-      toast.success("Produto de estoque excluído.");
+      toast.success("Produto do almoxarifado excluído.");
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Não foi possível excluir o produto.");
     }
@@ -226,7 +226,7 @@ export default function Estoque() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `estoque_${categoria
+    link.download = `almoxarifado_${categoria
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-zA-Z0-9]+/g, "_")
@@ -246,7 +246,7 @@ export default function Estoque() {
         (item) => `<tr><td>${formatDate(item.data)}</td><td>${escapeHtml(item.produto.nome)}</td><td>${escapeHtml(item.produto.codigoInterno)}</td><td>${item.tipo === "ENTRADA" ? "Entrada" : "Saída"}</td><td>${item.quantidade.toLocaleString("pt-BR")}</td><td>${formatBRL(item.valorUnitario)}</td><td>${formatBRL(item.valorTotal)}</td></tr>`,
       )
       .join("");
-    windowPrint.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Relatório de estoque</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#111}h1{margin:0 0 4px;font-size:22px}p{margin:0 0 20px;color:#555}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f1f5f9}@media print{button{display:none}}</style></head><body><h1>Estoque — ${escapeHtml(categoryLabel)}</h1><p>${viewMode === "ESTOQUE" ? "Todas as movimentações" : viewMode === "ENTRADAS" ? "Entradas" : "Saídas"}</p><table><thead><tr><th>Data</th><th>Produto</th><th>Código</th><th>Tipo</th><th>Quantidade</th><th>Valor unitário</th><th>Valor total</th></tr></thead><tbody>${rows || '<tr><td colspan="7">Nenhum registro.</td></tr>'}</tbody></table><script>window.onload=()=>window.print();</script></body></html>`);
+    windowPrint.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Relatório de almoxarifado</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#111}h1{margin:0 0 4px;font-size:22px}p{margin:0 0 20px;color:#555}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f1f5f9}@media print{button{display:none}}</style></head><body><h1>Almoxarifado — ${escapeHtml(categoryLabel)}</h1><p>${viewMode === "ESTOQUE" ? "Todas as movimentações" : viewMode === "ENTRADAS" ? "Entradas" : "Saídas"}</p><table><thead><tr><th>Data</th><th>Produto</th><th>Código</th><th>Tipo</th><th>Quantidade</th><th>Valor unitário</th><th>Valor total</th></tr></thead><tbody>${rows || '<tr><td colspan="7">Nenhum registro.</td></tr>'}</tbody></table><script>window.onload=()=>window.print();</script></body></html>`);
     windowPrint.document.close();
   };
 
@@ -255,9 +255,9 @@ export default function Estoque() {
       <div className="space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Estoque</h1>
+            <h1 className="text-2xl font-bold">Almoxarifado</h1>
             <p className="text-sm text-muted-foreground">
-              Produtos do estoque são cadastrados aqui e são independentes dos produtos da aba Cadastros.
+              Produtos do almoxarifado são cadastrados aqui e são independentes dos produtos da aba Cadastros.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -279,12 +279,12 @@ export default function Estoque() {
         <div className="grid gap-4 md:grid-cols-3">
           <Card title="Entradas" value={totalEntradas} icon={<ArrowDownToLine className="h-4 w-4" />} />
           <Card title="Saídas" value={totalSaidas} icon={<ArrowUpFromLine className="h-4 w-4" />} />
-          <Card title="Estoque atual" value={totalEstoque} icon={<Boxes className="h-4 w-4" />} />
+          <Card title="Saldo atual" value={totalEstoque} icon={<Boxes className="h-4 w-4" />} />
         </div>
 
         <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
           <TabsList className="grid w-full max-w-xl grid-cols-3">
-            <TabsTrigger value="ESTOQUE">Estoque</TabsTrigger>
+            <TabsTrigger value="ESTOQUE">Almoxarifado</TabsTrigger>
             <TabsTrigger value="ENTRADAS">Entradas</TabsTrigger>
             <TabsTrigger value="SAIDAS">Saídas</TabsTrigger>
           </TabsList>
@@ -305,7 +305,7 @@ export default function Estoque() {
 
         <Dialog open={productOpen} onOpenChange={(value) => { setProductOpen(value); if (!value) setEditingProduct(null); }}>
           <DialogContent className="sm:max-w-[520px]">
-            <DialogHeader><DialogTitle>{editingProduct ? "Editar produto do estoque" : "Novo produto do estoque"}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editingProduct ? "Editar produto do almoxarifado" : "Novo produto do almoxarifado"}</DialogTitle></DialogHeader>
             <form onSubmit={submitProduct} className="space-y-4">
               <Field label="Nome do produto">
                 <Input
@@ -421,7 +421,7 @@ function ResumoTable({
     <div className="overflow-x-auto rounded-xl border bg-card">
       <table className="w-full min-w-[760px] text-sm">
         <thead className="bg-muted/30">
-          <tr>{["Produto", "Código", "Entradas", "Saídas", "Estoque", "Valor das saídas", "Ações"].map((header) => <th key={header} className="px-4 py-3 text-left text-muted-foreground">{header}</th>)}</tr>
+          <tr>{["Produto", "Código", "Entradas", "Saídas", "Saldo", "Valor das saídas", "Ações"].map((header) => <th key={header} className="px-4 py-3 text-left text-muted-foreground">{header}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((row) => (

@@ -46,12 +46,12 @@ export const estoqueService = {
   },
 
   async createProduto(data: any) {
-    if (!categoriaValida(data.categoria)) throw new AppError(400, "Categoria de estoque inválida.");
+    if (!categoriaValida(data.categoria)) throw new AppError(400, "Categoria do almoxarifado inválida.");
     const codigoInterno = String(data.codigoInterno ?? "").trim();
     const nome = String(data.nome ?? "").trim();
 
     const existente = await prisma.estoqueProduto.findFirst({ where: { codigoInterno } });
-    if (existente) throw new AppError(409, "Já existe um produto de estoque com este código interno.");
+    if (existente) throw new AppError(409, "Já existe um produto do almoxarifado com este código interno.");
 
     const { createdAt, ...rest } = data;
     const item = await prisma.estoqueProduto.create({
@@ -67,16 +67,16 @@ export const estoqueService = {
 
   async updateProduto(id: string, data: any) {
     const atual = await prisma.estoqueProduto.findUnique({ where: { id } });
-    if (!atual) throw new AppError(404, "Produto de estoque não encontrado.");
+    if (!atual) throw new AppError(404, "Produto do almoxarifado não encontrado.");
     if (data.categoria !== undefined && !categoriaValida(data.categoria)) {
-      throw new AppError(400, "Categoria de estoque inválida.");
+      throw new AppError(400, "Categoria do almoxarifado inválida.");
     }
 
     const codigoInterno = data.codigoInterno === undefined ? atual.codigoInterno : String(data.codigoInterno).trim();
     const duplicado = await prisma.estoqueProduto.findFirst({
       where: { codigoInterno, id: { not: id } },
     });
-    if (duplicado) throw new AppError(409, "Já existe um produto de estoque com este código interno.");
+    if (duplicado) throw new AppError(409, "Já existe um produto do almoxarifado com este código interno.");
 
     const { createdAt, ...rest } = data;
     const item = await prisma.estoqueProduto.update({
@@ -92,7 +92,7 @@ export const estoqueService = {
 
   async removeProduto(id: string) {
     const item = await prisma.estoqueProduto.findUnique({ where: { id } });
-    if (!item) throw new AppError(404, "Produto de estoque não encontrado.");
+    if (!item) throw new AppError(404, "Produto do almoxarifado não encontrado.");
     const movimentacoes = await prisma.estoqueMovimentacao.count({ where: { produtoId: id } });
     if (movimentacoes > 0) {
       throw new AppError(409, "Este produto possui movimentações e não pode ser excluído.");
@@ -139,14 +139,14 @@ export const estoqueService = {
 
   async create(data: any) {
     const produto = await prisma.estoqueProduto.findUnique({ where: { id: data.produtoId } });
-    if (!produto) throw new AppError(404, "Produto de estoque não encontrado.");
+    if (!produto) throw new AppError(404, "Produto do almoxarifado não encontrado.");
 
     const quantidade = Number(data.quantidade);
     const valorUnitario = Number(data.valorUnitario || 0);
     if (data.tipo === "SAIDA") {
       const saldo = await saldoProduto(data.produtoId);
       if (quantidade > saldo) {
-        throw new AppError(409, `Estoque insuficiente. Disponível: ${saldo.toLocaleString("pt-BR")}.`);
+        throw new AppError(409, `Saldo insuficiente. Disponível: ${saldo.toLocaleString("pt-BR")}.`);
       }
     }
 
@@ -169,7 +169,7 @@ export const estoqueService = {
     if (item.tipo === "ENTRADA") {
       const saldoSemEntrada = await saldoProduto(item.produtoId, id);
       if (saldoSemEntrada < 0) {
-        throw new AppError(409, "Esta entrada não pode ser removida porque deixaria o estoque negativo.");
+        throw new AppError(409, "Esta entrada não pode ser removida porque deixaria o saldo negativo.");
       }
     }
     await prisma.estoqueMovimentacao.delete({ where: { id } });
