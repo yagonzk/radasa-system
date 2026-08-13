@@ -268,6 +268,7 @@ export default function Viagens() {
                 </Label>
                 <DatePicker
                   value={filterDataFim}
+                  defaultMonth={filterDataInicio}
                   onChange={setFilterDataFim}
                   className="w-44"
                   placeholder="Selecione uma data"

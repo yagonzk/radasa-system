@@ -151,6 +151,7 @@ export interface AbastecimentoImportacaoItem {
   valorDesconto?: number;
   hodometro: number;
   xmlUrl?: string | null;
+  pdfUrl?: string | null;
   produtos: Array<{
     produtoId: string;
     quantidadeLitros: number;

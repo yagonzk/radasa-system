@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import multer from "multer";
 import {
+  criarContextoSugestoesAbastecimento,
   interpretarAbastecimentoXml,
   sugerirVinculosAbastecimento,
 } from "../services/abastecimento-xml.service.js";
@@ -39,11 +40,17 @@ abastecimentosXmlRoutes.post(
         return;
       }
 
-      const results: any[] = [];
+      const results: Array<any | undefined> = new Array(files.length);
+      const parsed: Array<{
+        index: number;
+        file: Express.Multer.File;
+        document: ReturnType<typeof interpretarAbastecimentoXml>;
+      }> = [];
       const keys = new Set<string>();
-      let jaCadastrados = 0;
 
-      for (const file of files) {
+      // Parsing e validação inicial acontecem antes das consultas ao banco. Isso
+      // permite fazer a busca de duplicidades já cadastradas em uma única query.
+      files.forEach((file, index) => {
         try {
           if (!file.originalname.toLowerCase().endsWith(".xml")) {
             throw new Error("O arquivo não possui extensão .xml.");
@@ -62,54 +69,10 @@ abastecimentosXmlRoutes.post(
           }
 
           keys.add(document.chaveNfe);
-
-          const existente = await prisma.abastecimento.findUnique({
-            where: { chaveNfe: document.chaveNfe },
-            select: {
-              id: true,
-              clienteId: true,
-              veiculoId: true,
-              hodometro: true,
-            },
-          });
-
-          if (existente) {
-            jaCadastrados += 1;
-            if (modoDuplicidade === "OCULTAR") continue;
-          }
-
-          const sugestoes = await sugerirVinculosAbastecimento(document);
-
-          const missing: string[] = [];
-          if (!sugestoes.cliente) missing.push("cliente/posto");
-          if (!sugestoes.veiculo) missing.push("veículo");
-          if (document.hodometro === null) missing.push("odômetro");
-          if (sugestoes.produtos.some((item) => !item.cadastro)) {
-            missing.push("produto");
-          }
-
-          results.push({
-            fileName: file.originalname,
-            status: missing.length ? "PENDENTE" : "COMPLETO",
-            erros: [],
-            pendencias: Array.from(new Set(missing)),
-            documento: document,
-            sugestoes,
-            jaCadastrado: Boolean(existente),
-            existente: existente
-              ? {
-                  id: existente.id,
-                  clienteId: existente.clienteId,
-                  veiculoId: existente.veiculoId,
-                  hodometro: Number(existente.hodometro),
-                }
-              : null,
-            xmlUrl: `data:${
-              file.mimetype || "application/xml"
-            };base64,${file.buffer.toString("base64")}`,
-          });
+          parsed.push({ index, file, document });
         } catch (error) {
-          results.push({
+          results[index] = {
+            indiceArquivo: index,
             fileName: file.originalname,
             status: "INVALIDO",
             erros: [
@@ -121,22 +84,135 @@ abastecimentosXmlRoutes.post(
             documento: null,
             sugestoes: null,
             xmlUrl: null,
-          });
+          };
         }
-      }
+      });
+
+      type ExistingAbastecimento = {
+        id: string;
+        chaveNfe: string | null;
+        clienteId: string;
+        veiculoId: string;
+        hodometro: unknown;
+      };
+
+      const existentes = (keys.size
+        ? await prisma.abastecimento.findMany({
+            where: { chaveNfe: { in: Array.from(keys) } },
+            select: {
+              id: true,
+              chaveNfe: true,
+              clienteId: true,
+              veiculoId: true,
+              hodometro: true,
+            },
+          })
+        : []) as ExistingAbastecimento[];
+
+      const existentePorChave = new Map<string, ExistingAbastecimento>(
+        existentes
+          .filter((item) => item.chaveNfe)
+          .map((item) => [item.chaveNfe!, item] as const),
+      );
+      const jaCadastrados = existentes.length;
+
+      const pendentesDeSugestao = parsed.filter(({ document }) => {
+        const existente = existentePorChave.get(document.chaveNfe);
+        return !existente || modoDuplicidade === "SINCRONIZAR";
+      });
+
+      // Carrega clientes, veículos e combustíveis uma única vez por requisição.
+      // Antes cada XML repetia essas consultas, o que fazia lotes grandes ficarem
+      // muito mais lentos do que o parsing do XML em si.
+      const suggestionContext = pendentesDeSugestao.length
+        ? await criarContextoSugestoesAbastecimento()
+        : null;
+
+      const CONCURRENCY = 4;
+      let nextIndex = 0;
+
+      const workers = Array.from(
+        { length: Math.min(CONCURRENCY, pendentesDeSugestao.length) },
+        async () => {
+          while (true) {
+            const position = nextIndex;
+            nextIndex += 1;
+            if (position >= pendentesDeSugestao.length) return;
+
+            const { index, file, document } = pendentesDeSugestao[position];
+            const existente = existentePorChave.get(document.chaveNfe);
+
+            try {
+              const sugestoes = await sugerirVinculosAbastecimento(
+                document,
+                suggestionContext ?? undefined,
+              );
+
+              const missing: string[] = [];
+              if (!sugestoes.cliente) missing.push("cliente/posto");
+              if (!sugestoes.veiculo) missing.push("veículo");
+              if (document.hodometro === null) missing.push("odômetro");
+              if (sugestoes.produtos.some((item) => !item.cadastro)) {
+                missing.push("produto");
+              }
+
+              results[index] = {
+                indiceArquivo: index,
+                fileName: file.originalname,
+                status: missing.length ? "PENDENTE" : "COMPLETO",
+                erros: [],
+                pendencias: Array.from(new Set(missing)),
+                documento: document,
+                sugestoes,
+                jaCadastrado: Boolean(existente),
+                existente: existente
+                  ? {
+                      id: existente.id,
+                      clienteId: existente.clienteId,
+                      veiculoId: existente.veiculoId,
+                      hodometro: Number(existente.hodometro),
+                    }
+                  : null,
+                xmlUrl: `data:${
+                  file.mimetype || "application/xml"
+                };base64,${file.buffer.toString("base64")}`,
+              };
+            } catch (error) {
+              results[index] = {
+                indiceArquivo: index,
+                fileName: file.originalname,
+                status: "INVALIDO",
+                erros: [
+                  error instanceof Error
+                    ? error.message
+                    : "Não foi possível sugerir os vínculos do XML.",
+                ],
+                pendencias: [],
+                documento: null,
+                sugestoes: null,
+                xmlUrl: null,
+              };
+            }
+          }
+        },
+      );
+
+      await Promise.all(workers);
+
+      const visibleResults = results.filter(Boolean);
 
       res.json({
-        arquivos: results,
+        arquivos: visibleResults,
         resumo: {
-          quantidade: results.length,
-          completos: results.filter((item) => item.status === "COMPLETO")
+          quantidade: visibleResults.length,
+          completos: visibleResults.filter((item) => item.status === "COMPLETO")
             .length,
-          pendentes: results.filter((item) => item.status === "PENDENTE")
+          pendentes: visibleResults.filter((item) => item.status === "PENDENTE")
             .length,
-          invalidos: results.filter((item) => item.status === "INVALIDO")
+          invalidos: visibleResults.filter((item) => item.status === "INVALIDO")
             .length,
           jaCadastrados,
-          litros: results.reduce(
+          litros: visibleResults.reduce(
             (sum: number, item: any) =>
               sum +
               (item.documento?.produtos ?? []).reduce(
@@ -148,7 +224,7 @@ abastecimentosXmlRoutes.post(
               ),
             0,
           ),
-          valor: results.reduce(
+          valor: visibleResults.reduce(
             (sum, item) => sum + Number(item.documento?.totais.nota || 0),
             0,
           ),

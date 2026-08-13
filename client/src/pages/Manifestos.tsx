@@ -545,11 +545,20 @@ export default function Manifestos() {
           "Bonificação - Lebrinha": "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300",
           "Acertar c/ Lebrinha": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300",
           "Receber c/ Cliente": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300",
+          "Vasilhame": "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300",
         };
+        const tiposDoRomaneio = Array.from(new Set(
+          (item.produtos ?? []).map((produto) => produto.tipoManifesto ?? item.tipoManifesto),
+        ));
+        const tiposVisiveis = tiposDoRomaneio.length ? tiposDoRomaneio : [item.tipoManifesto];
         return (
-          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colors[item.tipoManifesto]}`}>
-            {item.tipoManifesto}
-          </span>
+          <div className="flex flex-wrap gap-1">
+            {tiposVisiveis.map((tipo) => (
+              <span key={tipo} className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colors[tipo]}`}>
+                {tipo}
+              </span>
+            ))}
+          </div>
         );
       },
     },
@@ -832,7 +841,7 @@ export default function Manifestos() {
                                       {(() => {
                                         // Build the items to display
                                         const items = col.key === "tipoManifesto"
-                                          ? (["Bonificação - Lebrinha", "Acertar c/ Lebrinha", "Receber c/ Cliente"] as TipoManifesto[])
+                                          ? (["Bonificação - Lebrinha", "Acertar c/ Lebrinha", "Receber c/ Cliente", "Vasilhame"] as TipoManifesto[])
                                           : produtos;
 
                                         const filteredItems = items.filter((item) => {
@@ -946,8 +955,12 @@ export default function Manifestos() {
                         }
                       }
                       // Filter by tipo
-                      if (filters.tipo && !item.tipoManifesto.toLowerCase().includes(filters.tipo.toLowerCase())) {
-                        return false;
+                      if (filters.tipo) {
+                        const needle = filters.tipo.toLowerCase();
+                        const hasTipo = (item.produtos ?? []).some((produto) =>
+                          (produto.tipoManifesto ?? item.tipoManifesto).toLowerCase().includes(needle),
+                        ) || item.tipoManifesto.toLowerCase().includes(needle);
+                        if (!hasTipo) return false;
                       }
                       // Filter by data
                       if (filters.data && getLocalDateKey(item.dataManifesto || item.createdAt) !== filters.data) {
@@ -1196,6 +1209,7 @@ export default function Manifestos() {
                         <SelectItem value="Bonificação - Lebrinha">Bonificação - Lebrinha</SelectItem>
                         <SelectItem value="Acertar c/ Lebrinha">Acertar c/ Lebrinha</SelectItem>
                         <SelectItem value="Receber c/ Cliente">Receber c/ Cliente</SelectItem>
+                        <SelectItem value="Vasilhame">Vasilhame</SelectItem>
                       </SelectContent>
                     </Select>
                   </FormField>
@@ -1239,6 +1253,7 @@ export default function Manifestos() {
                         "Bonificação - Lebrinha": "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300",
                         "Acertar c/ Lebrinha": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300",
                         "Receber c/ Cliente": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300",
+          "Vasilhame": "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300",
                       };
                       return (
                         <div key={idx} className="flex justify-between items-center p-2 bg-background rounded border border-border">
@@ -1422,6 +1437,7 @@ export default function Manifestos() {
                           "Bonificação - Lebrinha": "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300",
                           "Acertar c/ Lebrinha": "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300",
                           "Receber c/ Cliente": "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300",
+          "Vasilhame": "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/20 dark:text-cyan-300",
                         };
                         return (
                           <div key={idx} className="text-sm bg-background p-2 rounded border border-border">

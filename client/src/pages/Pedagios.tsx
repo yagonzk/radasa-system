@@ -61,6 +61,21 @@ function mergeTollPassages(items: TollItem[]) {
   return Array.from(merged.values());
 }
 
+// A geometria completa do OSRM pode ter dezenas de milhares de pontos em rotas longas.
+// Para localizar pedágios o backend trabalha por segmentos, então uma amostra uniforme
+// preserva o traçado e evita estourar CPU/tempo do Cloudflare Worker.
+function compactRouteForTolls(coords: [number, number][], maxPoints = 900) {
+  if (coords.length <= maxPoints) return coords;
+  const compact: [number, number][] = [];
+  let previousIndex = -1;
+  for (let i = 0; i < maxPoints; i += 1) {
+    const index = Math.round((i * (coords.length - 1)) / (maxPoints - 1));
+    if (index !== previousIndex) compact.push(coords[index]);
+    previousIndex = index;
+  }
+  return compact;
+}
+
 function CityPicker({ label, value, onSelect, placeholder }: { label: string; value: City | null; onSelect: (c: City | null) => void; placeholder: string }) {
   const [query, setQuery] = useState(value ? `${value.nome} - ${value.uf}` : "");
   const [open, setOpen] = useState(false), [cities, setCities] = useState<City[]>([]), [loadingCities, setLoadingCities] = useState(false);
@@ -177,7 +192,10 @@ export default function Pedagios() {
       if (!route) throw new Error("Nenhuma rota rodoviária encontrada entre as cidades selecionadas.");
       const coords = decodePolyline(route.geometry); setDistanceMeters(Number(route.distance || 0)); setDurationSeconds(Number(route.duration || 0));
       const L = (window as any).L; routeLayer.current = L.polyline(coords, { weight: 5, opacity: .85 }).addTo(mapRef.current); mapRef.current.fitBounds(routeLayer.current.getBounds(), { padding: [30, 30] });
-      const requestTolls = (routeCoords: [number, number][], from: City, to: City) => api.post("/pedagios/calcular", { points: routeCoords.map(([latitude, longitude]) => ({ latitude, longitude })), origin: { name: from.nome, uf: from.uf }, destination: { name: to.nome, uf: to.uf }, vehicleType, billingType, calculationDate: Date.now() });
+      const requestTolls = (routeCoords: [number, number][], from: City, to: City) => {
+        const compactCoords = compactRouteForTolls(routeCoords);
+        return api.post("/pedagios/calcular", { points: compactCoords.map(([latitude, longitude]) => ({ latitude, longitude })), origin: { name: from.nome, uf: from.uf }, destination: { name: to.nome, uf: to.uf }, vehicleType, billingType, calculationDate: Date.now() }, { timeout: 45_000 });
+      };
       const response = await requestTolls(coords, origin, destination); let items = Array.isArray(response.data?.tolls) ? response.data.tolls : [], combinedTotal = Number(response.data?.totalCost || 0);
       if (shouldRoundTrip) { const back = await requestTolls([...coords].reverse(), destination, origin); items = [...items.map((t: TollItem) => ({ ...t, type: "IDA" })), ...(back.data?.tolls || []).map((t: TollItem) => ({ ...t, id: `${t.id}-volta`, type: "VOLTA" }))]; combinedTotal += Number(back.data?.totalCost || 0); }
       items = mergeTollPassages(items); if (runId !== calculationRun.current) return; setTolls(items); setTotalCost(combinedTotal); setProviderConfigured(true);

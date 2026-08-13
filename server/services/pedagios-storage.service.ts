@@ -93,6 +93,20 @@ async function latestLogs(): Promise<LogRow[]> {
   `, ACTION, `${ENTITY_PREFIX}%`);
 }
 
+// O cálculo de rota só precisa das correções manuais. A consulta antiga carregava
+// também centenas de registros automáticos materializados, aumentando I/O e tempo
+// de CPU no Worker sem alterar o resultado do cálculo.
+async function latestManualLogs(): Promise<LogRow[]> {
+  return prisma.$queryRawUnsafe<LogRow[]>(`
+    SELECT DISTINCT ON ("entityId") "entityId", "path", "createdAt"
+      FROM "audit_logs"
+     WHERE "action" = $1
+       AND "entityId" LIKE $2
+       AND "path" LIKE '%"fonte":"MANUAL"%'
+     ORDER BY "entityId", "createdAt" DESC
+  `, ACTION, `${ENTITY_PREFIX}%`);
+}
+
 function editablePerAxle(plaza: LocalTollPlaza): number {
   if (plaza.pricing.kind === "PER_AXLE") return Number(plaza.pricing.perAxle || 0);
   if (plaza.pricing.kind === "UNKNOWN") return 0;
@@ -172,6 +186,16 @@ export async function listPedagios(onlyActive = false): Promise<PedagioDbRow[]> 
   return rows
     .map(parseStored)
     .filter((row): row is PedagioDbRow => Boolean(row))
+    .filter((row) => !onlyActive || row.ativo)
+    .sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.uf.localeCompare(b.uf) || a.rodovia.localeCompare(b.rodovia) || a.nome.localeCompare(b.nome));
+}
+
+export async function listManualPedagios(onlyActive = true): Promise<PedagioDbRow[]> {
+  const rows = await latestManualLogs();
+  return rows
+    .map(parseStored)
+    .filter((row): row is PedagioDbRow => Boolean(row))
+    .filter((row) => row.fonte === "MANUAL")
     .filter((row) => !onlyActive || row.ativo)
     .sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.uf.localeCompare(b.uf) || a.rodovia.localeCompare(b.rodovia) || a.nome.localeCompare(b.nome));
 }

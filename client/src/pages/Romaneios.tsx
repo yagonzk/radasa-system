@@ -35,7 +35,9 @@ import {
   ChevronDown,
   CircleDollarSign,
   Download,
+  FileDown,
   Eye,
+  EyeOff,
   Files,
   FileText,
   LoaderCircle,
@@ -166,6 +168,7 @@ const tipos: TipoManifesto[] = [
   "Bonificação - Lebrinha",
   "Acertar c/ Lebrinha",
   "Receber c/ Cliente",
+  "Vasilhame",
 ];
 
 const emptyManual = (): ManualForm => ({
@@ -251,9 +254,27 @@ function romaneioVehicleLabel(romaneio: Romaneio) {
   return `${romaneio.placaVeiculo || "Sem placa"}${romaneio.modeloVeiculo ? ` - ${romaneio.modeloVeiculo}` : ""}`;
 }
 
+function csvCell(value: unknown) {
+  const text = value == null ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function csvNumber(value: number) {
+  return Number.isFinite(value) ? value.toLocaleString("pt-BR", { maximumFractionDigits: 3 }) : "0";
+}
+
+function safeFilePart(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "sem-numero";
+}
+
 function typeClasses(type?: TipoManifesto) {
   if (type === "Receber c/ Cliente") return "bg-blue-500/15 text-blue-700 dark:text-blue-300";
   if (type === "Acertar c/ Lebrinha") return "bg-amber-500/15 text-amber-700 dark:text-amber-300";
+  if (type === "Vasilhame") return "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300";
   return "bg-violet-500/15 text-violet-700 dark:text-violet-300";
 }
 
@@ -341,6 +362,11 @@ function SearchableSelect({
 }
 
 export default function Romaneios() {
+  const [visibleSummaryValues, setVisibleSummaryValues] = useState<Record<string, boolean>>({});
+
+  const toggleSummaryValue = (label: string) => {
+    setVisibleSummaryValues((current) => ({ ...current, [label]: !current[label] }));
+  };
   const { items: romaneios, create, update, remove, replaceLocalItem, refresh: refreshRomaneios } = useRomaneios();
   const { items: clientes, refresh: refreshClientes } = useClientes();
   const { items: produtos, refresh: refreshProdutos } = useProdutos();
@@ -615,19 +641,34 @@ export default function Romaneios() {
     let valorLebrinha = 0;
     let faltaPagar = 0;
     let foiPago = 0;
+    let valorTotal = 0;
+
     filtered.forEach((romaneio) => {
       romaneio.produtos.forEach((item) => {
         const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
+        const valor = Number(item.valorTotal || 0);
+
         if (tipo === "Receber c/ Cliente") {
-          valorCliente += item.valorTotal;
-          if (item.pagoCliente === true) foiPago += item.valorTotal;
-          else faltaPagar += item.valorTotal;
+          valorCliente += valor;
+          if (item.pagoCliente === true) foiPago += valor;
+          else faltaPagar += valor;
         } else {
-          valorLebrinha += item.valorTotal;
+          valorLebrinha += valor;
+        }
+
+        // Valor Total: Cliente + cobrança Lebrinha + Bonificação Lebrinha.
+        // Vasilhames ficam fora dessa soma.
+        if (
+          tipo === "Receber c/ Cliente" ||
+          tipo === "Acertar c/ Lebrinha" ||
+          tipo === "Bonificação - Lebrinha"
+        ) {
+          valorTotal += valor;
         }
       });
     });
-    return { valorCliente, valorLebrinha, faltaPagar, foiPago };
+
+    return { valorCliente, valorLebrinha, faltaPagar, foiPago, valorTotal };
   }, [filtered]);
 
   const columnFilterOptions = (key: RomaneioFilterKey) => {
@@ -660,8 +701,8 @@ export default function Romaneios() {
 
   const inspectionChargeTotals = useMemo(() => {
     const totals = Object.fromEntries(
-      tipos.map((tipo) => [tipo, { itens: 0, valor: 0 }]),
-    ) as Record<TipoManifesto, { itens: number; valor: number }>;
+      tipos.map((tipo) => [tipo, { itens: 0, quantidade: 0, valor: 0 }]),
+    ) as Record<TipoManifesto, { itens: number; quantidade: number; valor: number }>;
 
     inspecting?.produtos.forEach((item) => {
       const tipo = tipos.includes(item.tipoManifesto as TipoManifesto)
@@ -671,11 +712,156 @@ export default function Romaneios() {
         ? tipo as TipoManifesto
         : "Bonificação - Lebrinha";
       totals[safeTipo].itens += 1;
+      totals[safeTipo].quantidade += item.quantidade;
       totals[safeTipo].valor += item.valorTotal;
     });
 
     return totals;
   }, [inspecting]);
+
+  const downloadRomaneioCsv = (romaneio: Romaneio) => {
+    const headers = [
+      "Romaneio",
+      "Data",
+      "Cliente - Código",
+      "Cliente",
+      "Produto - Código",
+      "Produto",
+      "NF",
+      "Série",
+      "Quantidade",
+      "Valor unitário",
+      "Valor total",
+      "Cobrança",
+      "Pago pelo cliente",
+      "Placa",
+      "Modelo",
+      "Transportadora",
+    ];
+
+    const rows = orderRomaneioItemsByClient(
+      romaneio.produtos,
+      (item) => item.clienteId ?? romaneio.clienteId,
+      (item) => produtoById(item.produtoId)?.nome ?? "",
+    ).map(({ item }) => {
+      const cliente = clienteById(item.clienteId ?? romaneio.clienteId);
+      const produto = produtoById(item.produtoId);
+      const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
+      return [
+        item.romaneio || romaneio.romaneios || "",
+        formatDate(romaneio.dataManifesto),
+        cliente?.codigoInterno || "",
+        cliente?.nomeFantasia || "",
+        produto?.codigoInterno || "",
+        produto?.nome || "",
+        item.notaFiscal || "",
+        item.serieNf || "",
+        csvNumber(item.quantidade),
+        csvNumber(item.valorUnitario),
+        csvNumber(item.valorTotal),
+        tipo,
+        tipo === "Receber c/ Cliente"
+          ? item.pagoCliente === true
+            ? "Sim"
+            : item.pagoCliente === false
+              ? "Não"
+              : "Pendente"
+          : "",
+        romaneio.placaVeiculo || "",
+        romaneio.modeloVeiculo || "",
+        romaneio.transportadoraNome || "",
+      ];
+    });
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map(csvCell).join(";"))
+      .join("\r\n");
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `romaneio-${safeFilePart(romaneio.romaneios || romaneio.id)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadFilteredRomaneiosCsv = () => {
+    if (filtered.length === 0) {
+      toast.error("Não há romaneios nos filtros atuais para exportar.");
+      return;
+    }
+
+    const headers = [
+      "Romaneio",
+      "Data",
+      "Cliente - Código",
+      "Cliente",
+      "Produto - Código",
+      "Produto",
+      "NF",
+      "Série",
+      "Quantidade",
+      "Valor unitário",
+      "Valor total",
+      "Cobrança",
+      "Pago pelo cliente",
+      "Placa",
+      "Modelo",
+      "Transportadora",
+    ];
+
+    const rows = filtered.flatMap((romaneio) =>
+      orderRomaneioItemsByClient(
+        romaneio.produtos,
+        (item) => item.clienteId ?? romaneio.clienteId,
+        (item) => produtoById(item.produtoId)?.nome ?? "",
+      ).map(({ item }) => {
+        const cliente = clienteById(item.clienteId ?? romaneio.clienteId);
+        const produto = produtoById(item.produtoId);
+        const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
+        return [
+          item.romaneio || romaneio.romaneios || "",
+          formatDate(romaneio.dataManifesto),
+          cliente?.codigoInterno || "",
+          cliente?.nomeFantasia || "",
+          produto?.codigoInterno || "",
+          produto?.nome || "",
+          item.notaFiscal || "",
+          item.serieNf || "",
+          csvNumber(item.quantidade),
+          csvNumber(item.valorUnitario),
+          csvNumber(item.valorTotal),
+          tipo,
+          tipo === "Receber c/ Cliente"
+            ? item.pagoCliente === true
+              ? "Sim"
+              : item.pagoCliente === false
+                ? "Não"
+                : "Pendente"
+            : "",
+          romaneio.placaVeiculo || "",
+          romaneio.modeloVeiculo || "",
+          romaneio.transportadoraNome || "",
+        ];
+      }),
+    );
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map(csvCell).join(";"))
+      .join("\r\n");
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `romaneios-filtrados-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    toast.success(`${filtered.length} romaneio(s) exportado(s) em CSV.`);
+  };
 
   const saveImportedRomaneio = async (result: PdfResponse, file: File) => {
     const entries = result.sugestoes.produtos;
@@ -751,13 +937,12 @@ export default function Romaneios() {
       );
       const selectedSource: "ocr" = "ocr";
 
-      const [vehiclesResponse] = await Promise.all([
-        api.get<Veiculo[]>("/veiculos"),
+      const [vehicles] = await Promise.all([
+        refreshVeiculos(),
         refreshClientes(),
         refreshProdutos(),
-        refreshVeiculos(),
       ]);
-      const currentVehicles = Array.isArray(vehiclesResponse.data) ? vehiclesResponse.data : [];
+      const currentVehicles = Array.isArray(vehicles) ? vehicles : [];
       if (!response.data.documento.parserVersion) {
         toast.error("O servidor de Romaneios está desatualizado. Reinicie/reimplante o backend.");
         return;
@@ -847,10 +1032,10 @@ export default function Romaneios() {
         .map((_, index) => index)
         .filter((index) => Boolean(texts[index]) && !extractionErrors.has(index));
 
-      // Busca a lista atual diretamente do backend. Assim o vínculo da placa
-      // não depende do estado React ainda estar atualizado no mesmo tick.
-      const vehiclesResponse = await api.get<Veiculo[]>("/veiculos");
-      const registeredVehicles = Array.isArray(vehiclesResponse.data) ? vehiclesResponse.data : [];
+      // Atualiza a lista pelo cache/batcher compartilhado e usa o retorno da
+      // própria leitura, sem disparar uma segunda request de veículos.
+      const vehicles = await refreshVeiculos();
+      const registeredVehicles = Array.isArray(vehicles) ? vehicles : [];
 
       // Envia somente texto, em lotes pequenos para manter requests leves no Worker.
       const TEXT_BATCH_SIZE = 20;
@@ -1254,11 +1439,20 @@ export default function Romaneios() {
               {bulkImporting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Files className="mr-2 h-4 w-4" />}
               {bulkImporting ? "Processando arquivos..." : "Importar em massa"}
             </Button>
+            <Button
+              variant="outline"
+              disabled={filtered.length === 0}
+              onClick={downloadFilteredRomaneiosCsv}
+              title="Baixar todos os romaneios que correspondem aos filtros atuais"
+            >
+              <FileDown className="mr-2 h-4 w-4" />
+              Exportar CSV
+            </Button>
             <Button onClick={() => openManual()}><Plus className="mr-2 h-4 w-4" /> Novo Romaneio</Button>
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-6 gap-2 xl:gap-3">
           {[
             { label: "Romaneios", value: filtered.length, Icon: FileText },
             {
@@ -1270,12 +1464,38 @@ export default function Romaneios() {
             { label: "Total Lebrinha", value: formatBRL(summary.valorLebrinha), Icon: Truck, valueClass: "text-violet-500" },
             { label: "Foi pago", value: formatBRL(summary.foiPago), Icon: Check, valueClass: "text-emerald-500" },
             { label: "Falta pagar", value: formatBRL(summary.faltaPagar), Icon: CircleDollarSign, valueClass: "text-amber-500" },
-          ].map(({ label, value, Icon, valueClass }) => (
-            <div key={label} className="rounded-xl border bg-card p-4">
-              <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Icon className="h-4 w-4" />{label}</p>
-              <p className={`mt-2 text-2xl font-bold ${valueClass ?? ""}`}>{String(value)}</p>
-            </div>
-          ))}
+            { label: "Valor Total", value: formatBRL(summary.valorTotal), Icon: CircleDollarSign, valueClass: "text-cyan-500" },
+          ].map(({ label, value, Icon, valueClass }) => {
+            const isMoney = label !== "Romaneios";
+            const isVisible = Boolean(visibleSummaryValues[label]);
+
+            return (
+              <div key={label} className="min-w-0 overflow-hidden rounded-xl border bg-card p-2.5 xl:p-4">
+                <p className="flex min-w-0 items-center gap-1.5 text-[10px] font-semibold uppercase text-muted-foreground xl:gap-2 xl:text-xs">
+                  <Icon className="h-3.5 w-3.5 shrink-0 xl:h-4 xl:w-4" />
+                  <span className="truncate">{label}</span>
+                </p>
+                <div className="mt-2 flex min-w-0 items-center justify-between gap-1 xl:gap-2">
+                  <p
+                    className={`min-w-0 whitespace-nowrap text-[clamp(0.78rem,1.32vw,1.5rem)] font-bold leading-tight tabular-nums tracking-[-0.035em] ${valueClass ?? ""}`}
+                  >
+                    {isMoney && !isVisible ? "R$ ••••••" : String(value)}
+                  </p>
+                  {isMoney && (
+                    <button
+                      type="button"
+                      onClick={() => toggleSummaryValue(label)}
+                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:h-8 xl:w-8"
+                      aria-label={isVisible ? `Ocultar ${label}` : `Mostrar ${label}`}
+                      title={isVisible ? "Ocultar valor" : "Mostrar valor"}
+                    >
+                      {isVisible ? <EyeOff className="h-3.5 w-3.5 xl:h-4 xl:w-4" /> : <Eye className="h-3.5 w-3.5 xl:h-4 xl:w-4" />}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -1334,7 +1554,7 @@ export default function Romaneios() {
                               {column.date ? (
                                 <div className="space-y-3 p-3">
                                   <div className="space-y-1"><Label className="text-xs">De</Label><DatePicker value={columnFilters.dataInicio} onChange={(value) => setColumnFilters((current) => ({ ...current, dataInicio: value }))} placeholder="Data inicial" /></div>
-                                  <div className="space-y-1"><Label className="text-xs">Até</Label><DatePicker value={columnFilters.dataFim} onChange={(value) => setColumnFilters((current) => ({ ...current, dataFim: value }))} placeholder="Data final" /></div>
+                                  <div className="space-y-1"><Label className="text-xs">Até</Label><DatePicker value={columnFilters.dataFim} defaultMonth={columnFilters.dataInicio} onChange={(value) => setColumnFilters((current) => ({ ...current, dataFim: value }))} placeholder="Data final" /></div>
                                 </div>
                               ) : (
                                 <>
@@ -1421,6 +1641,7 @@ export default function Romaneios() {
                         <td className="whitespace-nowrap px-4 py-3 text-right">
                           <div className="inline-flex gap-1">
                             <Button size="icon" variant="ghost" title="Inspecionar romaneio" aria-label="Inspecionar romaneio" onClick={() => setInspecting(romaneio)}><Eye className="h-4 w-4 text-blue-500" /></Button>
+                            <Button size="icon" variant="ghost" title="Baixar CSV" aria-label="Baixar CSV do romaneio" onClick={() => downloadRomaneioCsv(romaneio)}><FileDown className="h-4 w-4 text-sky-600" /></Button>
                             {(romaneio.pdfUrl || romaneio.pdfStored) && <Button size="icon" variant="ghost" title="Baixar PDF" aria-label="Baixar PDF" onClick={() => void downloadPdf(romaneio)}><Download className="h-4 w-4 text-emerald-600" /></Button>}
                             <Button size="icon" variant="ghost" title="Excluir" aria-label="Excluir romaneio" onClick={async () => {
                               if (!window.confirm("Deseja excluir este romaneio?")) return;
@@ -1562,11 +1783,20 @@ export default function Romaneios() {
                         { tipo: "Receber c/ Cliente" as TipoManifesto, label: "Valor total a receber dos clientes" },
                         { tipo: "Acertar c/ Lebrinha" as TipoManifesto, label: "Valor total a acertar com a Lebrinha" },
                         { tipo: "Bonificação - Lebrinha" as TipoManifesto, label: "Valor total em bonificações" },
+                        { tipo: "Vasilhame" as TipoManifesto, label: "Quantidade total de vasilhames" },
                       ].map(({ tipo, label }) => (
                         <tr key={tipo} className="border-t first:border-t-0">
                           <td className="px-3 py-2.5"><span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${typeClasses(tipo)}`}>{label}</span></td>
-                          <td className="whitespace-nowrap px-3 py-2.5 text-center text-xs text-muted-foreground">{inspectionChargeTotals[tipo].itens} item(ns)</td>
-                          <td className="whitespace-nowrap px-3 py-2.5 text-right font-bold tabular-nums">{formatBRL(inspectionChargeTotals[tipo].valor)}</td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-center text-xs text-muted-foreground">
+                            {tipo === "Vasilhame"
+                              ? `${inspectionChargeTotals[tipo].itens} lançamento(s)`
+                              : `${inspectionChargeTotals[tipo].itens} item(ns)`}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-right font-bold tabular-nums">
+                            {tipo === "Vasilhame"
+                              ? `${inspectionChargeTotals[tipo].quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} un.`
+                              : formatBRL(inspectionChargeTotals[tipo].valor)}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1574,6 +1804,7 @@ export default function Romaneios() {
                 </div>
 
                 <div className="flex flex-wrap justify-end gap-2">
+                  <Button variant="outline" onClick={() => downloadRomaneioCsv(inspecting)}><FileDown className="mr-2 h-4 w-4" />Baixar CSV</Button>
                   {(inspecting.pdfUrl || inspecting.pdfStored) && <Button variant="outline" onClick={() => void downloadPdf(inspecting)}><Download className="mr-2 h-4 w-4" />Baixar PDF</Button>}
                   <Button onClick={() => {
                     const romaneio = inspecting;

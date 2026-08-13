@@ -1,5 +1,5 @@
 import { LOCAL_TOLL_PLAZAS, NATIONAL_TOLL_BASE_META, type LocalTollPlaza } from "../data/pedagios-brasil.js";
-import { listPedagios } from "./pedagios-storage.service.js";
+import { listManualPedagios } from "./pedagios-storage.service.js";
 
 export type PedagioVehicleType =
   | "TRUCK_WITH_TWO_SINGLE_AXIS"
@@ -72,21 +72,74 @@ function haversineKm(a: RoutePoint, b: RoutePoint) {
   return radius * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-function nearestRoutePoint(route: RoutePoint[], target: RoutePoint) {
+type PreparedRoute = {
+  points: RoutePoint[];
+  cumulativeKm: number[];
+  bounds: { minLat: number; maxLat: number; minLon: number; maxLon: number };
+};
+
+function prepareRoute(route: RoutePoint[]): PreparedRoute {
+  const cumulativeKm = new Array<number>(route.length).fill(0);
+  let minLat = Number.POSITIVE_INFINITY, maxLat = Number.NEGATIVE_INFINITY;
+  let minLon = Number.POSITIVE_INFINITY, maxLon = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < route.length; index += 1) {
+    const point = route[index];
+    minLat = Math.min(minLat, point.latitude); maxLat = Math.max(maxLat, point.latitude);
+    minLon = Math.min(minLon, point.longitude); maxLon = Math.max(maxLon, point.longitude);
+    if (index > 0) cumulativeKm[index] = cumulativeKm[index - 1] + haversineKm(route[index - 1], point);
+  }
+  return { points: route, cumulativeKm, bounds: { minLat, maxLat, minLon, maxLon } };
+}
+
+// Distância do pedágio ao segmento da rota, não somente aos vértices. Isso permite
+// enviar uma geometria compacta pelo navegador sem perder precisão na detecção.
+function nearestRoutePoint(route: PreparedRoute, target: RoutePoint) {
   let minDistanceKm = Number.POSITIVE_INFINITY;
   let nearestIndex = -1;
   let distanceFromOriginKm = 0;
-  let traveledKm = 0;
-  for (let index = 0; index < route.length; index += 1) {
-    if (index > 0) traveledKm += haversineKm(route[index - 1], route[index]);
-    const distanceKm = haversineKm(route[index], target);
+  let nearestPoint: RoutePoint | null = null;
+  const latKm = 110.574;
+  const lonKm = Math.max(1, 111.320 * Math.cos((target.latitude * Math.PI) / 180));
+
+  for (let index = 0; index < route.points.length - 1; index += 1) {
+    const a = route.points[index], b = route.points[index + 1];
+    const ax = (a.longitude - target.longitude) * lonKm, ay = (a.latitude - target.latitude) * latKm;
+    const bx = (b.longitude - target.longitude) * lonKm, by = (b.latitude - target.latitude) * latKm;
+    const dx = bx - ax, dy = by - ay;
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lengthSquared)) : 0;
+    const px = ax + t * dx, py = ay + t * dy;
+    const distanceKm = Math.hypot(px, py);
     if (distanceKm < minDistanceKm) {
       minDistanceKm = distanceKm;
-      nearestIndex = index;
-      distanceFromOriginKm = traveledKm;
+      nearestIndex = t < 0.5 ? index : index + 1;
+      const segmentKm = route.cumulativeKm[index + 1] - route.cumulativeKm[index];
+      distanceFromOriginKm = route.cumulativeKm[index] + segmentKm * t;
+      nearestPoint = {
+        latitude: a.latitude + (b.latitude - a.latitude) * t,
+        longitude: a.longitude + (b.longitude - a.longitude) * t,
+      };
     }
   }
-  return { minDistanceKm, nearestIndex, distanceFromOriginKm, nearestPoint: nearestIndex >= 0 ? route[nearestIndex] : null };
+
+  if (!nearestPoint && route.points.length) {
+    nearestPoint = route.points[0];
+    nearestIndex = 0;
+    minDistanceKm = haversineKm(nearestPoint, target);
+  }
+  return { minDistanceKm, nearestIndex, distanceFromOriginKm, nearestPoint };
+}
+
+function plazaNearRouteBounds(plaza: LocalTollPlaza, route: PreparedRoute) {
+  // 8 km de margem é muito maior que o raio efetivo máximo (3 km) e elimina
+  // rapidamente praças de regiões que não têm qualquer chance de cruzar a rota.
+  const latPadding = 8 / 110.574;
+  const middleLat = (route.bounds.minLat + route.bounds.maxLat) / 2;
+  const lonPadding = 8 / Math.max(20, 111.320 * Math.cos((middleLat * Math.PI) / 180));
+  return plaza.latitude >= route.bounds.minLat - latPadding
+    && plaza.latitude <= route.bounds.maxLat + latPadding
+    && plaza.longitude >= route.bounds.minLon - lonPadding
+    && plaza.longitude <= route.bounds.maxLon + lonPadding;
 }
 
 function normalizeRoute(points: RoutePoint[]) {
@@ -146,7 +199,7 @@ function likelySamePhysicalPlaza(a: LocalTollPlaza, b: LocalTollPlaza) {
 
 async function loadDatabaseTolls(): Promise<LocalTollPlaza[]> {
   try {
-    const rows = (await listPedagios(true)).filter((row) => row.fonte === "MANUAL");
+    const rows = await listManualPedagios(true);
     return rows.map((row) => ({
       id: `db-${row.id}`,
       name: row.nome,
@@ -174,14 +227,16 @@ async function loadDatabaseTolls(): Promise<LocalTollPlaza[]> {
 
 async function getEffectiveTolls() {
   const database = await loadDatabaseTolls();
-  const combined = [...database, ...LOCAL_TOLL_PLAZAS];
-  return combined.reduce<LocalTollPlaza[]>((acc, plaza) => {
-    const duplicate = acc.findIndex((item) => item.id === plaza.id || likelySamePhysicalPlaza(item, plaza));
-    if (duplicate < 0) acc.push(plaza);
-    // A base manual do banco sempre prevalece sobre snapshots automáticos.
-    else if (plaza.sourceKind === "MANUAL" && acc[duplicate].sourceKind !== "MANUAL") acc[duplicate] = plaza;
-    return acc;
-  }, []);
+  // LOCAL_TOLL_PLAZAS já nasce consolidada no carregamento do módulo. Repassar
+  // toda a base por um reduce O(n²) a cada cálculo desperdiçava CPU no Worker.
+  // Aqui só fazemos o overlay das poucas correções manuais existentes.
+  const effective = [...LOCAL_TOLL_PLAZAS];
+  for (const plaza of database) {
+    const duplicate = effective.findIndex((item) => item.id === plaza.id || likelySamePhysicalPlaza(item, plaza));
+    if (duplicate < 0) effective.push(plaza);
+    else effective[duplicate] = plaza;
+  }
+  return effective;
 }
 
 export async function calculateTolls(input: {
@@ -196,11 +251,13 @@ export async function calculateTolls(input: {
   if (route.length < 2) {
     throw Object.assign(new Error("A geometria da rota é necessária para localizar os pedágios."), { code: "LOCAL_TOLLS_ROUTE_REQUIRED" });
   }
+  const preparedRoute = prepareRoute(route);
 
   const plazas = await getEffectiveTolls();
   const axes = axesFromVehicleType(input.vehicleType);
   const rawMatches = plazas
     .filter((plaza) => isStateRelevant(plaza, input.origin, input.destination))
+    .filter((plaza) => endpointHintMatch(plaza, input.origin, input.destination) || plazaNearRouteBounds(plaza, preparedRoute))
     .map((plaza) => {
       if (endpointHintMatch(plaza, input.origin, input.destination) && plaza.routeHint) {
         const originIsCityA = sameCity(input.origin.name, plaza.routeHint.cityA);
@@ -215,7 +272,7 @@ export async function calculateTolls(input: {
           matchedByRouteHint: true,
         };
       }
-      const nearest = nearestRoutePoint(route, { latitude: plaza.latitude, longitude: plaza.longitude });
+      const nearest = nearestRoutePoint(preparedRoute, { latitude: plaza.latitude, longitude: plaza.longitude });
       const effectiveRadiusKm = Math.min(Math.max(plaza.matchRadiusKm || 1.5, 0.2), plaza.sourceKind === "MANUAL" ? 3 : 2.2);
       return { plaza, ...nearest, effectiveRadiusKm, matchedByRouteHint: false };
     })

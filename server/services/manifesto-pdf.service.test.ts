@@ -215,6 +215,7 @@ CLIENTE : 094793/02-SUL NORTE SUPERMERCADO - INDUSTRIARIO IV
     expect(vasilhames).toHaveLength(4);
     expect(vasilhames.every((item) => item.valorUnitario === 0)).toBe(true);
     expect(vasilhames.every((item) => item.valorTotal === 0)).toBe(true);
+    expect(vasilhames.every((item) => item.tipoManifesto === "Vasilhame")).toBe(true);
 
     const vasilhame950 = result.produtos.find((item) => item.descricao.toUpperCase().includes("VASILHAME") && item.quantidade === 950);
     const garrafao922 = result.produtos.find((item) => item.codigo === "00308" && item.quantidade === 922);
@@ -232,6 +233,7 @@ CLIENTE : 094793/02-SUL NORTE SUPERMERCADO - INDUSTRIARIO IV
       quantidade: 950,
       valorUnitario: 0,
       valorTotal: 0,
+      tipoManifesto: "Vasilhame",
     });
     expect(result.produtos[1]).toMatchObject({
       descricao: "GARRAFAO 20 LT",
@@ -253,6 +255,7 @@ CLIENTE : 094793/02-SUL NORTE SUPERMERCADO - INDUSTRIARIO IV
       valorTotal: 0,
       notaFiscal: "060781",
       serie: "004",
+      tipoManifesto: "Vasilhame",
     });
     expect(result.produtos[1]).toMatchObject({
       descricao: "GARRAFAO 20 LT",

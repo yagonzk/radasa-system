@@ -34,6 +34,7 @@ import {
   ChevronDown,
   Download,
   Eye,
+  EyeOff,
   FileText,
   Filter,
   Fuel,
@@ -255,7 +256,11 @@ type BatchStatus = "COMPLETO" | "PENDENTE" | "INVALIDO" | "IMPORTADO" | "ERRO";
 
 const MAX_XML_FILES = 1000;
 const XML_READ_BATCH_SIZE = 20;
-const XML_IMPORT_BATCH_SIZE = 50;
+const XML_READ_CONCURRENCY = 3;
+const PDF_READ_CONCURRENCY = 2;
+const XML_IMPORT_BATCH_SIZE = 40;
+const MAX_IMPORT_BATCH_JSON_CHARS = 2_700_000;
+const XML_IMPORT_CONCURRENCY = 2;
 const XML_REQUEST_TIMEOUT_MS = 600_000;
 
 interface XmlProdutoInterpretado {
@@ -341,6 +346,7 @@ interface XmlSugestoes {
 }
 
 interface BatchXmlApiItem {
+  indiceArquivo?: number;
   fileName: string;
   status: "COMPLETO" | "PENDENTE" | "INVALIDO";
   erros: string[];
@@ -360,11 +366,13 @@ interface BatchXmlApiItem {
 interface BatchXmlRow {
   id: string;
   fileName: string;
+  origem: "XML" | "PDF";
   status: BatchStatus;
   erros: string[];
   pendencias: string[];
   documento: XmlDocumentoInterpretado | null;
   xmlUrl: string | null;
+  pdfUrl: string | null;
   jaCadastrado: boolean;
   clienteId: string;
   veiculoId: string;
@@ -524,11 +532,13 @@ function BatchXmlDialog({
     const row: BatchXmlRow = {
       id: `${item.fileName}-${index}-${item.documento?.chaveNfe || Date.now()}`,
       fileName: item.fileName,
+      origem: "XML",
       status: item.status,
       erros: item.erros,
       pendencias: item.pendencias,
       documento: item.documento,
       xmlUrl: item.xmlUrl,
+      pdfUrl: null,
       jaCadastrado: item.jaCadastrado ?? false,
       clienteId:
         item.sugestoes?.cliente?.id ?? item.existente?.clienteId ?? "",
@@ -555,22 +565,219 @@ function BatchXmlDialog({
     return item.status === "INVALIDO" ? row : recalculateStatus(row);
   };
 
+  const convertPdfResult = async (
+    result: DocumentoAbastecimentoInterpretado,
+    file: File,
+    index: number,
+  ): Promise<BatchXmlRow | null> => {
+    const onlyDigits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
+    const normalizedPlate = String(result.placa ?? "")
+      .replace(/[^A-Z0-9]/gi, "")
+      .toUpperCase();
+    const normalizedSupplier = normalize(String(result.fornecedorNome ?? ""));
+    const supplierCnpj = onlyDigits(result.fornecedorCnpj);
+
+    const existing = result.chaveNfe
+      ? abastecimentos.find(
+          (item) => onlyDigits(item.chaveNfe) === onlyDigits(result.chaveNfe),
+        )
+      : undefined;
+
+    if (existing && !correcaoSincronizacao) return null;
+
+    const cliente =
+      clientes.find(
+        (item) =>
+          supplierCnpj && onlyDigits(item.cnpj) === supplierCnpj,
+      ) ??
+      clientes.find((item) => {
+        if (!normalizedSupplier) return false;
+        const candidate = normalize(
+          `${item.nomeFantasia ?? ""} ${item.razaoSocial ?? ""}`,
+        );
+        const candidateTrimmed = candidate.trim();
+        return (
+          candidateTrimmed.length >= 3 &&
+          (candidate.includes(normalizedSupplier) ||
+            normalizedSupplier.includes(candidateTrimmed))
+        );
+      });
+
+    const veiculo = normalizedPlate
+      ? veiculos.find(
+          (item) =>
+            item.placa.replace(/[^A-Z0-9]/gi, "").toUpperCase() ===
+            normalizedPlate,
+        )
+      : undefined;
+
+    const matchProdutoPdf = (produtoPdf: DocumentoProdutoInterpretado) => {
+      const sourceCode = normalize(String(produtoPdf.codigo ?? "")).replace(
+        /[^a-z0-9]/g,
+        "",
+      );
+      const sourceName = normalize(produtoPdf.descricao);
+      const sourceTokens = sourceName
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 3);
+
+      const ranked = produtosCombustivel
+        .map((produto) => {
+          const targetCode = normalize(String(produto.codigoInterno ?? "")).replace(
+            /[^a-z0-9]/g,
+            "",
+          );
+          const targetName = normalize(produto.nome);
+          const targetTokens = new Set(
+            targetName
+              .split(/[^a-z0-9]+/)
+              .filter((token) => token.length >= 3),
+          );
+          let score = 0;
+          if (sourceCode && targetCode && sourceCode === targetCode) score += 100;
+          if (sourceName && targetName && sourceName === targetName) score += 90;
+          if (
+            sourceName.length >= 4 &&
+            (sourceName.includes(targetName) || targetName.includes(sourceName))
+          ) {
+            score += 50;
+          }
+          score += sourceTokens.filter((token) => targetTokens.has(token)).length * 20;
+          return { produto, score };
+        })
+        .sort((a, b) => b.score - a.score);
+
+      const best = ranked[0];
+      const second = ranked[1];
+      if (!best || best.score < 40) return undefined;
+      if (second && best.score - second.score < 10) return undefined;
+      return best.produto;
+    };
+
+    const produtosPdf: XmlProdutoInterpretado[] = result.produtos.map((item) => ({
+      codigo: item.codigo ?? "",
+      ean: "",
+      nome: item.descricao,
+      ncm: "",
+      cfop: "",
+      unidade: "L",
+      quantidade: Number(item.quantidadeLitros || 0),
+      valorUnitario: Number(item.valorUnitario || 0),
+      valorTotal: Number(
+        item.valorTotal || item.quantidadeLitros * item.valorUnitario || 0,
+      ),
+      desconto: 0,
+      combustivel: null,
+    }));
+
+    const valorProdutos = produtosPdf.reduce(
+      (sum, item) => sum + Number(item.valorTotal || 0),
+      0,
+    );
+    const valorDesconto = Number(result.valorDesconto || 0);
+
+    const document: XmlDocumentoInterpretado = {
+      chaveNfe: onlyDigits(result.chaveNfe),
+      numero: String(result.numeroNota ?? ""),
+      serie: String(result.serieNota ?? ""),
+      dataEmissao: String(result.dataEmissao ?? ""),
+      naturezaOperacao: "",
+      emitente: {
+        cnpj: supplierCnpj,
+        razaoSocial: String(result.fornecedorNome ?? ""),
+        nomeFantasia: String(result.fornecedorNome ?? ""),
+        inscricaoEstadual: "",
+        endereco: "",
+        cidade: "",
+        uf: "",
+      },
+      destinatario: {
+        cnpjCpf: "",
+        razaoSocial: "",
+        endereco: "",
+        cidade: "",
+        uf: "",
+      },
+      placa: String(result.placa ?? ""),
+      hodometro: result.hodometro ?? null,
+      hodometroOrigem: result.hodometro ? "PDF" : "",
+      hodometroConfianca: result.hodometro ? 0.6 : 0,
+      produtos: produtosPdf,
+      totais: {
+        produtos: valorProdutos,
+        desconto: valorDesconto,
+        frete: 0,
+        seguro: 0,
+        outros: 0,
+        nota: Number(result.valorTotal ?? Math.max(0, valorProdutos - valorDesconto)),
+        icms: 0,
+        pis: 0,
+        cofins: 0,
+      },
+      informacoesComplementares: result.avisos.join("\n"),
+    };
+
+    const row: BatchXmlRow = {
+      id: `${file.name}-${index}-${document.chaveNfe || Date.now()}`,
+      fileName: file.name,
+      origem: "PDF",
+      status: "PENDENTE",
+      erros: [],
+      pendencias: [],
+      documento: document,
+      xmlUrl: null,
+      pdfUrl: file.size <= 2_500_000 ? await fileToDataUrl(file) : null,
+      jaCadastrado: Boolean(existing),
+      clienteId: cliente?.id ?? existing?.clienteId ?? "",
+      veiculoId: veiculo?.id ?? existing?.veiculoId ?? "",
+      hodometro: result.hodometro
+        ? String(result.hodometro)
+        : existing?.hodometro
+          ? String(existing.hodometro)
+          : "",
+      produtos: produtosPdf.map((produtoXml, productIndex) => {
+        const matched = matchProdutoPdf(result.produtos[productIndex]);
+        return {
+          produtoXml,
+          produtoId: matched?.id ?? "",
+          quantidadeLitros: String(produtoXml.quantidade),
+          valorUnitario: String(produtoXml.valorUnitario),
+          cadastroNome: matched?.nome,
+          cadastroCodigo: matched?.codigoInterno,
+          criadoAutomaticamente: false,
+        };
+      }),
+    };
+
+    const recalculated = recalculateStatus(row);
+    if (file.size > 2_500_000) {
+      recalculated.importMessage =
+        "PDF lido normalmente, mas o arquivo original é maior que 2,5 MB e não será anexado ao cadastro em massa.";
+    }
+    return recalculated;
+  };
+
   const handleFiles = async (selectedFiles?: FileList | File[]) => {
     if (!selectedFiles) return;
 
-    const files = Array.from(selectedFiles).filter(
-      (file) =>
-        file.name.toLowerCase().endsWith(".xml") ||
-        file.type.toLowerCase().includes("xml"),
-    );
+    const files = Array.from(selectedFiles).filter((file) => {
+      const name = file.name.toLowerCase();
+      const type = file.type.toLowerCase();
+      return (
+        name.endsWith(".xml") ||
+        name.endsWith(".pdf") ||
+        type.includes("xml") ||
+        type.includes("pdf")
+      );
+    });
 
     if (!files.length) {
-      toast.error("Nenhum arquivo XML válido foi selecionado.");
+      toast.error("Nenhum arquivo XML ou PDF válido foi selecionado.");
       return;
     }
 
     if (files.length > MAX_XML_FILES) {
-      toast.error(`Selecione no máximo ${MAX_XML_FILES} XMLs.`);
+      toast.error(`Selecione no máximo ${MAX_XML_FILES} documentos por vez.`);
       return;
     }
 
@@ -578,31 +785,66 @@ function BatchXmlDialog({
     setItems([]);
     setProgress({ current: 0, total: files.length });
 
-    const allRows: BatchXmlRow[] = [];
-    let totalCompletos = 0;
-    let totalPendentes = 0;
-    let totalInvalidos = 0;
-    let totalJaCadastrados = 0;
+    const indexedRows: Array<{ index: number; row: BatchXmlRow }> = [];
     const produtosCriadosAutomaticamente = new Set<string>();
+    const counters = {
+      completos: 0,
+      pendentes: 0,
+      invalidos: 0,
+      jaCadastrados: 0,
+      completedFiles: 0,
+      failedBatches: 0,
+    };
 
-    try {
-      for (
-        let batchStart = 0;
-        batchStart < files.length;
-        batchStart += XML_READ_BATCH_SIZE
-      ) {
-        const batchFiles = files.slice(
-          batchStart,
-          batchStart + XML_READ_BATCH_SIZE,
-        );
+    const entries = files.map((file, index) => ({ file, index }));
+    const xmlEntries = entries.filter(({ file }) => {
+      const name = file.name.toLowerCase();
+      return name.endsWith(".xml") || file.type.toLowerCase().includes("xml");
+    });
+    const pdfEntries = entries.filter(({ file }) => {
+      const name = file.name.toLowerCase();
+      return name.endsWith(".pdf") || file.type.toLowerCase().includes("pdf");
+    });
 
-        const formData = new FormData();
-        formData.append(
-          "modoDuplicidade",
-          correcaoSincronizacao ? "SINCRONIZAR" : "OCULTAR",
-        );
-        batchFiles.forEach((file) => formData.append("arquivos", file));
+    const xmlBatches = Array.from(
+      { length: Math.ceil(xmlEntries.length / XML_READ_BATCH_SIZE) },
+      (_, batchIndex) => {
+        const start = batchIndex * XML_READ_BATCH_SIZE;
+        return {
+          entries: xmlEntries.slice(start, start + XML_READ_BATCH_SIZE),
+        };
+      },
+    );
 
+    let nextXmlBatch = 0;
+    let nextPdf = 0;
+
+    const refreshRows = () => {
+      const sorted = indexedRows
+        .slice()
+        .sort((a, b) => a.index - b.index)
+        .map((entry) => entry.row);
+      setItems(sorted);
+    };
+
+    const finishProgress = (count: number) => {
+      counters.completedFiles += count;
+      refreshRows();
+      setProgress({
+        current: Math.min(counters.completedFiles, files.length),
+        total: files.length,
+      });
+    };
+
+    const processXmlBatch = async (batch: (typeof xmlBatches)[number]) => {
+      const formData = new FormData();
+      formData.append(
+        "modoDuplicidade",
+        correcaoSincronizacao ? "SINCRONIZAR" : "OCULTAR",
+      );
+      batch.entries.forEach(({ file }) => formData.append("arquivos", file));
+
+      try {
         const response = await api.post<{
           arquivos: BatchXmlApiItem[];
           resumo: {
@@ -619,19 +861,13 @@ function BatchXmlDialog({
           timeout: XML_REQUEST_TIMEOUT_MS,
         });
 
-        const rows = response.data.arquivos.map((item, index) =>
-          convertApiItem(item, batchStart + index),
-        );
+        response.data.arquivos.forEach((item, responseIndex) => {
+          const localIndex = item.indiceArquivo ?? responseIndex;
+          const entry = batch.entries[localIndex];
+          if (!entry) return;
+          const row = convertApiItem(item, entry.index);
+          indexedRows.push({ index: entry.index, row });
 
-        allRows.push(...rows);
-        setItems([...allRows]);
-
-        totalCompletos += response.data.resumo.completos;
-        totalPendentes += response.data.resumo.pendentes;
-        totalInvalidos += response.data.resumo.invalidos;
-        totalJaCadastrados += response.data.resumo.jaCadastrados;
-
-        rows.forEach((row) => {
           row.produtos
             .filter((produto) => produto.criadoAutomaticamente)
             .forEach((produto) =>
@@ -639,36 +875,146 @@ function BatchXmlDialog({
             );
         });
 
-        setProgress({
-          current: Math.min(batchStart + batchFiles.length, files.length),
-          total: files.length,
+        counters.completos += response.data.resumo.completos;
+        counters.pendentes += response.data.resumo.pendentes;
+        counters.invalidos += response.data.resumo.invalidos;
+        counters.jaCadastrados += response.data.resumo.jaCadastrados;
+      } catch (error: any) {
+        counters.failedBatches += 1;
+        const message =
+          error?.code === "ECONNABORTED"
+            ? "Este lote excedeu o tempo máximo de leitura."
+            : error?.response?.data?.message ??
+              error?.message ??
+              "Não foi possível interpretar este lote de XMLs.";
+
+        batch.entries.forEach(({ file, index }) => {
+          indexedRows.push({
+            index,
+            row: {
+              id: `${file.name}-${index}-erro-lote`,
+              fileName: file.name,
+              origem: "XML",
+              status: "INVALIDO",
+              erros: [message],
+              pendencias: [],
+              documento: null,
+              xmlUrl: null,
+              pdfUrl: null,
+              jaCadastrado: false,
+              clienteId: "",
+              veiculoId: "",
+              hodometro: "",
+              produtos: [],
+            },
+          });
         });
+        counters.invalidos += batch.entries.length;
+      } finally {
+        finishProgress(batch.entries.length);
       }
+    };
+
+    const processPdf = async (entry: (typeof pdfEntries)[number]) => {
+      try {
+        const texto = await extrairTextoPdf(entry.file);
+        const response = await api.post<DocumentoAbastecimentoInterpretado>(
+          "/abastecimentos/interpretar-texto-pdf",
+          { texto },
+          { timeout: 180_000 },
+        );
+        const row = await convertPdfResult(response.data, entry.file, entry.index);
+
+        if (!row) {
+          counters.jaCadastrados += 1;
+          return;
+        }
+
+        indexedRows.push({ index: entry.index, row });
+        if (row.status === "COMPLETO") counters.completos += 1;
+        else if (row.status === "PENDENTE") counters.pendentes += 1;
+        else counters.invalidos += 1;
+        if (row.jaCadastrado) counters.jaCadastrados += 1;
+      } catch (error: any) {
+        const message =
+          error?.response?.data?.message ??
+          error?.message ??
+          "Não foi possível interpretar este PDF.";
+        indexedRows.push({
+          index: entry.index,
+          row: {
+            id: `${entry.file.name}-${entry.index}-erro-pdf`,
+            fileName: entry.file.name,
+            origem: "PDF",
+            status: "INVALIDO",
+            erros: [message],
+            pendencias: [],
+            documento: null,
+            xmlUrl: null,
+            pdfUrl: null,
+            jaCadastrado: false,
+            clienteId: "",
+            veiculoId: "",
+            hodometro: "",
+            produtos: [],
+          },
+        });
+        counters.invalidos += 1;
+      } finally {
+        finishProgress(1);
+      }
+    };
+
+    try {
+      const xmlWorkers = Array.from(
+        { length: Math.min(XML_READ_CONCURRENCY, xmlBatches.length) },
+        async () => {
+          while (true) {
+            const index = nextXmlBatch;
+            nextXmlBatch += 1;
+            if (index >= xmlBatches.length) return;
+            await processXmlBatch(xmlBatches[index]);
+          }
+        },
+      );
+
+      const pdfWorkers = Array.from(
+        { length: Math.min(PDF_READ_CONCURRENCY, pdfEntries.length) },
+        async () => {
+          while (true) {
+            const index = nextPdf;
+            nextPdf += 1;
+            if (index >= pdfEntries.length) return;
+            await processPdf(pdfEntries[index]);
+          }
+        },
+      );
+
+      await Promise.all([...xmlWorkers, ...pdfWorkers]);
 
       const duplicatesMessage = correcaoSincronizacao
-        ? `${totalJaCadastrados} correção(ões) de sincronização encontrada(s).`
-        : `${totalJaCadastrados} já cadastrado(s) ocultado(s).`;
+        ? `${counters.jaCadastrados} correção(ões) de sincronização encontrada(s).`
+        : `${counters.jaCadastrados} já cadastrado(s) ocultado(s).`;
 
-      toast.success(
-        `${totalCompletos} pronto(s), ${totalPendentes} pendente(s), ${totalInvalidos} inválido(s) e ${duplicatesMessage}${
-          produtosCriadosAutomaticamente.size
-            ? ` ${produtosCriadosAutomaticamente.size} produto(s) de combustível cadastrado(s) automaticamente.`
-            : ""
-        }`,
-      );
+      const baseMessage = `${counters.completos} pronto(s), ${counters.pendentes} pendente(s), ${counters.invalidos} inválido(s) e ${duplicatesMessage}${
+        produtosCriadosAutomaticamente.size
+          ? ` ${produtosCriadosAutomaticamente.size} produto(s) de combustível cadastrado(s) automaticamente.`
+          : ""
+      }`;
+
+      if (counters.failedBatches) {
+        toast.warning(
+          `${baseMessage} ${counters.failedBatches} lote(s) de XML falharam, mas os demais documentos continuaram normalmente.`,
+        );
+      } else {
+        toast.success(baseMessage);
+      }
     } catch (error: any) {
       console.error(error);
-
-      const processed = allRows.length;
-      const timeoutMessage =
-        error?.code === "ECONNABORTED"
-          ? `O lote excedeu o tempo máximo de 10 minutos. ${processed} XML(s) já processado(s) foram mantidos na conferência.`
-          : null;
-
       toast.error(
-        timeoutMessage ??
-          error?.response?.data?.message ??
-          `Não foi possível interpretar um dos lotes. ${processed} XML(s) já processado(s) foram mantidos.`,
+        error?.response?.data?.message ??
+          error?.message ??
+          "Não foi possível concluir a leitura paralela dos documentos.",
       );
     } finally {
       setReading(false);
@@ -702,7 +1048,7 @@ function BatchXmlDialog({
     );
 
     if (!validItems.length) {
-      toast.error("Nenhum XML completo está pronto para importação.");
+      toast.error("Nenhum documento completo está pronto para importação.");
       return;
     }
 
@@ -757,6 +1103,7 @@ function BatchXmlDialog({
         valorDesconto: item.documento!.totais.desconto,
         hodometro: parseNumber(item.hodometro),
         xmlUrl: item.xmlUrl,
+        pdfUrl: item.pdfUrl,
         produtos: item.produtos.map(
           ({ produtoId, quantidadeLitros, valorUnitario }) => ({
             produtoId,
@@ -775,62 +1122,119 @@ function BatchXmlDialog({
         erros: 0,
       };
 
-      for (
-        let batchStart = 0;
-        batchStart < payload.length;
-        batchStart += XML_IMPORT_BATCH_SIZE
-      ) {
-        const batchPayload = payload.slice(
-          batchStart,
-          batchStart + XML_IMPORT_BATCH_SIZE,
-        );
-        const batchItems = validItems.slice(
-          batchStart,
-          batchStart + XML_IMPORT_BATCH_SIZE,
-        );
+      const importBatches: Array<{
+        payload: typeof payload;
+        items: typeof validItems;
+      }> = [];
+      let xmlPayloadBuffer: typeof payload = [];
+      let xmlItemsBuffer: typeof validItems = [];
+      let xmlBufferChars = 0;
 
-        const response = await api.post<{
-          resultados: Array<{
-            indice: number;
-            chaveNfe: string;
-            acao: "CRIADO" | "ATUALIZADO" | "IGNORADO" | "ERRO";
-            erro?: string;
-          }>;
-          resumo: {
-            total: number;
-            criados: number;
-            atualizados: number;
-            ignorados: number;
-            erros: number;
-          };
-        }>("/abastecimentos/xml/importar-lote", {
-          politicaDuplicidade: correcaoSincronizacao ? "ATUALIZAR" : "IGNORAR",
-          itens: batchPayload,
-        }, {
-          timeout: XML_REQUEST_TIMEOUT_MS,
+      const flushXmlImportBuffer = () => {
+        if (!xmlPayloadBuffer.length) return;
+        importBatches.push({
+          payload: xmlPayloadBuffer,
+          items: xmlItemsBuffer,
         });
+        xmlPayloadBuffer = [];
+        xmlItemsBuffer = [];
+        xmlBufferChars = 0;
+      };
 
-        summary.criados += response.data.resumo.criados;
-        summary.atualizados += response.data.resumo.atualizados;
-        summary.ignorados += response.data.resumo.ignorados;
-        summary.erros += response.data.resumo.erros;
+      payload.forEach((itemPayload, index) => {
+        const sourceItem = validItems[index];
+        if (sourceItem.origem === "PDF") {
+          // PDF pode carregar base64 e o servidor aceita JSON de até 4 MB.
+          // Mantém um PDF por requisição para não ultrapassar esse limite.
+          flushXmlImportBuffer();
+          importBatches.push({
+            payload: [itemPayload],
+            items: [sourceItem],
+          });
+          return;
+        }
 
-        response.data.resultados.forEach((result) => {
-          const item = batchItems[result.indice];
-          if (!item) return;
+        const itemChars = JSON.stringify(itemPayload).length;
+        if (
+          xmlPayloadBuffer.length > 0 &&
+          (xmlPayloadBuffer.length >= XML_IMPORT_BATCH_SIZE ||
+            xmlBufferChars + itemChars > MAX_IMPORT_BATCH_JSON_CHARS)
+        ) {
+          flushXmlImportBuffer();
+        }
 
-          if (result.acao === "ERRO") {
-            failedIds.add(item.id);
-          } else {
-            successfulIds.add(item.id);
+        xmlPayloadBuffer.push(itemPayload);
+        xmlItemsBuffer.push(sourceItem);
+        xmlBufferChars += itemChars;
+      });
+      flushXmlImportBuffer();
+      let nextImportBatch = 0;
+      let importedProgress = 0;
+
+      const importOneBatch = async (batch: (typeof importBatches)[number]) => {
+        try {
+          const response = await api.post<{
+            resultados: Array<{
+              indice: number;
+              chaveNfe: string;
+              acao: "CRIADO" | "ATUALIZADO" | "IGNORADO" | "ERRO";
+              erro?: string;
+            }>;
+            resumo: {
+              total: number;
+              criados: number;
+              atualizados: number;
+              ignorados: number;
+              erros: number;
+            };
+          }>("/abastecimentos/xml/importar-lote", {
+            politicaDuplicidade: correcaoSincronizacao ? "ATUALIZAR" : "IGNORAR",
+            itens: batch.payload,
+          }, {
+            timeout: XML_REQUEST_TIMEOUT_MS,
+          });
+
+          summary.criados += response.data.resumo.criados;
+          summary.atualizados += response.data.resumo.atualizados;
+          summary.ignorados += response.data.resumo.ignorados;
+          summary.erros += response.data.resumo.erros;
+
+          response.data.resultados.forEach((result) => {
+            const item = batch.items[result.indice];
+            if (!item) return;
+
+            if (result.acao === "ERRO") {
+              failedIds.add(item.id);
+            } else {
+              successfulIds.add(item.id);
+            }
+          });
+        } catch (error) {
+          console.error("Falha ao importar lote de abastecimentos", error);
+          batch.items.forEach((item) => failedIds.add(item.id));
+          summary.erros += batch.items.length;
+        } finally {
+          importedProgress += batch.payload.length;
+          setProgress({
+            current: Math.min(importedProgress, payload.length),
+            total: payload.length,
+          });
+        }
+      };
+
+      const importWorkers = Array.from(
+        { length: Math.min(XML_IMPORT_CONCURRENCY, importBatches.length) },
+        async () => {
+          while (true) {
+            const index = nextImportBatch;
+            nextImportBatch += 1;
+            if (index >= importBatches.length) return;
+            await importOneBatch(importBatches[index]);
           }
-        });
+        },
+      );
 
-        setProgress({
-          current: Math.min(batchStart + batchPayload.length, payload.length),
-          total: payload.length,
-        });
-      }
+      await Promise.all(importWorkers);
 
       setItems((current) =>
         current
@@ -840,7 +1244,7 @@ function BatchXmlDialog({
               ? {
                   ...item,
                   status: "ERRO" as const,
-                  importMessage: "Falha na importação deste XML.",
+                  importMessage: "Falha na importação deste documento.",
                 }
               : item,
           ),
@@ -915,6 +1319,7 @@ function BatchXmlDialog({
     const lines = [
       [
         "Arquivo",
+        "Origem",
         "Status",
         "NF",
         "Serie",
@@ -945,6 +1350,7 @@ function BatchXmlDialog({
 
         return [
           item.fileName,
+          item.origem,
           item.status,
           item.documento?.numero ?? "",
           item.documento?.serie ?? "",
@@ -1025,7 +1431,7 @@ function BatchXmlDialog({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[96vh] w-[97vw] max-w-[1500px] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Importação em massa de XMLs de abastecimento</DialogTitle>
+          <DialogTitle>Importação em massa de XML/PDF de abastecimento</DialogTitle>
         </DialogHeader>
 
         <div
@@ -1047,10 +1453,10 @@ function BatchXmlDialog({
           }}
         >
           <Layers3 className="mb-3 h-10 w-10 text-primary" />
-          <p className="font-semibold">Arraste os XMLs para esta área</p>
+          <p className="font-semibold">Arraste XMLs e PDFs para esta área</p>
           <p className="mt-1 text-sm text-muted-foreground">
             {correcaoSincronizacao
-              ? "XMLs já cadastrados serão exibidos e atualizarão o registro existente pela mesma chave da NF-e."
+              ? "Documentos já cadastrados serão exibidos e atualizarão o registro existente pela mesma chave da NF-e."
               : "Notas já cadastradas serão ocultadas. Somente as completas serão importadas; as pendentes permanecerão para correção."}
           </p>
 
@@ -1091,7 +1497,7 @@ function BatchXmlDialog({
               disabled={reading || importing}
             >
               <Upload className="mr-2 h-4 w-4" />
-              Selecionar XMLs
+              Selecionar XML/PDF
             </Button>
 
             <Button
@@ -1104,12 +1510,15 @@ function BatchXmlDialog({
               Selecionar pasta
             </Button>
           </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Processamento paralelo ativo: até {XML_READ_CONCURRENCY} lotes de {XML_READ_BATCH_SIZE} XMLs e {PDF_READ_CONCURRENCY} PDFs são analisados simultaneamente.
+          </p>
         </div>
 
         <input
           ref={inputRef}
           type="file"
-          accept=".xml,text/xml,application/xml"
+          accept=".xml,.pdf,text/xml,application/xml,application/pdf"
           multiple
           className="hidden"
           onChange={(event) => void handleFiles(event.target.files ?? undefined)}
@@ -1118,7 +1527,7 @@ function BatchXmlDialog({
         <input
           ref={folderInputRef}
           type="file"
-          accept=".xml,text/xml,application/xml"
+          accept=".xml,.pdf,text/xml,application/xml,application/pdf"
           multiple
           className="hidden"
           {...({ webkitdirectory: "", directory: "" } as any)}
@@ -1128,7 +1537,7 @@ function BatchXmlDialog({
         {(reading || importing) && progress.total > 0 && (
           <div className="space-y-2 rounded-xl border p-4">
             <div className="flex justify-between text-sm">
-              <span>{reading ? "Lendo XMLs..." : "Importando abastecimentos..."}</span>
+              <span>{reading ? "Lendo documentos em paralelo..." : "Importando abastecimentos..."}</span>
               <span>
                 {progress.current} / {progress.total}
               </span>
@@ -1202,6 +1611,9 @@ function BatchXmlDialog({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate font-semibold">{item.fileName}</p>
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                          {item.origem}
+                        </span>
                         {item.jaCadastrado && (
                           <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[11px] font-semibold text-blue-400">
                             Correção de sincronização
@@ -1300,7 +1712,7 @@ function BatchXmlDialog({
                       className="mt-3 grid items-start gap-3 rounded-lg bg-muted/30 p-3 lg:grid-cols-[minmax(0,2fr)_150px_160px_minmax(0,2fr)]"
                     >
                       <div>
-                        <p className="mb-1 block h-4 text-xs text-muted-foreground">Produto do XML</p>
+                        <p className="mb-1 block h-4 text-xs text-muted-foreground">Produto do documento</p>
                         <p className="font-medium">
                           {product.combustivel?.descricaoAnp || product.nome}
                         </p>
@@ -1331,7 +1743,7 @@ function BatchXmlDialog({
                           disabled={reading || importing}
                         />
                         <p className="mt-1 text-[11px] text-muted-foreground">
-                          XML: {formatLitros(product.quantidade)}
+                          Original: {formatLitros(product.quantidade)}
                         </p>
                       </div>
 
@@ -1415,7 +1827,7 @@ function BatchXmlDialog({
               ))}
               {!filteredItems.length && (
                 <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                  Nenhum XML corresponde aos filtros atuais.
+                  Nenhum documento corresponde aos filtros atuais.
                 </div>
               )}
             </div>
@@ -2354,6 +2766,11 @@ export default function Abastecimentos() {
   const [filterSearch, setFilterSearch] = useState("");
   const [pageSize, setPageSize] = useState(15);
   const [currentPage, setCurrentPage] = useState(1);
+  const [visibleSummaryValues, setVisibleSummaryValues] = useState<Record<string, boolean>>({});
+
+  const toggleSummaryValue = (key: string) => {
+    setVisibleSummaryValues((current) => ({ ...current, [key]: !current[key] }));
+  };
 
   const filteredItems = useMemo(() => {
     return [...items]
@@ -2428,24 +2845,42 @@ export default function Abastecimentos() {
   }, [filteredItems]);
 
   const mediaKmLitro = useMemo(() => {
-    let distancia = 0;
-    let litros = 0;
+    let kmRodados = 0;
+    let litrosAbastecidos = 0;
+    const idsFiltrados = new Set(filteredItems.map((item) => item.id));
     const porVeiculo = new Map<string, Abastecimento[]>();
-    items.forEach((item) => porVeiculo.set(item.veiculoId, [...(porVeiculo.get(item.veiculoId) ?? []), item]));
+
+    items.forEach((item) => {
+      porVeiculo.set(item.veiculoId, [...(porVeiculo.get(item.veiculoId) ?? []), item]);
+    });
+
     porVeiculo.forEach((registros) => {
-      const crescente = registros.sort((a, b) => a.hodometro - b.hodometro || a.dataEmissao.localeCompare(b.dataEmissao));
-      for (let index = 1; index < crescente.length; index += 1) {
-        const atual = crescente[index];
-        if (!filteredItems.some((item) => item.id === atual.id)) continue;
-        const delta = atual.hodometro - crescente[index - 1].hodometro;
-        const litrosAtual = (atual.produtos ?? []).reduce((sum, produto) => sum + produto.quantidadeLitros, 0);
-        if (delta > 0 && litrosAtual > 0) {
-          distancia += delta;
-          litros += litrosAtual;
+      const cronologicos = [...registros].sort(
+        (a, b) =>
+          a.dataEmissao.localeCompare(b.dataEmissao) ||
+          a.hodometro - b.hodometro ||
+          a.createdAt.localeCompare(b.createdAt),
+      );
+
+      for (let index = 1; index < cronologicos.length; index += 1) {
+        const atual = cronologicos[index];
+        const anterior = cronologicos[index - 1];
+        if (!idsFiltrados.has(atual.id)) continue;
+
+        const kmRodadosNoPeriodo = atual.hodometro - anterior.hodometro;
+        const litrosQueEntraramNaBomba = (atual.produtos ?? []).reduce(
+          (sum, produto) => sum + produto.quantidadeLitros,
+          0,
+        );
+
+        if (kmRodadosNoPeriodo > 0 && litrosQueEntraramNaBomba > 0) {
+          kmRodados += kmRodadosNoPeriodo;
+          litrosAbastecidos += litrosQueEntraramNaBomba;
         }
       }
     });
-    return litros > 0 ? distancia / litros : 0;
+
+    return litrosAbastecidos > 0 ? kmRodados / litrosAbastecidos : 0;
   }, [filteredItems, items]);
 
   const filterOptions = (key: keyof Filters): string[] => {
@@ -2535,7 +2970,7 @@ export default function Abastecimentos() {
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setBatchXmlOpen(true)}>
               <Layers3 className="mr-2 h-4 w-4" />
-              Importar XMLs
+              Importar XML/PDF
             </Button>
             <Button onClick={() => { setEditing(null); setFormOpen(true); }}>
               <Plus className="mr-2 h-4 w-4" /> Novo Abastecimento
@@ -2548,17 +2983,56 @@ export default function Abastecimentos() {
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4" /> Total de litros</p>
             <p className="mt-2 whitespace-nowrap text-2xl font-bold tabular-nums">{formatLitros(totals.litros)}</p>
           </div>
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Banknote className="h-4 w-4" /> Valor total</p>
-            <p className="mt-2 text-2xl font-bold text-primary">{formatBRL(totals.valor)}</p>
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4">
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Banknote className="h-4 w-4 shrink-0" /> <span className="truncate">Valor total</span></p>
+            <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
+              <p className="min-w-0 whitespace-nowrap text-2xl font-bold text-primary tabular-nums">
+                {visibleSummaryValues.valorTotal ? formatBRL(totals.valor) : "R$ ••••••"}
+              </p>
+              <button
+                type="button"
+                onClick={() => toggleSummaryValue("valorTotal")}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={visibleSummaryValues.valorTotal ? "Ocultar valor total" : "Mostrar valor total"}
+                title={visibleSummaryValues.valorTotal ? "Ocultar valor" : "Mostrar valor"}
+              >
+                {visibleSummaryValues.valorTotal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Banknote className="h-4 w-4" /> Total de descontos</p>
-            <p className="mt-2 text-2xl font-bold text-emerald-600 dark:text-emerald-400">{formatBRL(totals.descontos)}</p>
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4">
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Banknote className="h-4 w-4 shrink-0" /> <span className="truncate">Total de descontos</span></p>
+            <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
+              <p className="min-w-0 whitespace-nowrap text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400">
+                {visibleSummaryValues.descontos ? formatBRL(totals.descontos) : "R$ ••••••"}
+              </p>
+              <button
+                type="button"
+                onClick={() => toggleSummaryValue("descontos")}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={visibleSummaryValues.descontos ? "Ocultar total de descontos" : "Mostrar total de descontos"}
+                title={visibleSummaryValues.descontos ? "Ocultar valor" : "Mostrar valor"}
+              >
+                {visibleSummaryValues.descontos ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4" /> Média de R$/L</p>
-            <p className="mt-2 text-2xl font-bold">{formatBRL(totals.media)}</p>
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4">
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4 shrink-0" /> <span className="truncate">Média de R$/L</span></p>
+            <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
+              <p className="min-w-0 whitespace-nowrap text-2xl font-bold tabular-nums">
+                {visibleSummaryValues.mediaLitro ? formatBRL(totals.media) : "R$ ••••••"}
+              </p>
+              <button
+                type="button"
+                onClick={() => toggleSummaryValue("mediaLitro")}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={visibleSummaryValues.mediaLitro ? "Ocultar média de R$/L" : "Mostrar média de R$/L"}
+                title={visibleSummaryValues.mediaLitro ? "Ocultar valor" : "Mostrar valor"}
+              >
+                {visibleSummaryValues.mediaLitro ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Gauge className="h-4 w-4" /> Média de KM/L</p>
@@ -2611,7 +3085,7 @@ export default function Abastecimentos() {
                               {column.date ? (
                                 <div className="space-y-3 p-3">
                                   <div className="space-y-1"><Label className="text-xs">De</Label><DatePicker value={filters.emissao} onChange={(value) => setFilters((current) => ({ ...current, emissao: value }))} placeholder="Data inicial" /></div>
-                                  <div className="space-y-1"><Label className="text-xs">Até</Label><DatePicker value={filters.emissaoAte} onChange={(value) => setFilters((current) => ({ ...current, emissaoAte: value }))} placeholder="Data final" /></div>
+                                  <div className="space-y-1"><Label className="text-xs">Até</Label><DatePicker value={filters.emissaoAte} defaultMonth={filters.emissao} onChange={(value) => setFilters((current) => ({ ...current, emissaoAte: value }))} placeholder="Data final" /></div>
                                 </div>
                               ) : (
                                 <>

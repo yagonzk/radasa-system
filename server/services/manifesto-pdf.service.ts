@@ -7,7 +7,8 @@ const RADASA_OCR_PRIMARY_MARKER = "[[RADASA_OCR_PRIMARY]]";
 export type TipoRomaneioPdf =
   | "Bonificação - Lebrinha"
   | "Acertar c/ Lebrinha"
-  | "Receber c/ Cliente";
+  | "Receber c/ Cliente"
+  | "Vasilhame";
 
 export interface RomaneioPdfCliente {
   codigo: string;
@@ -279,7 +280,10 @@ function humanizeInstruction(value: string, total: number) {
   return value.replace(/-/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function inferTipo(instruction: string, total: number): TipoRomaneioPdf {
+function inferTipo(instruction: string, total: number, description = ""): TipoRomaneioPdf {
+  // Vasilhame is a business category, not a zero-value bonificação. It must
+  // win over the instruction/total heuristics used for normal merchandise.
+  if (isVasilhameDescription(description)) return "Vasilhame";
   const normalized = normalize(instruction);
   if (normalized.includes("RECEBERCCLIENTE")) return "Receber c/ Cliente";
   if (
@@ -540,7 +544,7 @@ function parseProductLine(
     instrucaoCobranca,
     notaFiscal: matchParts.notaFiscal,
     serie: matchParts.serie,
-    tipoManifesto: inferTipo(instrucaoCobranca, valorTotal),
+    tipoManifesto: inferTipo(instrucaoCobranca, valorTotal, descricaoLegivel),
     clienteCodigo: cliente.codigo,
     clienteNome: cliente.nome,
     blocoCliente,
@@ -761,7 +765,7 @@ function parseLooseVasilhameLine(
     instrucaoCobranca: instruction,
     notaFiscal: match[8],
     serie: match[9],
-    tipoManifesto: inferTipo(instruction, 0),
+    tipoManifesto: inferTipo(instruction, 0, description),
     clienteCodigo: cliente.codigo,
     clienteNome: cliente.nome,
     blocoCliente,
@@ -958,7 +962,7 @@ function parseSigaCompactStream(
         instrucaoCobranca,
         notaFiscal: nfMatch[1],
         serie: nfMatch[2],
-        tipoManifesto: inferTipo(instrucaoCobranca, valorTotal),
+        tipoManifesto: inferTipo(instrucaoCobranca, valorTotal, descricao),
         clienteCodigo: client.codigo,
         clienteNome: client.nome,
         blocoCliente: clientIndex + 1,
@@ -1278,7 +1282,7 @@ function convertLooseOcrProducts(produtos: LooseOcrProduct[]): RomaneioPdfProdut
       instrucaoCobranca,
       notaFiscal: product.notaFiscal,
       serie: product.serie,
-      tipoManifesto: inferTipo(instrucaoCobranca, ehVasilhame ? 0 : valorTotal),
+      tipoManifesto: inferTipo(instrucaoCobranca, ehVasilhame ? 0 : valorTotal, product.descricao),
       clienteCodigo: product.cliente.codigo,
       clienteNome: product.cliente.nome,
       blocoCliente: product.blocoCliente,
@@ -1599,7 +1603,7 @@ function parseHybridSigaDocument(rawText: string) {
       instrucaoCobranca,
       notaFiscal,
       serie,
-      tipoManifesto: inferTipo(instrucaoCobranca, ehVasilhame ? 0 : valorTotal),
+      tipoManifesto: inferTipo(instrucaoCobranca, ehVasilhame ? 0 : valorTotal, product.descricao),
       clienteCodigo: product.cliente.codigo,
       clienteNome: product.cliente.nome,
       blocoCliente: product.blocoCliente,

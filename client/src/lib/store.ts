@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "./api";
+import { api, getResourceCollection, invalidateResourceCache, peekResourceCollection } from "./api";
 
 export type StatusMotorista = "ATIVO" | "DEMITIDO";
 export interface Motorista { id: string; nome: string; cpf: string; salarioBase: number; status: StatusMotorista; createdAt: string; }
@@ -41,7 +41,7 @@ export interface Fechamento { id: string; motoristaId: string; dataInicio: strin
 export type SubcategoriaVeiculo = "CAMINHAO" | "CARRO" | "MOTO";
 export interface Veiculo { id: string; placa: string; modelo?: string; subcategoria?: SubcategoriaVeiculo | null; quantidadePneus?: number; quantidadeEstepes?: number; createdAt: string; }
 export interface Viagem { id: string; placa: string; motoristaId: string; valorFrete: number; dataManifesto: string; cidadeEntrega: string; distanciaKm: number; valorPedagio: number; valorDiaria: number; valorAbastecimento: number; valorChapa: number; createdAt: string; }
-export type TipoManifesto = "Bonificação - Lebrinha" | "Acertar c/ Lebrinha" | "Receber c/ Cliente";
+export type TipoManifesto = "Bonificação - Lebrinha" | "Acertar c/ Lebrinha" | "Receber c/ Cliente" | "Vasilhame";
 export interface ManifestoProduto { id?: string; produtoId: string; clienteId?: string | null; romaneio?: string; notaFiscal?: string; serieNf?: string; instrucaoCobranca?: string; quantidade: number; valorUnitario: number; valorTotal: number; tipoManifesto?: TipoManifesto; pagoCliente?: boolean | null; }
 export interface ManifestoMetadata {
   transportadoraCodigo?: string;
@@ -248,7 +248,7 @@ function requireEntity<T>(data: unknown, entityName: string): T {
 }
 
 function useApiCrud<T extends Entity>(resource: string, entityName: string) {
-  const [items, setItems] = useState<T[]>([]);
+  const [items, setItems] = useState<T[]>(() => peekResourceCollection<T>(resource) ?? []);
   const sourceId = useRef(generateId()).current;
   const mutationRevision = useRef(0);
   const replaceLocalItem = useCallback((item: T) => {
@@ -261,31 +261,37 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string) {
     });
   }, []);
 
-  const refresh = useCallback(async () => {
+  const load = useCallback(async (force: boolean) => {
     const revisionAtStart = mutationRevision.current;
     try {
-      const response = await api.get<unknown>(`/${resource}`);
-      const collection = requireCollection<T>(response.data, entityName);
+      const payload = await getResourceCollection<unknown>(resource, force);
+      const collection = requireCollection<T>(payload, entityName);
 
       // Uma leitura iniciada antes de uma gravação não pode apagar o estado
       // confirmado pela resposta do POST/PUT/DELETE.
       if (revisionAtStart === mutationRevision.current) {
         setItems(collection);
       }
+      return collection;
     }
     catch (error) { console.error(`Falha ao carregar ${entityName}.`, error); }
   }, [resource, entityName]);
 
+  const refresh = useCallback(async () => load(true), [load]);
+
   useEffect(() => {
-    void refresh();
+    // A montagem usa cache compartilhado e agrupa recursos do mesmo frame em
+    // uma única chamada /api/bootstrap. Navegar entre telas deixa de refazer
+    // consultas idênticas enquanto o cache curto estiver válido.
+    void load(false);
     const handler = (event: Event) => {
       const source = (event as CustomEvent<ApiChangeDetail>).detail?.source;
       if (source === sourceId) return;
-      void refresh();
+      void load(true);
     };
     window.addEventListener(eventName(resource), handler);
     return () => window.removeEventListener(eventName(resource), handler);
-  }, [refresh, resource, sourceId]);
+  }, [load, resource, sourceId]);
 
   const create = useCallback(async (data: Omit<T, "id" | "createdAt">): Promise<T> => {
     const newItem = { ...data, id: generateId(), createdAt: new Date().toISOString() } as T;
@@ -296,6 +302,7 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string) {
       const response = await api.post<unknown>(`/${resource}`, newItem);
       const createdItem = requireEntity<T>(response.data, entityName);
       setItems(current => current.map(item => item.id === newItem.id ? createdItem : item));
+      invalidateResourceCache(resource);
       notifyApiChange(resource, sourceId);
       return createdItem;
     } catch (error) {
@@ -317,6 +324,7 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string) {
       const response = await api.put<unknown>(`/${resource}/${id}`, data);
       const updatedItem = requireEntity<T>(response.data, entityName);
       setItems(current => current.map(item => item.id === id ? updatedItem : item));
+      invalidateResourceCache(resource);
       notifyApiChange(resource, sourceId);
       return updatedItem;
     } catch (error) {
@@ -337,6 +345,7 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string) {
 
     try {
       await api.delete(`/${resource}/${id}`);
+      invalidateResourceCache(resource);
       notifyApiChange(resource, sourceId);
     } catch (error) {
       if (previous) setItems(current => [...current, previous!]);

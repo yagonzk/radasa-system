@@ -216,7 +216,7 @@ export function extrairHodometro(texts: string[]) {
       alias: "PLACA + ODOMETRO",
       confidence: 123,
       regex:
-        /\bPLACA\s*[:=\-#.]?\s*[A-Z0-9.-]{5,10}.{0,100}?\b(?:KM|KMS?|OD|ODOM|ODOMETRO|HOD|HODOM|HODOMETRO|HD|HO|HM|HORIMETRO|QUILOMETRAGEM)\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
+        /\bPLACA\s*[:=\-#.]?\s*[A-Z0-9.-]{5,10}.{0,100}?\b(?:KM|KMS?|OD|ODOM|ODOMETRO|HOD|HODOM|HODOMETRO|HD|HO|HM|HORIMETRO|QUILOMETRAGEM|SEQUENCIA)\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
     },
     {
       alias: "ODOMETRO COMPLETO",
@@ -229,6 +229,12 @@ export function extrairHodometro(texts: string[]) {
       confidence: 119,
       regex:
         /(?:^|[\s;|,(])(?:-\s*)?KM(?:S)?(?:\s+(?:ATUAL|FINAL|INICIAL|VEICULO|RODADO|TOTAL|ODOMETRO|HODOMETRO))?\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
+    },
+    {
+      alias: "SEQUENCIA",
+      confidence: 120,
+      regex:
+        /(?:^|[\s;|,(])SEQUENCIA\.?\s*(?:ATUAL|FINAL|INICIAL|VEICULO|RODADO|TOTAL)?\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
     },
     {
       alias: "ABREVIACAO ODOMETRO",
@@ -523,6 +529,120 @@ export function interpretarAbastecimentoXml(
   };
 }
 
+type ClienteSuggestion = {
+  id: string;
+  nomeFantasia: string;
+  razaoSocial: string;
+  cnpj: string;
+};
+
+type VehicleSuggestion = {
+  id: string;
+  placa: string;
+  modelo: string | null;
+};
+
+type ProductSuggestion = {
+  id: string;
+  nome: string;
+  codigoInterno: string;
+  criadoAutomaticamente?: boolean;
+};
+
+export interface AbastecimentoSuggestionContext {
+  clientes: ClienteSuggestion[];
+  veiculos: VehicleSuggestion[];
+  produtos: ProductSuggestion[];
+  productCreationTail: Promise<void>;
+}
+
+export async function criarContextoSugestoesAbastecimento(): Promise<AbastecimentoSuggestionContext> {
+  const [clientes, veiculos, produtos] = await Promise.all([
+    prisma.cliente.findMany({
+      select: {
+        id: true,
+        nomeFantasia: true,
+        razaoSocial: true,
+        cnpj: true,
+      },
+    }),
+    prisma.veiculo.findMany({
+      select: {
+        id: true,
+        placa: true,
+        modelo: true,
+      },
+    }),
+    prisma.produto.findMany({
+      where: {
+        categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
+      },
+      select: {
+        id: true,
+        nome: true,
+        codigoInterno: true,
+      },
+    }),
+  ]);
+
+  return {
+    clientes,
+    veiculos,
+    produtos,
+    productCreationTail: Promise.resolve(),
+  };
+}
+
+async function withProductCreationLock<T>(
+  context: AbastecimentoSuggestionContext,
+  task: () => Promise<T>,
+) {
+  const previous = context.productCreationTail;
+  let release!: () => void;
+  context.productCreationTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous;
+  try {
+    return await task();
+  } finally {
+    release();
+  }
+}
+
+function findClienteSuggestionFromContext(
+  document: AbastecimentoXmlInterpretado,
+  context: AbastecimentoSuggestionContext,
+) {
+  const cnpj = document.emitente.cnpj;
+  if (cnpj) {
+    const exact = context.clientes.find((cliente) => cliente.cnpj === cnpj);
+    if (exact) return exact;
+  }
+
+  const name = firstText(
+    document.emitente.nomeFantasia,
+    document.emitente.razaoSocial,
+  );
+  if (!name) return null;
+
+  const words = normalizeSearch(name)
+    .split(" ")
+    .filter((word) => word.length >= 3)
+    .slice(0, 3);
+  if (!words.length) return null;
+
+  return (
+    context.clientes.find((cliente) => {
+      const candidate = normalizeSearch(
+        `${cliente.nomeFantasia} ${cliente.razaoSocial}`,
+      );
+      return words.some((word) => candidate.includes(word));
+    }) ?? null
+  );
+}
+
 async function findClienteSuggestion(document: AbastecimentoXmlInterpretado) {
   const cnpj = document.emitente.cnpj;
 
@@ -568,6 +688,40 @@ async function findClienteSuggestion(document: AbastecimentoXmlInterpretado) {
       cnpj: true,
     },
   });
+}
+
+function findVehicleSuggestionFromContext(
+  plate: string,
+  context: AbastecimentoSuggestionContext,
+) {
+  const normalizedPlate = normalizePlate(plate);
+  if (!normalizedPlate) return null;
+
+  const normalizedCandidates = context.veiculos.map((vehicle) => ({
+    vehicle,
+    normalized: normalizePlate(vehicle.placa),
+  }));
+
+  const exact = normalizedCandidates.find(
+    (candidate) => candidate.normalized === normalizedPlate,
+  );
+  if (exact) return exact.vehicle;
+  if (!isLoosePlateCandidate(normalizedPlate)) return null;
+
+  const ranked = normalizedCandidates
+    .map((candidate) => ({
+      ...candidate,
+      distance: levenshteinDistance(normalizedPlate, candidate.normalized),
+    }))
+    .filter((candidate) => candidate.distance <= 1)
+    .sort((a, b) => a.distance - b.distance);
+
+  if (!ranked.length) return null;
+  const bestDistance = ranked[0].distance;
+  const bestMatches = ranked.filter(
+    (candidate) => candidate.distance === bestDistance,
+  );
+  return bestMatches.length === 1 ? bestMatches[0].vehicle : null;
 }
 
 async function findVehicleSuggestion(plate: string) {
@@ -656,52 +810,63 @@ async function createFuelProductIfMissing(product: AbastecimentoXmlProduto) {
   const exactName = firstText(product.nome, product.combustivel?.descricaoAnp);
   if (!exactName) return null;
 
-  const existingByName = await prisma.produto.findFirst({
-    where: {
-      nome: { equals: exactName, mode: "insensitive" },
-      categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
-    },
-    select: { id: true, nome: true, codigoInterno: true },
-  });
+  // A leitura em massa pode executar mais de uma requisição ao mesmo tempo.
+  // O advisory lock do PostgreSQL impede duas requisições/Workers de criarem
+  // o mesmo combustível simultaneamente quando ele ainda não existe.
+  const lockKey = `radasa:combustivel:${normalizeSearch(exactName)}`;
 
-  if (existingByName) return { ...existingByName, criadoAutomaticamente: false };
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
 
-  const baseCode = generatedInternalCode(product);
-  let code = baseCode;
-  let suffix = 2;
-
-  while (
-    await prisma.produto.findFirst({
-      where: { codigoInterno: { equals: code, mode: "insensitive" } },
-      select: { id: true },
-    })
-  ) {
-    const sameProduct = await prisma.produto.findFirst({
+    const existingByName = await tx.produto.findFirst({
       where: {
-        codigoInterno: { equals: code, mode: "insensitive" },
         nome: { equals: exactName, mode: "insensitive" },
+        categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
       },
       select: { id: true, nome: true, codigoInterno: true },
     });
 
-    if (sameProduct) {
-      return { ...sameProduct, criadoAutomaticamente: false };
+    if (existingByName) {
+      return { ...existingByName, criadoAutomaticamente: false };
     }
 
-    code = `${baseCode}-${suffix}`;
-    suffix += 1;
-  }
+    const baseCode = generatedInternalCode(product);
+    let code = baseCode;
+    let suffix = 2;
 
-  const created = await prisma.produto.create({
-    data: {
-      nome: exactName,
-      codigoInterno: code,
-      categoriaEstoque: "Combustível",
-    },
-    select: { id: true, nome: true, codigoInterno: true },
+    while (
+      await tx.produto.findFirst({
+        where: { codigoInterno: { equals: code, mode: "insensitive" } },
+        select: { id: true },
+      })
+    ) {
+      const sameProduct = await tx.produto.findFirst({
+        where: {
+          codigoInterno: { equals: code, mode: "insensitive" },
+          nome: { equals: exactName, mode: "insensitive" },
+        },
+        select: { id: true, nome: true, codigoInterno: true },
+      });
+
+      if (sameProduct) {
+        return { ...sameProduct, criadoAutomaticamente: false };
+      }
+
+      code = `${baseCode}-${suffix}`;
+      suffix += 1;
+    }
+
+    const created = await tx.produto.create({
+      data: {
+        nome: exactName,
+        codigoInterno: code,
+        categoriaEstoque: "Combustível",
+      },
+      select: { id: true, nome: true, codigoInterno: true },
+    });
+
+    return { ...created, criadoAutomaticamente: true };
   });
-
-  return { ...created, criadoAutomaticamente: true };
 }
 
 async function findProductSuggestion(product: AbastecimentoXmlProduto) {
@@ -759,16 +924,95 @@ async function findProductSuggestion(product: AbastecimentoXmlProduto) {
   return createFuelProductIfMissing(product);
 }
 
+function findProductInContext(
+  product: AbastecimentoXmlProduto,
+  context: AbastecimentoSuggestionContext,
+) {
+  const code = normalizeSearch(product.codigo).replace(/\s+/g, "");
+  if (code) {
+    const byCode = context.produtos.find(
+      (candidate) =>
+        normalizeSearch(candidate.codigoInterno).replace(/\s+/g, "") === code,
+    );
+    if (byCode) return { ...byCode, criadoAutomaticamente: false };
+  }
+
+  const normalizedName = normalizeSearch(
+    product.combustivel?.descricaoAnp || product.nome,
+  );
+  const terms = normalizedName
+    .split(" ")
+    .filter((term) => term.length >= 3)
+    .slice(0, 4);
+
+  const exactName = context.produtos.find(
+    (candidate) => normalizeSearch(candidate.nome) === normalizedName,
+  );
+  if (exactName) return { ...exactName, criadoAutomaticamente: false };
+
+  if (!terms.length) return null;
+
+  const ranked = context.produtos
+    .map((candidate) => {
+      const candidateName = normalizeSearch(candidate.nome);
+      const hits = terms.filter((term) => candidateName.includes(term)).length;
+      return { candidate, hits };
+    })
+    .filter((entry) => entry.hits > 0)
+    .sort((a, b) => b.hits - a.hits);
+
+  if (!ranked.length) return null;
+  return { ...ranked[0].candidate, criadoAutomaticamente: false };
+}
+
+async function findProductSuggestionFromContext(
+  product: AbastecimentoXmlProduto,
+  context: AbastecimentoSuggestionContext,
+) {
+  const cached = findProductInContext(product, context);
+  if (cached) return cached;
+
+  return withProductCreationLock(context, async () => {
+    // Outra NF-e do mesmo lote pode ter criado o produto enquanto esta aguardava
+    // a trava. Confere o cache novamente antes de tocar no banco.
+    const afterWait = findProductInContext(product, context);
+    if (afterWait) return afterWait;
+
+    const created = await createFuelProductIfMissing(product);
+    if (created) {
+      const alreadyCached = context.produtos.some(
+        (candidate) => candidate.id === created.id,
+      );
+      if (!alreadyCached) {
+        context.produtos.push({
+          id: created.id,
+          nome: created.nome,
+          codigoInterno: created.codigoInterno,
+          criadoAutomaticamente: created.criadoAutomaticamente,
+        });
+      }
+    }
+    return created;
+  });
+}
+
 export async function sugerirVinculosAbastecimento(
   document: AbastecimentoXmlInterpretado,
+  context?: AbastecimentoSuggestionContext,
 ) {
-  const [cliente, veiculo] = await Promise.all([
-    findClienteSuggestion(document),
-    findVehicleSuggestion(document.placa),
-  ]);
+  const [cliente, veiculo] = context
+    ? [
+        findClienteSuggestionFromContext(document, context),
+        findVehicleSuggestionFromContext(document.placa, context),
+      ]
+    : await Promise.all([
+        findClienteSuggestion(document),
+        findVehicleSuggestion(document.placa),
+      ]);
 
-  // Processa em sequência para evitar criar produtos duplicados quando
-  // o mesmo combustível aparece mais de uma vez no mesmo lote/documento.
+  // Os produtos continuam protegidos por uma fila curta quando precisam ser
+  // cadastrados automaticamente. Assim o restante do lote pode ser lido em
+  // paralelo sem gerar produtos duplicados.
   const produtos: Array<{
     produto: AbastecimentoXmlProduto;
     cadastro: Awaited<ReturnType<typeof findProductSuggestion>>;
@@ -776,7 +1020,9 @@ export async function sugerirVinculosAbastecimento(
   for (const produto of document.produtos) {
     produtos.push({
       produto,
-      cadastro: await findProductSuggestion(produto),
+      cadastro: context
+        ? await findProductSuggestionFromContext(produto, context)
+        : await findProductSuggestion(produto),
     });
   }
 

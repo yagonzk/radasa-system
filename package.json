@@ -1,6 +1,6 @@
 {
   "name": "radasa-system",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -23,7 +23,9 @@
     "build:cloudflare": "prisma generate && vite build --configLoader runner",
     "deploy:cloudflare": "pnpm run build:cloudflare && wrangler deploy",
     "dev:cloudflare": "pnpm run build:cloudflare && wrangler dev",
-    "deploy": "pnpm run deploy:cloudflare"
+    "deploy": "pnpm run deploy:cloudflare",
+    "hyperdrive:list": "wrangler hyperdrive list",
+    "db:fix-vasilhames": "tsx scripts/corrigir-vasilhames.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -23,6 +23,7 @@ import { ciotsRoutes } from "./ciots.routes.js";
 import { cteRoutes } from "./cte.routes.js";
 import { pedagiosRoutes } from "./pedagios.routes.js";
 import { auditMutations } from "../middlewares/audit-log.js";
+import { bootstrapRoutes } from "./bootstrap.routes.js";
 
 export const apiRoutes = Router();
 apiRoutes.get("/health", (_req, res) => res.json({ status: "ok" }));
@@ -30,6 +31,7 @@ apiRoutes.use("/auth", authRoutes);
 apiRoutes.use("/usuarios", usuariosRoutes);
 apiRoutes.use(authenticateIfRequired);
 apiRoutes.use(auditMutations);
+apiRoutes.use("/bootstrap", bootstrapRoutes);
 apiRoutes.use("/logs", logsRoutes);
 apiRoutes.use("/migration", migrationRoutes);
 apiRoutes.use("/motoristas", motoristasRoutes);

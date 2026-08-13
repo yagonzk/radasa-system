@@ -57,9 +57,9 @@ function storageErrorMessage(error: any, action = "salvar o pedágio") {
   return detail ? `Não foi possível ${action}: ${detail}` : `Não foi possível ${action}.`;
 }
 
-pedagiosRoutes.get("/status", async (req, res, next) => {
+pedagiosRoutes.get("/status", async (_req, res, next) => {
   try {
-    if (req.user?.id) await materializeAutomaticPedagios(req.user.id);
+    // Status deve ser leitura leve; materialização da base fica somente ao abrir o editor.
     res.json(await pedagiosProviderStatus());
   } catch (error) { next(error); }
 });

@@ -21,6 +21,7 @@ enum TipoManifesto {
   BONIFICACAO_LEBRINHA
   ACERTAR_LEBRINHA
   RECEBER_CLIENTE
+  VASILHAME
 }
 
 enum StatusMotorista {

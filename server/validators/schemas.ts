@@ -115,7 +115,7 @@ export const fechamentoBody = z.object({
   viagens: z.array(z.object({ localId: id, quantidade: z.coerce.number().int().min(1) })),
   valorTotal: money.optional(), createdAt: z.string().optional(),
 });
-export const tipoManifesto = z.enum(["Bonificação - Lebrinha", "Acertar c/ Lebrinha", "Receber c/ Cliente"]);
+export const tipoManifesto = z.enum(["Bonificação - Lebrinha", "Acertar c/ Lebrinha", "Receber c/ Cliente", "Vasilhame"]);
 export const manifestoProdutoBody = z.object({
   id: id.optional(), produtoId: id, clienteId: id.optional().nullable(), romaneio: z.string().max(80).optional().default(""), notaFiscal: z.string().max(80).optional().default(""), serieNf: z.string().max(30).optional().default(""), instrucaoCobranca: z.string().max(2000).optional().default(""), quantidade: money, valorUnitario: money, valorTotal: money, tipoManifesto: tipoManifesto.optional(), pagoCliente: z.boolean().nullable().optional().default(null),
 });

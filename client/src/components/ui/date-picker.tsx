@@ -17,17 +17,32 @@ interface DatePickerProps {
   onChange: (value: string) => void;
   className?: string;
   placeholder?: string;
+  /** Optional month anchor for an empty picker, e.g. end date following a start date. */
+  defaultMonth?: string;
 }
 
-export function DatePicker({ value, onChange, className, placeholder = "Selecione uma data" }: DatePickerProps) {
+function parseDateOnly(value?: string): Date | undefined {
+  if (!value) return undefined;
+  const [y, m, d] = value.split("-").map(Number);
+  if (!y || !m || !d) return undefined;
+  const parsed = new Date(y, m - 1, d);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+export function DatePicker({ value, onChange, className, placeholder = "Selecione uma data", defaultMonth }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
 
   // Convert YYYY-MM-DD to JS Date for the calendar
-  const selectedDate = React.useMemo(() => {
-    if (!value) return undefined;
-    const [y, m, d] = value.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  }, [value]);
+  const selectedDate = React.useMemo(() => parseDateOnly(value), [value]);
+  const fallbackMonth = React.useMemo(() => parseDateOnly(defaultMonth), [defaultMonth]);
+  const [visibleMonth, setVisibleMonth] = React.useState<Date>(() => selectedDate ?? fallbackMonth ?? new Date());
+
+  React.useEffect(() => {
+    // When reopening a picker with an existing filter, always return to that
+    // selected month instead of jumping back to the current month.
+    if (open && selectedDate) setVisibleMonth(selectedDate);
+    else if (open && !selectedDate && fallbackMonth) setVisibleMonth(fallbackMonth);
+  }, [open, selectedDate, fallbackMonth]);
 
   // Convert JS Date back to YYYY-MM-DD
   const formatDateValue = (date: Date | undefined): string => {
@@ -60,6 +75,8 @@ export function DatePicker({ value, onChange, className, placeholder = "Selecion
         <Calendar
           mode="single"
           selected={selectedDate}
+          month={visibleMonth}
+          onMonthChange={setVisibleMonth}
           onSelect={(date) => {
             if (date) {
               onChange(formatDateValue(date));
