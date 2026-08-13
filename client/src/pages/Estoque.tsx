@@ -176,15 +176,17 @@ export default function Estoque() {
   };
 
   const openMovement = () => {
-    if (!produtosFiltrados.length) {
-      toast.error(
-        categoriaFiltro === "TODOS"
-          ? "Cadastre um produto antes de registrar uma movimentação."
-          : `Cadastre um produto do tipo ${categoriaFiltro} antes de registrar uma movimentação.`,
-      );
-      openCreateProduct();
+    if (!produtos.length) {
+      toast.error('Nenhum produto cadastrado. Use o botão "Novo produto" para cadastrar um produto antes de registrar uma movimentação.');
       return;
     }
+
+    if (!produtosFiltrados.length) {
+      toast.error(`Nenhum produto do tipo ${categoriaFiltro} está cadastrado. Altere o filtro de tipo de produto ou cadastre um novo produto.`);
+      return;
+    }
+
+    resetForm();
     setOpen(true);
   };
 
