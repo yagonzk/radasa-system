@@ -216,7 +216,7 @@ export function extrairHodometro(texts: string[]) {
       alias: "PLACA + ODOMETRO",
       confidence: 123,
       regex:
-        /\bPLACA\s*[:=\-#.]?\s*[A-Z0-9.-]{5,10}.{0,100}?\b(?:KM|KMS?|OD|ODOM|ODOMETRO|HOD|HODOM|HODOMETRO|HD|HO|HM|HORIMETRO|QUILOMETRAGEM|SEQUENCIA)\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
+        /\bPLACA\s*[:=\-#.]?\s*[A-Z0-9.-]{5,10}.{0,100}?\b(?:KM|KMS?|OD|ODOM|ODOMETRO|HOD|HODOM|HODOMETRO|HD|HO|HM|HORIMETRO|QUILOMETRAGEM)\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
     },
     {
       alias: "ODOMETRO COMPLETO",
@@ -229,12 +229,6 @@ export function extrairHodometro(texts: string[]) {
       confidence: 119,
       regex:
         /(?:^|[\s;|,(])(?:-\s*)?KM(?:S)?(?:\s+(?:ATUAL|FINAL|INICIAL|VEICULO|RODADO|TOTAL|ODOMETRO|HODOMETRO))?\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
-    },
-    {
-      alias: "SEQUENCIA",
-      confidence: 120,
-      regex:
-        /(?:^|[\s;|,(])SEQUENCIA\.?\s*(?:ATUAL|FINAL|INICIAL|VEICULO|RODADO|TOTAL)?\s*[:=\-/#.]?\s*(\d{3,8}(?:[\.,]\d{1,3})?)/i,
     },
     {
       alias: "ABREVIACAO ODOMETRO",
