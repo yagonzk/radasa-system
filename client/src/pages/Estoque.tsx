@@ -41,6 +41,7 @@ const CATEGORIAS_ESTOQUE: CategoriaEstoque[] = [
 ];
 
 type ViewMode = "ESTOQUE" | "ENTRADAS" | "SAIDAS";
+type CategoriaFiltro = "TODOS" | CategoriaEstoque;
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyMovementForm = () => ({
@@ -75,7 +76,7 @@ export default function Estoque() {
   } = useEstoqueProdutos();
   const { movimentacoes, resumo, create, remove, refresh: refreshEstoque } = useEstoque();
 
-  const [categoria, setCategoria] = useState<CategoriaEstoque>("Produtos de Piscina");
+  const [categoriaFiltro, setCategoriaFiltro] = useState<CategoriaFiltro>("TODOS");
   const [viewMode, setViewMode] = useState<ViewMode>("ESTOQUE");
 
   const [open, setOpen] = useState(false);
@@ -90,30 +91,30 @@ export default function Estoque() {
   const [productForm, setProductForm] = useState(() => emptyProductForm("Produtos de Piscina"));
   const [savingProduct, setSavingProduct] = useState(false);
 
-  const produtosCategoria = useMemo(
-    () => produtos.filter((produto) => produto.categoria === categoria),
-    [produtos, categoria],
+  const produtosFiltrados = useMemo(
+    () => categoriaFiltro === "TODOS" ? produtos : produtos.filter((produto) => produto.categoria === categoriaFiltro),
+    [produtos, categoriaFiltro],
   );
-  const resumoCategoria = useMemo(
-    () => resumo.filter((item) => item.produto.categoria === categoria),
-    [resumo, categoria],
+  const resumoFiltrado = useMemo(
+    () => categoriaFiltro === "TODOS" ? resumo : resumo.filter((item) => item.produto.categoria === categoriaFiltro),
+    [resumo, categoriaFiltro],
   );
-  const movimentosCategoria = useMemo(
-    () => movimentacoes.filter((movimento) => movimento.produto.categoria === categoria),
-    [movimentacoes, categoria],
+  const movimentosFiltrados = useMemo(
+    () => categoriaFiltro === "TODOS" ? movimentacoes : movimentacoes.filter((movimento) => movimento.produto.categoria === categoriaFiltro),
+    [movimentacoes, categoriaFiltro],
   );
   const entradas = useMemo(
-    () => movimentosCategoria.filter((movimento) => movimento.tipo === "ENTRADA"),
-    [movimentosCategoria],
+    () => movimentosFiltrados.filter((movimento) => movimento.tipo === "ENTRADA"),
+    [movimentosFiltrados],
   );
   const saidas = useMemo(
-    () => movimentosCategoria.filter((movimento) => movimento.tipo === "SAIDA"),
-    [movimentosCategoria],
+    () => movimentosFiltrados.filter((movimento) => movimento.tipo === "SAIDA"),
+    [movimentosFiltrados],
   );
 
-  const totalEntradas = resumoCategoria.reduce((total, item) => total + item.entradas, 0);
-  const totalSaidas = resumoCategoria.reduce((total, item) => total + item.saidas, 0);
-  const totalEstoque = resumoCategoria.reduce((total, item) => total + item.estoque, 0);
+  const totalEntradas = resumoFiltrado.reduce((total, item) => total + item.entradas, 0);
+  const totalSaidas = resumoFiltrado.reduce((total, item) => total + item.saidas, 0);
+  const totalEstoque = resumoFiltrado.reduce((total, item) => total + item.estoque, 0);
 
   const resetForm = () => {
     setForm(emptyMovementForm());
@@ -123,7 +124,7 @@ export default function Estoque() {
 
   const openCreateProduct = () => {
     setEditingProduct(null);
-    setProductForm(emptyProductForm(categoria));
+    setProductForm(emptyProductForm(categoriaFiltro === "TODOS" ? "Produtos de Piscina" : categoriaFiltro));
     setProductOpen(true);
   };
 
@@ -150,7 +151,6 @@ export default function Estoque() {
         await createProduto(productForm);
         toast.success("Produto criado no almoxarifado.");
       }
-      setCategoria(productForm.categoria);
       setProductOpen(false);
       setEditingProduct(null);
       await refreshEstoque();
@@ -173,8 +173,12 @@ export default function Estoque() {
   };
 
   const openMovement = () => {
-    if (!produtosCategoria.length) {
-      toast.error(`Cadastre um produto em ${categoria} antes de registrar uma movimentação.`);
+    if (!produtosFiltrados.length) {
+      toast.error(
+        categoriaFiltro === "TODOS"
+          ? "Cadastre um produto antes de registrar uma movimentação."
+          : `Cadastre um produto do tipo ${categoriaFiltro} antes de registrar uma movimentação.`,
+      );
       openCreateProduct();
       return;
     }
@@ -203,8 +207,8 @@ export default function Estoque() {
     }
   };
 
-  const exportRows = viewMode === "ENTRADAS" ? entradas : viewMode === "SAIDAS" ? saidas : movimentosCategoria;
-  const categoryLabel = categoria;
+  const exportRows = viewMode === "ENTRADAS" ? entradas : viewMode === "SAIDAS" ? saidas : movimentosFiltrados;
+  const categoryLabel = categoriaFiltro === "TODOS" ? "Todos os tipos" : categoriaFiltro;
 
   const exportCsv = () => {
     const headers = ["Data", "Produto", "Código", "Tipo", "Quantidade", "Valor unitário", "Valor total", "Observações", "NF PDF"];
@@ -226,7 +230,7 @@ export default function Estoque() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `almoxarifado_${categoria
+    link.download = `almoxarifado_${categoryLabel
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-zA-Z0-9]+/g, "_")
@@ -268,29 +272,39 @@ export default function Estoque() {
           </div>
         </div>
 
-        <Tabs value={categoria} onValueChange={(value) => setCategoria(value as CategoriaEstoque)}>
-          <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
-            {CATEGORIAS_ESTOQUE.map((category) => (
-              <TabsTrigger key={category} value={category}>{category}</TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card title="Entradas" value={totalEntradas} icon={<ArrowDownToLine className="h-4 w-4" />} />
-          <Card title="Saídas" value={totalSaidas} icon={<ArrowUpFromLine className="h-4 w-4" />} />
-          <Card title="Saldo atual" value={totalEstoque} icon={<Boxes className="h-4 w-4" />} />
-        </div>
-
         <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
-          <TabsList className="grid w-full max-w-xl grid-cols-3">
-            <TabsTrigger value="ESTOQUE">Almoxarifado</TabsTrigger>
-            <TabsTrigger value="ENTRADAS">Entradas</TabsTrigger>
-            <TabsTrigger value="SAIDAS">Saídas</TabsTrigger>
-          </TabsList>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <TabsList className="grid w-full max-w-xl grid-cols-3">
+              <TabsTrigger value="ESTOQUE">Estoque</TabsTrigger>
+              <TabsTrigger value="ENTRADAS">Entrada</TabsTrigger>
+              <TabsTrigger value="SAIDAS">Saída</TabsTrigger>
+            </TabsList>
+
+            <div className="w-full sm:w-[260px]">
+              <Label className="mb-1.5 block text-xs text-muted-foreground">Tipo de produto</Label>
+              <Select value={categoriaFiltro} onValueChange={(value) => setCategoriaFiltro(value as CategoriaFiltro)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="TODOS">Todos os tipos</SelectItem>
+                  {CATEGORIAS_ESTOQUE.map((category) => (
+                    <SelectItem key={category} value={category}>{category}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <Card title="Entradas" value={totalEntradas} icon={<ArrowDownToLine className="h-4 w-4" />} />
+            <Card title="Saídas" value={totalSaidas} icon={<ArrowUpFromLine className="h-4 w-4" />} />
+            <Card title="Saldo atual" value={totalEstoque} icon={<Boxes className="h-4 w-4" />} />
+          </div>
+
           <TabsContent value="ESTOQUE" className="mt-4">
             <ResumoTable
-              rows={resumoCategoria}
+              rows={resumoFiltrado}
               onEditProduct={openEditProduct}
               onDeleteProduct={deleteProduct}
             />
@@ -355,11 +369,11 @@ export default function Estoque() {
                 </Field>
                 <Field label="Data"><DatePicker value={form.data} onChange={(value) => setForm({ ...form, data: value })} placeholder="Selecione uma data" /></Field>
               </div>
-              <Field label={`Produto — ${categoria}`}>
+              <Field label={categoriaFiltro === "TODOS" ? "Produto" : `Produto — ${categoriaFiltro}`}>
                 <Select value={form.produtoId} onValueChange={(value) => setForm({ ...form, produtoId: value })}>
                   <SelectTrigger><SelectValue placeholder="Selecione o produto" /></SelectTrigger>
                   <SelectContent>
-                    {produtosCategoria.map((produto) => <SelectItem key={produto.id} value={produto.id}>{produto.nome} - {produto.codigoInterno}</SelectItem>)}
+                    {produtosFiltrados.map((produto) => <SelectItem key={produto.id} value={produto.id}>{produto.nome} - {produto.codigoInterno}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </Field>
@@ -440,7 +454,7 @@ function ResumoTable({
               </td>
             </tr>
           ))}
-          {!rows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Nenhum produto cadastrado nesta categoria.</td></tr>}
+          {!rows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Nenhum produto cadastrado para o filtro selecionado.</td></tr>}
         </tbody>
       </table>
     </div>
