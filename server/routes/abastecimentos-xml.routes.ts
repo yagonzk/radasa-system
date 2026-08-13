@@ -152,7 +152,17 @@ abastecimentosXmlRoutes.post(
               if (!sugestoes.cliente) missing.push("cliente/posto");
               if (!sugestoes.veiculo) missing.push("veículo");
               if (document.hodometro === null) missing.push("odômetro");
-              if (sugestoes.produtos.some((item) => !item.cadastro)) {
+              if (
+                sugestoes.produtos.some(
+                  (item) =>
+                    !item.cadastro &&
+                    !String(
+                      item.produto.nome ||
+                        item.produto.combustivel?.descricaoAnp ||
+                        "",
+                    ).trim(),
+                )
+              ) {
                 missing.push("produto");
               }
 
@@ -275,14 +285,21 @@ abastecimentosXmlRoutes.post("/importar-lote", async (req, res, next) => {
           !Number.isFinite(item.hodometro) ||
           item.hodometro <= 0 ||
           !item.produtos.length ||
-          item.produtos.some(
-            (produto: any) =>
-              !produto?.produtoId ||
+          item.produtos.some((produto: any) => {
+            const produtoId = String(produto?.produtoId ?? "").trim();
+            const produtoXml = produto?.produtoXml ?? null;
+            const nomeXml = String(
+              produtoXml?.nome ?? produtoXml?.combustivel?.descricaoAnp ?? "",
+            ).trim();
+
+            return (
+              (!produtoId && !nomeXml) ||
               !Number.isFinite(Number(produto?.quantidadeLitros)) ||
               Number(produto?.quantidadeLitros) <= 0 ||
               !Number.isFinite(Number(produto?.valorUnitario)) ||
-              Number(produto?.valorUnitario) < 0,
-          ),
+              Number(produto?.valorUnitario) < 0
+            );
+          }),
       );
 
     if (invalidos.length) {

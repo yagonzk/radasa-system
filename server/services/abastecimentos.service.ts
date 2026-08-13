@@ -70,6 +70,169 @@ function buildProducts(produtos: any[]) {
   });
 }
 
+type ProdutoXmlImportacao = {
+  codigo?: string;
+  ean?: string;
+  nome?: string;
+  ncm?: string;
+  cfop?: string;
+  unidade?: string;
+  combustivel?: {
+    codigoAnp?: string;
+    descricaoAnp?: string;
+    ufConsumo?: string;
+  } | null;
+};
+
+function normalizeProductText(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+}
+
+function xmlProductName(produtoXml?: ProdutoXmlImportacao | null) {
+  return String(
+    produtoXml?.nome || produtoXml?.combustivel?.descricaoAnp || "",
+  ).trim();
+}
+
+function xmlProductCode(produtoXml?: ProdutoXmlImportacao | null) {
+  const raw = String(
+    produtoXml?.codigo ||
+      produtoXml?.combustivel?.codigoAnp ||
+      produtoXml?.ean ||
+      produtoXml?.ncm ||
+      "",
+  ).trim();
+
+  if (raw) return raw.slice(0, 100);
+
+  const name = normalizeProductText(xmlProductName(produtoXml))
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return `ABAST-${name || "PRODUTO"}`;
+}
+
+async function ensureClienteVeiculo(tx: any, clienteId: string, veiculoId: string) {
+  const [cliente, veiculo] = await Promise.all([
+    tx.cliente.findUnique({ where: { id: clienteId }, select: { id: true } }),
+    tx.veiculo.findUnique({ where: { id: veiculoId }, select: { id: true } }),
+  ]);
+
+  if (!cliente) throw new AppError(404, "Cliente não encontrado.");
+  if (!veiculo) throw new AppError(404, "Veículo não encontrado.");
+}
+
+async function resolveProdutoImportacao(
+  tx: any,
+  produto: AbastecimentoImportacaoItem["produtos"][number],
+) {
+  const requestedId = String(produto.produtoId ?? "").trim();
+
+  if (requestedId) {
+    const existingById = await tx.produto.findUnique({
+      where: { id: requestedId },
+      select: { id: true },
+    });
+    if (existingById) {
+      return { produtoId: existingById.id, criadoAutomaticamente: false };
+    }
+  }
+
+  const nome = xmlProductName(produto.produtoXml);
+  if (!nome) {
+    throw new AppError(
+      400,
+      "Produto não cadastrado e o XML não possui nome suficiente para criá-lo automaticamente.",
+    );
+  }
+
+  const codigoBase = xmlProductCode(produto.produtoXml);
+  const lockKey = `radasa:abastecimento-produto:${normalizeProductText(
+    `${codigoBase}:${nome}`,
+  )}`;
+
+  // Protege importações paralelas do mesmo combustível. Assim, se dois XMLs
+  // novos trouxerem o mesmo produto ao mesmo tempo, apenas um cadastro nasce.
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
+  if (codigoBase) {
+    const existingByCode = await tx.produto.findFirst({
+      where: {
+        codigoInterno: { equals: codigoBase, mode: "insensitive" },
+        categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
+      },
+      select: { id: true },
+    });
+    if (existingByCode) {
+      return { produtoId: existingByCode.id, criadoAutomaticamente: false };
+    }
+  }
+
+  const existingByName = await tx.produto.findFirst({
+    where: {
+      nome: { equals: nome, mode: "insensitive" },
+      categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
+    },
+    select: { id: true },
+  });
+  if (existingByName) {
+    return { produtoId: existingByName.id, criadoAutomaticamente: false };
+  }
+
+  let codigoInterno = codigoBase;
+  let suffix = 2;
+  while (
+    await tx.produto.findFirst({
+      where: { codigoInterno: { equals: codigoInterno, mode: "insensitive" } },
+      select: { id: true },
+    })
+  ) {
+    const suffixText = `-${suffix}`;
+    codigoInterno = `${codigoBase.slice(0, 100 - suffixText.length)}${suffixText}`;
+    suffix += 1;
+  }
+
+  const created = await tx.produto.create({
+    data: {
+      nome,
+      codigoInterno,
+      categoriaEstoque: "Combustível",
+    },
+    select: { id: true },
+  });
+
+  return { produtoId: created.id, criadoAutomaticamente: true };
+}
+
+async function buildImportedProducts(
+  tx: any,
+  produtos: AbastecimentoImportacaoItem["produtos"],
+) {
+  const resolved = [];
+  let produtosCriados = 0;
+
+  for (const produto of produtos) {
+    const cadastro = await resolveProdutoImportacao(tx, produto);
+    if (cadastro.criadoAutomaticamente) produtosCriados += 1;
+
+    const quantidadeLitros = Number(produto.quantidadeLitros);
+    const valorUnitario = Number(produto.valorUnitario);
+    resolved.push({
+      produtoId: cadastro.produtoId,
+      quantidadeLitros,
+      valorUnitario,
+      valorTotal: Number((quantidadeLitros * valorUnitario).toFixed(2)),
+    });
+  }
+
+  return { produtos: resolved, produtosCriados };
+}
+
 function buildHeader(input: any, produtos: ReturnType<typeof buildProducts>) {
   const valorDesconto = Number(input.valorDesconto ?? 0);
   const valorBruto = produtos.reduce((sum, produto) => sum + produto.valorTotal, 0);
@@ -153,9 +316,10 @@ export interface AbastecimentoImportacaoItem {
   xmlUrl?: string | null;
   pdfUrl?: string | null;
   produtos: Array<{
-    produtoId: string;
+    produtoId?: string;
     quantidadeLitros: number;
     valorUnitario: number;
+    produtoXml?: ProdutoXmlImportacao | null;
   }>;
 }
 
@@ -170,13 +334,6 @@ async function importarItem(
     throw new AppError(400, "A chave da NF-e deve possuir 44 dígitos.");
   }
 
-  const produtos = buildProducts(input.produtos);
-  await ensureReferences(
-    input.clienteId,
-    input.veiculoId,
-    produtos.map((produto) => produto.produtoId),
-  );
-
   const existing = await tx.abastecimento.findUnique({
     where: { chaveNfe },
     include,
@@ -186,8 +343,13 @@ async function importarItem(
     return {
       acao: "IGNORADO" as const,
       item: serialize(existing),
+      produtosCriados: 0,
     };
   }
+
+  await ensureClienteVeiculo(tx, input.clienteId, input.veiculoId);
+  const resolvedProducts = await buildImportedProducts(tx, input.produtos);
+  const produtos = resolvedProducts.produtos;
 
   const data = {
     ...buildHeader(
@@ -221,6 +383,7 @@ async function importarItem(
     return {
       acao: "ATUALIZADO" as const,
       item: serialize(updatedItem),
+      produtosCriados: resolvedProducts.produtosCriados,
     };
   }
 
@@ -235,6 +398,7 @@ async function importarItem(
   return {
     acao: "CRIADO" as const,
     item: serialize(createdItem),
+    produtosCriados: resolvedProducts.produtosCriados,
   };
 }
 
@@ -366,6 +530,7 @@ export const abastecimentosService = {
       acao: "CRIADO" | "ATUALIZADO" | "IGNORADO" | "ERRO";
       item?: unknown;
       erro?: string;
+      produtosCriados?: number;
     }> = [];
 
     for (let index = 0; index < inputs.length; index += 1) {
@@ -381,6 +546,7 @@ export const abastecimentosService = {
           chaveNfe: String(input.chaveNfe ?? "").replace(/\D/g, ""),
           acao: result.acao,
           item: result.item,
+          produtosCriados: result.produtosCriados,
         });
       } catch (error) {
         resultados.push({
@@ -404,6 +570,10 @@ export const abastecimentosService = {
           .length,
         ignorados: resultados.filter((item) => item.acao === "IGNORADO").length,
         erros: resultados.filter((item) => item.acao === "ERRO").length,
+        produtosCriados: resultados.reduce(
+          (total, item) => total + Number(item.produtosCriados ?? 0),
+          0,
+        ),
       },
     };
   },

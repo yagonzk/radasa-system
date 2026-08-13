@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -19,6 +20,8 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Boxes,
+  Check,
+  ChevronDown,
   Download,
   Eye,
   FileDown,
@@ -304,6 +307,7 @@ export default function Estoque() {
 
           <TabsContent value="ESTOQUE" className="mt-4">
             <ResumoTable
+              key={categoriaFiltro}
               rows={resumoFiltrado}
               onEditProduct={openEditProduct}
               onDeleteProduct={deleteProduct}
@@ -422,6 +426,35 @@ export default function Estoque() {
   );
 }
 
+type EstoqueResumoFilterKey = "produto" | "codigo" | "entradas" | "saidas" | "saldo" | "valorSaidas";
+
+type EstoqueResumoFilters = Record<EstoqueResumoFilterKey, string>;
+
+const emptyEstoqueResumoFilters: EstoqueResumoFilters = {
+  produto: "",
+  codigo: "",
+  entradas: "",
+  saidas: "",
+  saldo: "",
+  valorSaidas: "",
+};
+
+const estoqueResumoColumns: Array<{ key: EstoqueResumoFilterKey; label: string }> = [
+  { key: "produto", label: "Produto" },
+  { key: "codigo", label: "Código" },
+  { key: "entradas", label: "Entradas" },
+  { key: "saidas", label: "Saídas" },
+  { key: "saldo", label: "Saldo" },
+  { key: "valorSaidas", label: "Valor das saídas" },
+];
+
+const normalizeFilterText = (value: unknown) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .trim();
+
 function ResumoTable({
   rows,
   onEditProduct,
@@ -431,32 +464,152 @@ function ResumoTable({
   onEditProduct: (produto: EstoqueProduto) => void;
   onDeleteProduct: (produto: EstoqueProduto) => Promise<void>;
 }) {
+  const [columnFilters, setColumnFilters] = useState<EstoqueResumoFilters>(emptyEstoqueResumoFilters);
+  const [activeColumnFilter, setActiveColumnFilter] = useState<EstoqueResumoFilterKey | null>(null);
+  const [columnFilterSearch, setColumnFilterSearch] = useState("");
+
+  const displayValue = (row: (typeof rows)[number], key: EstoqueResumoFilterKey) => {
+    if (key === "produto") return row.produto.nome;
+    if (key === "codigo") return row.produto.codigoInterno;
+    if (key === "entradas") return row.entradas.toLocaleString("pt-BR");
+    if (key === "saidas") return row.saidas.toLocaleString("pt-BR");
+    if (key === "saldo") return row.estoque.toLocaleString("pt-BR");
+    return formatBRL(row.valorSaidas);
+  };
+
+  const filteredRows = useMemo(
+    () => rows.filter((row) =>
+      estoqueResumoColumns.every(({ key }) => !columnFilters[key] || displayValue(row, key) === columnFilters[key]),
+    ),
+    [rows, columnFilters],
+  );
+
+  const optionsFor = (key: EstoqueResumoFilterKey) =>
+    Array.from(new Set(rows.map((row) => displayValue(row, key))))
+      .filter(Boolean)
+      .filter((option) => normalizeFilterText(option).includes(normalizeFilterText(columnFilterSearch)))
+      .sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+
+  const hasFilters = estoqueResumoColumns.some(({ key }) => Boolean(columnFilters[key]));
+
   return (
-    <div className="overflow-x-auto rounded-xl border bg-card">
-      <table className="w-full min-w-[760px] text-sm">
-        <thead className="bg-muted/30">
-          <tr>{["Produto", "Código", "Entradas", "Saídas", "Saldo", "Valor das saídas", "Ações"].map((header) => <th key={header} className="px-4 py-3 text-left text-muted-foreground">{header}</th>)}</tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.produto.id} className="border-t">
-              <td className="px-4 py-3 font-medium">{row.produto.nome}</td>
-              <td className="px-4 py-3">{row.produto.codigoInterno}</td>
-              <td className="px-4 py-3 text-emerald-500">{row.entradas.toLocaleString("pt-BR")}</td>
-              <td className="px-4 py-3 text-amber-500">{row.saidas.toLocaleString("pt-BR")}</td>
-              <td className="px-4 py-3 font-bold text-primary">{row.estoque.toLocaleString("pt-BR")}</td>
-              <td className="px-4 py-3">{formatBRL(row.valorSaidas)}</td>
-              <td className="px-4 py-3">
-                <div className="flex gap-1">
-                  <Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onEditProduct(row.produto)} title="Editar produto"><Pencil className="h-4 w-4" /></Button>
-                  <Button size="icon" variant="ghost" className="text-destructive" onClick={() => void onDeleteProduct(row.produto)} title="Excluir produto"><Trash2 className="h-4 w-4" /></Button>
-                </div>
-              </td>
+    <div className="space-y-2">
+      {hasFilters && (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setColumnFilters(emptyEstoqueResumoFilters)}
+          >
+            <X className="mr-2 h-4 w-4" />Limpar filtros
+          </Button>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border bg-card">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead className="bg-muted/30">
+            <tr>
+              {estoqueResumoColumns.map((column) => {
+                const active = Boolean(columnFilters[column.key]);
+                const options = optionsFor(column.key);
+
+                return (
+                  <th key={column.key} className="px-4 py-3 font-semibold">
+                    <Popover
+                      open={activeColumnFilter === column.key}
+                      onOpenChange={(open) => {
+                        setActiveColumnFilter(open ? column.key : null);
+                        setColumnFilterSearch("");
+                      }}
+                    >
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className={`flex w-full items-center gap-1 rounded-sm text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary ${active ? "text-primary" : "text-muted-foreground"}`}
+                          title={`Filtrar por ${column.label}`}
+                        >
+                          <span>{column.label}</span>
+                          <ChevronDown className="h-4 w-4 shrink-0" />
+                        </button>
+                      </PopoverTrigger>
+
+                      <PopoverContent align="start" className="w-80 p-0">
+                        <div className="border-b p-3">
+                          <Input
+                            value={columnFilterSearch}
+                            onChange={(event) => setColumnFilterSearch(event.target.value)}
+                            placeholder={`Pesquisar ${column.label.toLocaleLowerCase("pt-BR")}...`}
+                            autoFocus
+                          />
+                        </div>
+
+                        <div className="max-h-60 overflow-y-auto p-2">
+                          {options.length === 0 ? (
+                            <p className="py-4 text-center text-xs text-muted-foreground">Nenhuma opção encontrada.</p>
+                          ) : options.map((option) => (
+                            <button
+                              type="button"
+                              key={option}
+                              onClick={() => {
+                                setColumnFilters((current) => ({ ...current, [column.key]: option }));
+                                setActiveColumnFilter(null);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${columnFilters[column.key] === option ? "bg-primary/10 text-primary" : ""}`}
+                            >
+                              <span className="truncate">{option}</span>
+                              {columnFilters[column.key] === option && <Check className="h-4 w-4" />}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex gap-2 border-t p-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => setColumnFilters((current) => ({ ...current, [column.key]: "" }))}
+                          >
+                            Limpar
+                          </Button>
+                          <Button size="sm" className="flex-1" onClick={() => setActiveColumnFilter(null)}>OK</Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </th>
+                );
+              })}
+              <th className="px-4 py-3 text-left text-muted-foreground">Ações</th>
             </tr>
-          ))}
-          {!rows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Nenhum produto cadastrado para o filtro selecionado.</td></tr>}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filteredRows.map((row) => (
+              <tr key={row.produto.id} className="border-t">
+                <td className="px-4 py-3 font-medium">{row.produto.nome}</td>
+                <td className="px-4 py-3">{row.produto.codigoInterno}</td>
+                <td className="px-4 py-3 text-emerald-500">{row.entradas.toLocaleString("pt-BR")}</td>
+                <td className="px-4 py-3 text-amber-500">{row.saidas.toLocaleString("pt-BR")}</td>
+                <td className="px-4 py-3 font-bold text-primary">{row.estoque.toLocaleString("pt-BR")}</td>
+                <td className="px-4 py-3">{formatBRL(row.valorSaidas)}</td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-1">
+                    <Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onEditProduct(row.produto)} title="Editar produto"><Pencil className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => void onDeleteProduct(row.produto)} title="Excluir produto"><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!filteredRows.length && (
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                  {hasFilters ? "Nenhum produto corresponde aos filtros da tabela." : "Nenhum produto cadastrado para o filtro selecionado."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

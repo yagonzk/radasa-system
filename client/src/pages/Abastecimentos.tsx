@@ -486,7 +486,17 @@ function BatchXmlDialog({
     if (!item.documento.dataEmissao) pendencias.push("Data não encontrada");
     if (!item.documento.chaveNfe) pendencias.push("Chave da NF-e não encontrada");
     if (!item.produtos.length) pendencias.push("Nenhum produto encontrado");
-    if (item.produtos.some((produto) => !produto.produtoId)) {
+    if (
+      item.produtos.some(
+        (produto) =>
+          !produto.produtoId &&
+          !String(
+            produto.produtoXml.nome ||
+              produto.produtoXml.combustivel?.descricaoAnp ||
+              "",
+          ).trim(),
+      )
+    ) {
       pendencias.push("Associe todos os produtos");
     }
     if (
@@ -1105,10 +1115,11 @@ function BatchXmlDialog({
         xmlUrl: item.xmlUrl,
         pdfUrl: item.pdfUrl,
         produtos: item.produtos.map(
-          ({ produtoId, quantidadeLitros, valorUnitario }) => ({
-            produtoId,
+          ({ produtoId, quantidadeLitros, valorUnitario, produtoXml }) => ({
+            produtoId: produtoId || undefined,
             quantidadeLitros: parseNumber(quantidadeLitros),
             valorUnitario: parseNumber(valorUnitario),
+            produtoXml,
           }),
         ),
       }));
@@ -1120,6 +1131,7 @@ function BatchXmlDialog({
         atualizados: 0,
         ignorados: 0,
         erros: 0,
+        produtosCriados: 0,
       };
 
       const importBatches: Array<{
@@ -1186,6 +1198,7 @@ function BatchXmlDialog({
               atualizados: number;
               ignorados: number;
               erros: number;
+              produtosCriados: number;
             };
           }>("/abastecimentos/xml/importar-lote", {
             politicaDuplicidade: correcaoSincronizacao ? "ATUALIZAR" : "IGNORAR",
@@ -1198,6 +1211,7 @@ function BatchXmlDialog({
           summary.atualizados += response.data.resumo.atualizados;
           summary.ignorados += response.data.resumo.ignorados;
           summary.erros += response.data.resumo.erros;
+          summary.produtosCriados += response.data.resumo.produtosCriados ?? 0;
 
           response.data.resultados.forEach((result) => {
             const item = batch.items[result.indice];
@@ -1253,7 +1267,11 @@ function BatchXmlDialog({
       await onImported();
 
       toast.success(
-        `${summary.criados} novo(s), ${summary.atualizados} sincronizado(s), ${summary.ignorados} ignorado(s) e ${summary.erros} com erro. Os concluídos foram removidos da conferência.`,
+        `${summary.criados} novo(s), ${summary.atualizados} sincronizado(s), ${summary.ignorados} ignorado(s) e ${summary.erros} com erro.${
+          summary.produtosCriados
+            ? ` ${summary.produtosCriados} produto(s) criado(s) automaticamente com os dados do XML.`
+            : ""
+        } Os concluídos foram removidos da conferência.`,
       );
     } catch (error: any) {
       console.error(error);
@@ -1799,6 +1817,14 @@ function BatchXmlDialog({
                           searchPlaceholder="Pesquisar produto..."
                           emptyText="Nenhum produto encontrado."
                         />
+                        {!item.produtos[productIndex]?.produtoId &&
+                          String(
+                            product.nome || product.combustivel?.descricaoAnp || "",
+                          ).trim() && (
+                            <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+                              Será cadastrado automaticamente ao lançar, usando nome e código do XML.
+                            </p>
+                          )}
                       </div>
                     </div>
                   ))}

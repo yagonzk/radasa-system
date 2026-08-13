@@ -915,7 +915,10 @@ async function findProductSuggestion(product: AbastecimentoXmlProduto) {
 
   if (matched) return { ...matched, criadoAutomaticamente: false };
 
-  return createFuelProductIfMissing(product);
+  // Não cria cadastro durante a simples leitura/conferência do XML.
+  // Se o usuário efetivar o lançamento, o serviço de importação cria o
+  // produto usando os dados originais do XML dentro da mesma transação.
+  return null;
 }
 
 function findProductInContext(
@@ -966,28 +969,9 @@ async function findProductSuggestionFromContext(
   const cached = findProductInContext(product, context);
   if (cached) return cached;
 
-  return withProductCreationLock(context, async () => {
-    // Outra NF-e do mesmo lote pode ter criado o produto enquanto esta aguardava
-    // a trava. Confere o cache novamente antes de tocar no banco.
-    const afterWait = findProductInContext(product, context);
-    if (afterWait) return afterWait;
-
-    const created = await createFuelProductIfMissing(product);
-    if (created) {
-      const alreadyCached = context.produtos.some(
-        (candidate) => candidate.id === created.id,
-      );
-      if (!alreadyCached) {
-        context.produtos.push({
-          id: created.id,
-          nome: created.nome,
-          codigoInterno: created.codigoInterno,
-          criadoAutomaticamente: created.criadoAutomaticamente,
-        });
-      }
-    }
-    return created;
-  });
+  // O cadastro automático agora acontece somente quando o lançamento é
+  // confirmado, evitando criar produtos se a conferência for cancelada.
+  return null;
 }
 
 export async function sugerirVinculosAbastecimento(
@@ -1004,9 +988,8 @@ export async function sugerirVinculosAbastecimento(
         findVehicleSuggestion(document.placa),
       ]);
 
-  // Os produtos continuam protegidos por uma fila curta quando precisam ser
-  // cadastrados automaticamente. Assim o restante do lote pode ser lido em
-  // paralelo sem gerar produtos duplicados.
+  // Nesta etapa apenas tenta associar produtos já existentes. Produtos novos
+  // são cadastrados automaticamente somente ao confirmar o lançamento.
   const produtos: Array<{
     produto: AbastecimentoXmlProduto;
     cadastro: Awaited<ReturnType<typeof findProductSuggestion>>;
