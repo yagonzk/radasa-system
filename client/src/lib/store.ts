@@ -30,11 +30,12 @@ export interface Empresa {
   createdAt: string;
 }
 
-export type CategoriaEstoque = string;
-export interface Produto { id: string; nome: string; codigoInterno: string; categoriaEstoque: CategoriaEstoque; createdAt: string; }
+export interface Produto { id: string; nome: string; codigoInterno: string; categoriaEstoque: string; createdAt: string; }
+export type CategoriaEstoque = "Produtos de Piscina" | "Peças" | "Ferramentas";
+export interface EstoqueProduto { id: string; nome: string; codigoInterno: string; categoria: CategoriaEstoque; createdAt: string; }
 export type TipoMovimentacaoEstoque = "ENTRADA" | "SAIDA";
-export interface EstoqueMovimentacao { id:string; produtoId:string; tipo:TipoMovimentacaoEstoque; quantidade:number; valorUnitario:number; valorTotal:number; data:string; observacoes?:string|null; pdfUrl?:string|null; pdfName?:string|null; produto:Produto; createdAt:string; }
-export interface EstoqueResumo { produto:Produto; entradas:number; saidas:number; estoque:number; valorSaidas:number; }
+export interface EstoqueMovimentacao { id:string; produtoId:string; tipo:TipoMovimentacaoEstoque; quantidade:number; valorUnitario:number; valorTotal:number; data:string; observacoes?:string|null; pdfUrl?:string|null; pdfName?:string|null; produto:EstoqueProduto; createdAt:string; }
+export interface EstoqueResumo { produto:EstoqueProduto; entradas:number; saidas:number; estoque:number; valorSaidas:number; }
 export interface Local { id: string; cidade: string; valorComissao: number; createdAt: string; }
 export interface ViagemFechamento { localId: string; quantidade: number; }
 export interface Fechamento { id: string; motoristaId: string; dataInicio: string; dataFim: string; viagens: ViagemFechamento[]; valorTotal: number; createdAt: string; }
@@ -362,6 +363,7 @@ export const useChapas = () => useApiCrud<Chapa>("chapas", "Chapa");
 export const useClientes = () => useApiCrud<Cliente>("clientes", "Cliente");
 export const useEmpresa = () => useApiCrud<Empresa>("empresa", "Empresa");
 export const useProdutos = () => useApiCrud<Produto>("produtos", "Produto");
+export const useEstoqueProdutos = () => useApiCrud<EstoqueProduto>("estoque/produtos", "Produto de estoque");
 export const useLocais = () => useApiCrud<Local>("locais", "Local");
 export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");
 export const useViagens = () => useApiCrud<Viagem>("viagens", "Viagem");

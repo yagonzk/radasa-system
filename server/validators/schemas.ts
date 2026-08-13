@@ -93,6 +93,14 @@ export const produtoBody = z.object({
   createdAt: z.string().optional(),
 });
 
+export const estoqueProdutoBody = z.object({
+  id: id.optional(),
+  nome: text(),
+  codigoInterno: text(100),
+  categoria: z.enum(["Produtos de Piscina", "Peças", "Ferramentas"]),
+  createdAt: z.string().optional(),
+});
+
 export const estoqueMovimentacaoBody = z.object({
   id: id.optional(), produtoId: id, tipo: z.enum(["ENTRADA", "SAIDA"]),
   quantidade: z.coerce.number().finite().positive(),

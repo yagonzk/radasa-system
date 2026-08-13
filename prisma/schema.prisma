@@ -137,11 +137,26 @@ model Produto {
   updatedAt            DateTime               @updatedAt
   manifestos           ManifestoProduto[]
   abastecimentos       AbastecimentoProduto[]
-  movimentacoesEstoque EstoqueMovimentacao[]
 
   @@index([nome])
   @@index([codigoInterno])
   @@map("produtos")
+}
+
+
+model EstoqueProduto {
+  id             String                 @id @default(cuid())
+  nome           String
+  codigoInterno  String
+  categoria      String                 @default("Produtos de Piscina")
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  movimentacoes  EstoqueMovimentacao[]
+
+  @@index([nome])
+  @@index([codigoInterno])
+  @@index([categoria])
+  @@map("estoque_produtos")
 }
 
 model Local {
@@ -490,7 +505,7 @@ model EstoqueMovimentacao {
   pdfName       String?
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
-  produto       Produto                 @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  produto       EstoqueProduto          @relation(fields: [produtoId], references: [id], onDelete: Restrict)
 
   @@index([produtoId])
   @@index([tipo])

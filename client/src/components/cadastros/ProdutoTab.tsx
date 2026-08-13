@@ -139,7 +139,7 @@ export default function ProdutoTab() {
     <div>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex w-full flex-col gap-3 sm:max-w-xl">
-          <p className="text-sm text-muted-foreground">{items.length} produto(s) cadastrado(s)</p>
+          <div><p className="text-sm text-muted-foreground">{items.length} produto(s) cadastrado(s)</p><p className="text-xs text-muted-foreground">Este cadastro é independente dos produtos da aba Estoque.</p></div>
           <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por nome, código ou categoria..." />
         </div>
         <Button onClick={handleOpenCreate} size="sm">
@@ -178,7 +178,7 @@ export default function ProdutoTab() {
                 placeholder="Ex: 2001"
               />
             </FormField>
-            <FormField label="Categoria no estoque">
+            <FormField label="Categoria do produto">
               <div className="flex items-center gap-2">
                 <Select
                   value={form.categoriaEstoque}
@@ -213,7 +213,7 @@ export default function ProdutoTab() {
       <Dialog open={categoryOpen} onOpenChange={setCategoryOpen}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>Nova categoria de estoque</DialogTitle>
+            <DialogTitle>Nova categoria de produto</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <FormField label="Nome da categoria">

@@ -11,6 +11,11 @@ const labels: Record<string, string> = {
 
 function describe(method: string, path: string, body?: unknown) {
   if (path.includes("/auth/change-password")) return "Alterou a própria senha";
+  if (path.includes("/estoque/produtos")) {
+    if (method === "POST") return "Cadastrou produto de estoque";
+    if (method === "PUT" || method === "PATCH") return "Editou produto de estoque";
+    if (method === "DELETE") return "Excluiu produto de estoque";
+  }
   const cleanPath = path.split("?")[0];
   if (
     cleanPath.includes("/motoristas/") &&

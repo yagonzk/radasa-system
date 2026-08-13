@@ -1,8 +1,7 @@
 -- Separa completamente os produtos do Estoque dos produtos da aba Cadastros.
--- Os produtos que já possuem movimentação são copiados para a nova tabela
--- para preservar todo o histórico de entradas e saídas existente.
+-- Migration preparada para ser segura caso parte da estrutura já exista.
 
-CREATE TABLE "estoque_produtos" (
+CREATE TABLE IF NOT EXISTS "estoque_produtos" (
   "id" TEXT NOT NULL,
   "nome" TEXT NOT NULL,
   "codigoInterno" TEXT NOT NULL,
@@ -12,10 +11,11 @@ CREATE TABLE "estoque_produtos" (
   CONSTRAINT "estoque_produtos_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "estoque_produtos_nome_idx" ON "estoque_produtos"("nome");
-CREATE INDEX "estoque_produtos_codigoInterno_idx" ON "estoque_produtos"("codigoInterno");
-CREATE INDEX "estoque_produtos_categoria_idx" ON "estoque_produtos"("categoria");
+CREATE INDEX IF NOT EXISTS "estoque_produtos_nome_idx" ON "estoque_produtos"("nome");
+CREATE INDEX IF NOT EXISTS "estoque_produtos_codigoInterno_idx" ON "estoque_produtos"("codigoInterno");
+CREATE INDEX IF NOT EXISTS "estoque_produtos_categoria_idx" ON "estoque_produtos"("categoria");
 
+-- Preserva produtos antigos que já possuam movimentação.
 INSERT INTO "estoque_produtos" ("id", "nome", "codigoInterno", "categoria", "createdAt", "updatedAt")
 SELECT DISTINCT
   p."id",
@@ -33,7 +33,8 @@ WHERE EXISTS (
   SELECT 1
   FROM "estoque_movimentacoes" em
   WHERE em."produtoId" = p."id"
-);
+)
+ON CONFLICT ("id") DO NOTHING;
 
 ALTER TABLE "estoque_movimentacoes"
   DROP CONSTRAINT IF EXISTS "estoque_movimentacoes_produtoId_fkey";

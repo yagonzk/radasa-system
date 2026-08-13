@@ -1,0 +1,11 @@
+RADASA SYSTEM - ESTOQUE V1.22
+
+Confirmações desta versão:
+- Botão azul "Novo produto" na aba Estoque.
+- Produtos do Estoque independentes da aba Cadastros.
+- Somente 3 tipos de produto no Estoque:
+  1. Produtos de Piscina
+  2. Peças
+  3. Ferramentas
+- Cadastro, edição e exclusão de produtos direto no Estoque.
+- Movimentações usam exclusivamente produtos cadastrados no Estoque.

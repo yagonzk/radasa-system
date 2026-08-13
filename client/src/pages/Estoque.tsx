@@ -2,13 +2,14 @@ import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react
 import Layout from "@/components/Layout";
 import {
   useEstoque,
-  useProdutos,
+  useEstoqueProdutos,
   type CategoriaEstoque,
   type EstoqueMovimentacao,
+  type EstoqueProduto,
   type TipoMovimentacaoEstoque,
 } from "@/lib/store";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,6 +23,8 @@ import {
   Eye,
   FileDown,
   FileText,
+  PackagePlus,
+  Pencil,
   Plus,
   Printer,
   Trash2,
@@ -31,29 +34,28 @@ import {
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 
-const DEFAULT_CATEGORIES: CategoriaEstoque[] = [
-  "Produtos de piscina",
+const CATEGORIAS_ESTOQUE: CategoriaEstoque[] = [
+  "Produtos de Piscina",
   "Peças",
   "Ferramentas",
 ];
 
-const normalizeCategory = (value?: string | null): CategoriaEstoque => {
-  if (!value || value === "PISCINA") return "Produtos de piscina";
-  if (value === "PECA") return "Peças";
-  if (value === "FERRAMENTA") return "Ferramentas";
-  return value;
-};
-
 type ViewMode = "ESTOQUE" | "ENTRADAS" | "SAIDAS";
 
 const today = () => new Date().toISOString().slice(0, 10);
-const emptyForm = () => ({
+const emptyMovementForm = () => ({
   produtoId: "",
   tipo: "ENTRADA" as TipoMovimentacaoEstoque,
   quantidade: "",
   valorUnitario: "",
   data: today(),
   observacoes: "",
+});
+
+const emptyProductForm = (categoria: CategoriaEstoque) => ({
+  nome: "",
+  codigoInterno: "",
+  categoria,
 });
 
 const fileToDataUrl = (file: File) =>
@@ -65,34 +67,39 @@ const fileToDataUrl = (file: File) =>
   });
 
 export default function Estoque() {
-  const { items: produtos } = useProdutos();
-  const { movimentacoes, resumo, create, remove } = useEstoque();
-  const [categoria, setCategoria] = useState<CategoriaEstoque>("Produtos de piscina");
+  const {
+    items: produtos,
+    create: createProduto,
+    update: updateProduto,
+    remove: removeProduto,
+  } = useEstoqueProdutos();
+  const { movimentacoes, resumo, create, remove, refresh: refreshEstoque } = useEstoque();
+
+  const [categoria, setCategoria] = useState<CategoriaEstoque>("Produtos de Piscina");
   const [viewMode, setViewMode] = useState<ViewMode>("ESTOQUE");
+
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(emptyMovementForm);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [viewing, setViewing] = useState<EstoqueMovimentacao | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const categories = useMemo(() => {
-    const productCategories = produtos.map((produto) =>
-      normalizeCategory(produto.categoriaEstoque),
-    );
-    return Array.from(new Set([...DEFAULT_CATEGORIES, ...productCategories]));
-  }, [produtos]);
+  const [productOpen, setProductOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<EstoqueProduto | null>(null);
+  const [productForm, setProductForm] = useState(() => emptyProductForm("Produtos de Piscina"));
+  const [savingProduct, setSavingProduct] = useState(false);
 
   const produtosCategoria = useMemo(
-    () => produtos.filter((produto) => normalizeCategory(produto.categoriaEstoque) === categoria),
+    () => produtos.filter((produto) => produto.categoria === categoria),
     [produtos, categoria],
   );
   const resumoCategoria = useMemo(
-    () => resumo.filter((item) => normalizeCategory(item.produto.categoriaEstoque) === categoria),
+    () => resumo.filter((item) => item.produto.categoria === categoria),
     [resumo, categoria],
   );
   const movimentosCategoria = useMemo(
-    () => movimentacoes.filter((movimento) => normalizeCategory(movimento.produto.categoriaEstoque) === categoria),
+    () => movimentacoes.filter((movimento) => movimento.produto.categoria === categoria),
     [movimentacoes, categoria],
   );
   const entradas = useMemo(
@@ -109,9 +116,69 @@ export default function Estoque() {
   const totalEstoque = resumoCategoria.reduce((total, item) => total + item.estoque, 0);
 
   const resetForm = () => {
-    setForm(emptyForm());
+    setForm(emptyMovementForm());
     setPdfFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const openCreateProduct = () => {
+    setEditingProduct(null);
+    setProductForm(emptyProductForm(categoria));
+    setProductOpen(true);
+  };
+
+  const openEditProduct = (produto: EstoqueProduto) => {
+    setEditingProduct(produto);
+    setProductForm({
+      nome: produto.nome,
+      codigoInterno: produto.codigoInterno,
+      categoria: produto.categoria,
+    });
+    setProductOpen(true);
+  };
+
+  const submitProduct = async (event: FormEvent) => {
+    event.preventDefault();
+    if (savingProduct) return;
+
+    setSavingProduct(true);
+    try {
+      if (editingProduct) {
+        await updateProduto(editingProduct.id, productForm);
+        toast.success("Produto de estoque atualizado.");
+      } else {
+        await createProduto(productForm);
+        toast.success("Produto criado no estoque.");
+      }
+      setCategoria(productForm.categoria);
+      setProductOpen(false);
+      setEditingProduct(null);
+      await refreshEstoque();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível salvar o produto de estoque.");
+    } finally {
+      setSavingProduct(false);
+    }
+  };
+
+  const deleteProduct = async (produto: EstoqueProduto) => {
+    if (!window.confirm(`Excluir o produto "${produto.nome}" do estoque?`)) return;
+    try {
+      await removeProduto(produto.id);
+      await refreshEstoque();
+      toast.success("Produto de estoque excluído.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível excluir o produto.");
+    }
+  };
+
+  const openMovement = () => {
+    if (!produtosCategoria.length) {
+      toast.error(`Cadastre um produto em ${categoria} antes de registrar uma movimentação.`);
+      openCreateProduct();
+      return;
+    }
+    setOpen(true);
   };
 
   const submit = async (event: FormEvent) => {
@@ -137,7 +204,7 @@ export default function Estoque() {
   };
 
   const exportRows = viewMode === "ENTRADAS" ? entradas : viewMode === "SAIDAS" ? saidas : movimentosCategoria;
-  const categoryLabel = categoria || "Estoque";
+  const categoryLabel = categoria;
 
   const exportCsv = () => {
     const headers = ["Data", "Produto", "Código", "Tipo", "Quantidade", "Valor unitário", "Valor total", "Observações", "NF PDF"];
@@ -189,21 +256,22 @@ export default function Estoque() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Estoque</h1>
-            <p className="text-sm text-muted-foreground">Controle entradas, saídas e o saldo atual dos produtos cadastrados.</p>
+            <p className="text-sm text-muted-foreground">
+              Produtos do estoque são cadastrados aqui e são independentes dos produtos da aba Cadastros.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={exportCsv}><FileDown className="mr-2 h-4 w-4" />Exportar CSV</Button>
             <Button variant="outline" onClick={exportPdf}><Printer className="mr-2 h-4 w-4" />Exportar PDF</Button>
-            <Button onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" />Nova movimentação</Button>
+            <Button onClick={openCreateProduct}><PackagePlus className="mr-2 h-4 w-4" />Novo produto</Button>
+            <Button variant="outline" onClick={openMovement}><Plus className="mr-2 h-4 w-4" />Nova movimentação</Button>
           </div>
         </div>
 
-        <Tabs value={categoria} onValueChange={(value) => setCategoria(value)}>
-          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
-            {categories.map((category) => (
-              <TabsTrigger key={category} value={category}>
-                {category}
-              </TabsTrigger>
+        <Tabs value={categoria} onValueChange={(value) => setCategoria(value as CategoriaEstoque)}>
+          <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
+            {CATEGORIAS_ESTOQUE.map((category) => (
+              <TabsTrigger key={category} value={category}>{category}</TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
@@ -221,7 +289,11 @@ export default function Estoque() {
             <TabsTrigger value="SAIDAS">Saídas</TabsTrigger>
           </TabsList>
           <TabsContent value="ESTOQUE" className="mt-4">
-            <ResumoTable rows={resumoCategoria} />
+            <ResumoTable
+              rows={resumoCategoria}
+              onEditProduct={openEditProduct}
+              onDeleteProduct={deleteProduct}
+            />
           </TabsContent>
           <TabsContent value="ENTRADAS" className="mt-4">
             <MovimentacoesTable rows={entradas} onView={setViewing} onPdf={setPdfPreview} onRemove={remove} />
@@ -230,6 +302,45 @@ export default function Estoque() {
             <MovimentacoesTable rows={saidas} onView={setViewing} onPdf={setPdfPreview} onRemove={remove} />
           </TabsContent>
         </Tabs>
+
+        <Dialog open={productOpen} onOpenChange={(value) => { setProductOpen(value); if (!value) setEditingProduct(null); }}>
+          <DialogContent className="sm:max-w-[520px]">
+            <DialogHeader><DialogTitle>{editingProduct ? "Editar produto do estoque" : "Novo produto do estoque"}</DialogTitle></DialogHeader>
+            <form onSubmit={submitProduct} className="space-y-4">
+              <Field label="Nome do produto">
+                <Input
+                  required
+                  value={productForm.nome}
+                  onChange={(event) => setProductForm({ ...productForm, nome: event.target.value })}
+                  placeholder="Ex: Cloro granulado"
+                />
+              </Field>
+              <Field label="Código interno">
+                <Input
+                  required
+                  value={productForm.codigoInterno}
+                  onChange={(event) => setProductForm({ ...productForm, codigoInterno: event.target.value })}
+                  placeholder="Ex: EST-001"
+                />
+              </Field>
+              <Field label="Tipo de produto">
+                <Select
+                  value={productForm.categoria}
+                  onValueChange={(value) => setProductForm({ ...productForm, categoria: value as CategoriaEstoque })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIAS_ESTOQUE.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setProductOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={savingProduct}>{savingProduct ? "Salvando..." : editingProduct ? "Salvar alterações" : "Cadastrar produto"}</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (!value) resetForm(); }}>
           <DialogContent className="sm:max-w-[620px]">
@@ -244,10 +355,12 @@ export default function Estoque() {
                 </Field>
                 <Field label="Data"><DatePicker value={form.data} onChange={(value) => setForm({ ...form, data: value })} placeholder="Selecione uma data" /></Field>
               </div>
-              <Field label="Produto">
+              <Field label={`Produto — ${categoria}`}>
                 <Select value={form.produtoId} onValueChange={(value) => setForm({ ...form, produtoId: value })}>
                   <SelectTrigger><SelectValue placeholder="Selecione o produto" /></SelectTrigger>
-                  <SelectContent>{produtosCategoria.map((produto) => <SelectItem key={produto.id} value={produto.id}>{produto.nome} - {produto.codigoInterno}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {produtosCategoria.map((produto) => <SelectItem key={produto.id} value={produto.id}>{produto.nome} - {produto.codigoInterno}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </Field>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -268,7 +381,7 @@ export default function Estoque() {
                   </div>
                 ) : <Button type="button" variant="outline" className="w-full" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2 h-4 w-4" />Selecionar NF em PDF</Button>}
               </Field>
-              <div className="flex justify-end"><Button type="submit">Registrar</Button></div>
+              <div className="flex justify-end"><Button type="submit" disabled={!form.produtoId}>Registrar</Button></div>
             </form>
           </DialogContent>
         </Dialog>
@@ -295,12 +408,47 @@ export default function Estoque() {
   );
 }
 
-function ResumoTable({ rows }: { rows: ReturnType<typeof useEstoque>["resumo"] }) {
-  return <div className="overflow-hidden rounded-xl border bg-card"><table className="w-full text-sm"><thead className="bg-muted/30"><tr>{["Produto", "Código", "Entradas", "Saídas", "Estoque", "Valor das saídas"].map((header) => <th key={header} className="px-4 py-3 text-left text-muted-foreground">{header}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.produto.id} className="border-t"><td className="px-4 py-3 font-medium">{row.produto.nome}</td><td className="px-4 py-3">{row.produto.codigoInterno}</td><td className="px-4 py-3 text-emerald-500">{row.entradas.toLocaleString("pt-BR")}</td><td className="px-4 py-3 text-amber-500">{row.saidas.toLocaleString("pt-BR")}</td><td className="px-4 py-3 font-bold text-primary">{row.estoque.toLocaleString("pt-BR")}</td><td className="px-4 py-3">{formatBRL(row.valorSaidas)}</td></tr>)}{!rows.length && <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">Nenhum produto nesta categoria.</td></tr>}</tbody></table></div>;
+function ResumoTable({
+  rows,
+  onEditProduct,
+  onDeleteProduct,
+}: {
+  rows: ReturnType<typeof useEstoque>["resumo"];
+  onEditProduct: (produto: EstoqueProduto) => void;
+  onDeleteProduct: (produto: EstoqueProduto) => Promise<void>;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-xl border bg-card">
+      <table className="w-full min-w-[760px] text-sm">
+        <thead className="bg-muted/30">
+          <tr>{["Produto", "Código", "Entradas", "Saídas", "Estoque", "Valor das saídas", "Ações"].map((header) => <th key={header} className="px-4 py-3 text-left text-muted-foreground">{header}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.produto.id} className="border-t">
+              <td className="px-4 py-3 font-medium">{row.produto.nome}</td>
+              <td className="px-4 py-3">{row.produto.codigoInterno}</td>
+              <td className="px-4 py-3 text-emerald-500">{row.entradas.toLocaleString("pt-BR")}</td>
+              <td className="px-4 py-3 text-amber-500">{row.saidas.toLocaleString("pt-BR")}</td>
+              <td className="px-4 py-3 font-bold text-primary">{row.estoque.toLocaleString("pt-BR")}</td>
+              <td className="px-4 py-3">{formatBRL(row.valorSaidas)}</td>
+              <td className="px-4 py-3">
+                <div className="flex gap-1">
+                  <Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onEditProduct(row.produto)} title="Editar produto"><Pencil className="h-4 w-4" /></Button>
+                  <Button size="icon" variant="ghost" className="text-destructive" onClick={() => void onDeleteProduct(row.produto)} title="Excluir produto"><Trash2 className="h-4 w-4" /></Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+          {!rows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Nenhum produto cadastrado nesta categoria.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function MovimentacoesTable({ rows, onView, onPdf, onRemove }: { rows: EstoqueMovimentacao[]; onView: (item: EstoqueMovimentacao) => void; onPdf: (item: { url: string; title: string }) => void; onRemove: (id: string) => Promise<void> }) {
-  return <div className="overflow-hidden rounded-xl border bg-card"><table className="w-full text-sm"><thead className="bg-muted/30"><tr>{["Data", "Produto", "Quantidade", "Valor unitário", "Valor total", "NF", "Ações"].map((header) => <th key={header} className="px-4 py-3 text-left text-muted-foreground">{header}</th>)}</tr></thead><tbody>{rows.map((item) => <tr key={item.id} className="border-t"><td className="px-4 py-3">{formatDate(item.data)}</td><td className="px-4 py-3 font-medium">{item.produto.nome} - {item.produto.codigoInterno}</td><td className="px-4 py-3">{item.quantidade.toLocaleString("pt-BR")}</td><td className="px-4 py-3">{formatBRL(item.valorUnitario)}</td><td className="px-4 py-3">{formatBRL(item.valorTotal)}</td><td className="px-4 py-3">{item.pdfUrl ? <button className="text-blue-600 hover:underline" onClick={() => onPdf({ url: item.pdfUrl!, title: item.pdfName || "Nota fiscal" })}>Visualizar</button> : <span className="text-muted-foreground">—</span>}</td><td className="px-4 py-3"><div className="flex gap-1"><Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onView(item)}><Eye className="h-4 w-4" /></Button>{item.pdfUrl && <Button size="icon" variant="ghost" className="text-emerald-600" onClick={() => downloadPdf(item.pdfUrl!, item.pdfName || `nf_${item.id}.pdf`)}><Download className="h-4 w-4" /></Button>}<Button size="icon" variant="ghost" className="text-destructive" onClick={async () => { try { await onRemove(item.id); toast.success("Movimentação removida."); } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível remover."); } }}><Trash2 className="h-4 w-4" /></Button></div></td></tr>)}{!rows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Nenhuma movimentação registrada.</td></tr>}</tbody></table></div>;
+  return <div className="overflow-x-auto rounded-xl border bg-card"><table className="w-full min-w-[840px] text-sm"><thead className="bg-muted/30"><tr>{["Data", "Produto", "Quantidade", "Valor unitário", "Valor total", "NF", "Ações"].map((header) => <th key={header} className="px-4 py-3 text-left text-muted-foreground">{header}</th>)}</tr></thead><tbody>{rows.map((item) => <tr key={item.id} className="border-t"><td className="px-4 py-3">{formatDate(item.data)}</td><td className="px-4 py-3 font-medium">{item.produto.nome} - {item.produto.codigoInterno}</td><td className="px-4 py-3">{item.quantidade.toLocaleString("pt-BR")}</td><td className="px-4 py-3">{formatBRL(item.valorUnitario)}</td><td className="px-4 py-3">{formatBRL(item.valorTotal)}</td><td className="px-4 py-3">{item.pdfUrl ? <button className="text-blue-600 hover:underline" onClick={() => onPdf({ url: item.pdfUrl!, title: item.pdfName || "Nota fiscal" })}>Visualizar</button> : <span className="text-muted-foreground">—</span>}</td><td className="px-4 py-3"><div className="flex gap-1"><Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onView(item)}><Eye className="h-4 w-4" /></Button>{item.pdfUrl && <Button size="icon" variant="ghost" className="text-emerald-600" onClick={() => downloadPdf(item.pdfUrl!, item.pdfName || `nf_${item.id}.pdf`)}><Download className="h-4 w-4" /></Button>}<Button size="icon" variant="ghost" className="text-destructive" onClick={async () => { try { await onRemove(item.id); toast.success("Movimentação removida."); } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível remover."); } }}><Trash2 className="h-4 w-4" /></Button></div></td></tr>)}{!rows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Nenhuma movimentação registrada.</td></tr>}</tbody></table></div>;
 }
 
 function downloadPdf(url: string, filename: string) {
@@ -317,5 +465,11 @@ function escapeHtml(value: string) {
 function Card({ title, value, icon }: { title: string; value: number; icon: ReactNode }) {
   return <div className="rounded-xl border bg-card p-5"><div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">{icon}{title}</div><div className="mt-2 text-2xl font-bold">{value.toLocaleString("pt-BR")}</div></div>;
 }
-function Field({ label, children }: { label: string; children: ReactNode }) { return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>; }
-function Detail({ label, value }: { label: string; value: string }) { return <div><p className="text-xs text-muted-foreground">{label}</p><p className="font-medium">{value}</p></div>; }
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>;
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return <div><p className="text-xs text-muted-foreground">{label}</p><p className="font-medium">{value}</p></div>;
+}
