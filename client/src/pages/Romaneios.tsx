@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -787,17 +788,12 @@ export default function Romaneios() {
     URL.revokeObjectURL(url);
   };
 
-  const downloadFilteredRomaneiosCsv = () => {
+  const downloadFilteredRomaneiosXlsx = async () => {
     if (filtered.length === 0) {
       toast.error("Não há romaneios nos filtros atuais para exportar.");
       return;
     }
 
-    // Estrutura inspirada na planilha "resumo registro de viagens":
-    // uma linha para LEBRINHA, uma para CLIENTE e uma de TOTAL por placa,
-    // separando os valores da 1ª e da 2ª quinzena.
-    // Quando os filtros abrangem mais de um mês, cada mês é exportado
-    // separadamente na coluna Mês/Ano para que o CSV continue tabular.
     type TravelSummary = {
       lebrinhaPrimeira: number;
       lebrinhaSegunda: number;
@@ -847,8 +843,6 @@ export default function Romaneios() {
           return;
         }
 
-        // O resumo financeiro da Lebrinha considera cobranças e bonificações.
-        // Vasilhames não entram no faturamento monetário desta planilha.
         if (tipo === "Acertar c/ Lebrinha" || tipo === "Bonificação - Lebrinha") {
           if (primeiraQuinzena) plateSummary!.lebrinhaPrimeira += valor;
           else plateSummary!.lebrinhaSegunda += valor;
@@ -856,52 +850,166 @@ export default function Romaneios() {
       });
     });
 
-    const monthNames = [
-      "JAN", "FEV", "MAR", "ABR", "MAI", "JUN",
-      "JUL", "AGO", "SET", "OUT", "NOV", "DEZ",
-    ];
-    const formatMonthKey = (monthKey: string) => {
-      const [year, month] = monthKey.split("-").map(Number);
-      return `${monthNames[month - 1] ?? String(month).padStart(2, "0")}/${year}`;
-    };
-    const csvMoney = (value: number) =>
-      Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    try {
+      // Usa a própria planilha enviada como template. Assim a exportação mantém
+      // as abas, cores, bordas, larguras, títulos e fórmulas do modelo original.
+      const templateResponse = await fetch("/templates/resumo-registro-de-viagens.xlsx", {
+        cache: "no-store",
+      });
+      if (!templateResponse.ok) {
+        throw new Error(`Não foi possível carregar o modelo Excel (${templateResponse.status}).`);
+      }
 
-    const headers = ["Mês/Ano", "Placa", "Tipo", "1ª", "2ª", "Total"];
-    const rows: string[][] = [];
-
-    Array.from(summaryByMonthAndPlate.entries())
-      .sort(([monthA], [monthB]) => monthA.localeCompare(monthB))
-      .forEach(([monthKey, plateMap]) => {
-        Array.from(plateMap.entries())
-          .sort(([plateA], [plateB]) => plateA.localeCompare(plateB, "pt-BR", { numeric: true }))
-          .forEach(([plate, values]) => {
-            const lebrinhaTotal = values.lebrinhaPrimeira + values.lebrinhaSegunda;
-            const clienteTotal = values.clientePrimeira + values.clienteSegunda;
-            const primeiraTotal = values.lebrinhaPrimeira + values.clientePrimeira;
-            const segundaTotal = values.lebrinhaSegunda + values.clienteSegunda;
-
-            rows.push(
-              [formatMonthKey(monthKey), plate, "LEBRINHA", csvMoney(values.lebrinhaPrimeira), csvMoney(values.lebrinhaSegunda), csvMoney(lebrinhaTotal)],
-              [formatMonthKey(monthKey), plate, "CLIENTE", csvMoney(values.clientePrimeira), csvMoney(values.clienteSegunda), csvMoney(clienteTotal)],
-              [formatMonthKey(monthKey), plate, "TOTAL", csvMoney(primeiraTotal), csvMoney(segundaTotal), csvMoney(lebrinhaTotal + clienteTotal)],
-            );
-          });
+      const templateBuffer = await templateResponse.arrayBuffer();
+      const workbook = XLSX.read(templateBuffer, {
+        type: "array",
+        cellStyles: true,
+        cellNF: true,
+        cellFormula: true,
       });
 
-    const csv = [headers, ...rows]
-      .map((row) => row.map(csvCell).join(";"))
-      .join("\r\n");
-    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `resumo-registro-viagens-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-    toast.success(`Resumo de ${filtered.length} romaneio(s) exportado em CSV.`);
+      const yearConfigs: Record<number, {
+        clienteSheet: string;
+        lebrinhaSheet: string;
+        clientePrimeiraRows: [number, number];
+        clienteSegundaRows: [number, number];
+        lebrinhaPrimeiraRows: [number, number];
+        lebrinhaSegundaRows: [number, number];
+      }> = {
+        2025: {
+          clienteSheet: "FAT MENSAL CLIENTE 2025",
+          lebrinhaSheet: "FAT MENSAL LEB 2025",
+          clientePrimeiraRows: [52, 56],
+          clienteSegundaRows: [62, 66],
+          lebrinhaPrimeiraRows: [42, 46],
+          lebrinhaSegundaRows: [52, 56],
+        },
+        2026: {
+          clienteSheet: "FAT MENSAL CLIENTE 2026",
+          lebrinhaSheet: "FAT MENSAL LEB 2026",
+          clientePrimeiraRows: [52, 56],
+          clienteSegundaRows: [62, 66],
+          lebrinhaPrimeiraRows: [42, 46],
+          lebrinhaSegundaRows: [52, 56],
+        },
+      };
+
+      const getPlateRows = (sheet: XLSX.WorkSheet, firstRow: number, lastRow: number) => {
+        const rows = new Map<string, number>();
+        for (let row = firstRow; row <= lastRow; row += 1) {
+          const value = String(sheet[`B${row}`]?.v ?? "")
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, "");
+          if (value) rows.set(value, row);
+        }
+        return rows;
+      };
+
+      const setNumberPreservingStyle = (sheet: XLSX.WorkSheet, address: string, value: number) => {
+        const current = sheet[address] as XLSX.CellObject | undefined;
+        if (current) {
+          current.t = "n";
+          current.v = Number(value.toFixed(2));
+          delete current.w;
+          return;
+        }
+        sheet[address] = {
+          t: "n",
+          v: Number(value.toFixed(2)),
+          z: '#,##0.00',
+        } as XLSX.CellObject;
+      };
+
+      const clearDataBlock = (sheet: XLSX.WorkSheet, firstRow: number, lastRow: number) => {
+        for (let row = firstRow; row <= lastRow; row += 1) {
+          for (let col = 2; col <= 13; col += 1) {
+            setNumberPreservingStyle(sheet, XLSX.utils.encode_cell({ r: row - 1, c: col }), 0);
+          }
+        }
+      };
+
+      const yearsPresent = new Set<number>();
+      summaryByMonthAndPlate.forEach((_plateMap, monthKey) => {
+        const year = Number(monthKey.slice(0, 4));
+        if (year) yearsPresent.add(year);
+      });
+
+      const unsupportedYears = Array.from(yearsPresent).filter((year) => !yearConfigs[year]);
+      if (unsupportedYears.length > 0) {
+        toast.warning(
+          `O modelo possui abas formatadas para 2025 e 2026. Ano(s) não exportado(s): ${unsupportedYears.join(", ")}.`,
+        );
+      }
+
+      for (const year of Array.from(yearsPresent)) {
+        const config = yearConfigs[year];
+        if (!config) continue;
+
+        const clienteSheet = workbook.Sheets[config.clienteSheet];
+        const lebrinhaSheet = workbook.Sheets[config.lebrinhaSheet];
+        if (!clienteSheet || !lebrinhaSheet) {
+          throw new Error(`O modelo Excel não contém as abas esperadas para ${year}.`);
+        }
+
+        // Zera apenas as áreas de alimentação; toda a formatação/fórmulas do modelo é preservada.
+        clearDataBlock(clienteSheet, ...config.clientePrimeiraRows);
+        clearDataBlock(clienteSheet, ...config.clienteSegundaRows);
+        clearDataBlock(lebrinhaSheet, ...config.lebrinhaPrimeiraRows);
+        clearDataBlock(lebrinhaSheet, ...config.lebrinhaSegundaRows);
+
+        const clienteRows1 = getPlateRows(clienteSheet, ...config.clientePrimeiraRows);
+        const clienteRows2 = getPlateRows(clienteSheet, ...config.clienteSegundaRows);
+        const lebrinhaRows1 = getPlateRows(lebrinhaSheet, ...config.lebrinhaPrimeiraRows);
+        const lebrinhaRows2 = getPlateRows(lebrinhaSheet, ...config.lebrinhaSegundaRows);
+
+        for (const [monthKey, plateMap] of summaryByMonthAndPlate.entries()) {
+          const [summaryYear, summaryMonth] = monthKey.split("-").map(Number);
+          if (summaryYear !== year || !summaryMonth) continue;
+
+          // C = janeiro ... N = dezembro.
+          const columnIndex = summaryMonth + 1;
+          const columnLetter = XLSX.utils.encode_col(columnIndex);
+
+          for (const [plate, values] of plateMap.entries()) {
+            const clienteRow1 = clienteRows1.get(plate);
+            const clienteRow2 = clienteRows2.get(plate);
+            const lebrinhaRow1 = lebrinhaRows1.get(plate);
+            const lebrinhaRow2 = lebrinhaRows2.get(plate);
+
+            if (clienteRow1) setNumberPreservingStyle(clienteSheet, `${columnLetter}${clienteRow1}`, values.clientePrimeira);
+            if (clienteRow2) setNumberPreservingStyle(clienteSheet, `${columnLetter}${clienteRow2}`, values.clienteSegunda);
+            if (lebrinhaRow1) setNumberPreservingStyle(lebrinhaSheet, `${columnLetter}${lebrinhaRow1}`, values.lebrinhaPrimeira);
+            if (lebrinhaRow2) setNumberPreservingStyle(lebrinhaSheet, `${columnLetter}${lebrinhaRow2}`, values.lebrinhaSegunda);
+          }
+        }
+      }
+
+      // Pede ao Excel para recalcular os totais/fórmulas assim que o arquivo for aberto.
+      const workbookMeta = ((workbook as any).Workbook ??= {});
+      workbookMeta.CalcPr = {
+        ...(workbookMeta.CalcPr ?? {}),
+        calcMode: "auto",
+        fullCalcOnLoad: true,
+        forceFullCalc: true,
+      };
+
+      XLSX.writeFile(
+        workbook,
+        `resumo-registro-viagens-${new Date().toISOString().slice(0, 10)}.xlsx`,
+        {
+          bookType: "xlsx",
+          compression: true,
+          cellStyles: true,
+        },
+      );
+
+      toast.success(
+        `Resumo de ${filtered.length} romaneio(s) exportado em Excel com a formatação da planilha modelo.`,
+      );
+    } catch (error) {
+      console.error("Erro ao exportar romaneios em Excel:", error);
+      toast.error(error instanceof Error ? error.message : "Não foi possível gerar o arquivo Excel.");
+    }
   };
 
   const saveImportedRomaneio = async (result: PdfResponse, file: File) => {
@@ -1483,11 +1591,11 @@ export default function Romaneios() {
             <Button
               variant="outline"
               disabled={filtered.length === 0}
-              onClick={downloadFilteredRomaneiosCsv}
-              title="Exportar resumo por mês, placa e quinzena conforme os filtros atuais"
+              onClick={() => void downloadFilteredRomaneiosXlsx()}
+              title="Exportar Excel no mesmo modelo e formatação da planilha de registro de viagens"
             >
               <FileDown className="mr-2 h-4 w-4" />
-              Exportar CSV
+              Exportar Excel
             </Button>
             <Button onClick={() => openManual()}><Plus className="mr-2 h-4 w-4" /> Novo Romaneio</Button>
           </div>
