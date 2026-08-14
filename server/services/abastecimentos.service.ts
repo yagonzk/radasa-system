@@ -213,7 +213,12 @@ async function buildImportedProducts(
   tx: any,
   produtos: AbastecimentoImportacaoItem["produtos"],
 ) {
-  const resolved = [];
+  const resolved: Array<{
+    produtoId: string;
+    quantidadeLitros: number;
+    valorUnitario: number;
+    valorTotal: number;
+  }> = [];
   let produtosCriados = 0;
 
   for (const produto of produtos) {
