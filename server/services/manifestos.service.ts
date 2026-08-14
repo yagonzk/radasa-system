@@ -37,6 +37,65 @@ function formatPlate(value: unknown) {
   return `${normalized.slice(0, 3)}-${normalized.slice(3)}`;
 }
 
+/**
+ * Mantém os dados de veículo dos romaneios sincronizados com o cadastro atual.
+ *
+ * Historicamente placa/modelo foram gravados como texto no manifesto. Isso fazia
+ * com que romaneios antigos continuassem exibindo "Modelo não informado" mesmo
+ * após o modelo ser preenchido em Cadastros > Veículos. A placa (ou o ID salvo)
+ * passa a funcionar como vínculo lógico e o cadastro de veículos vira a fonte
+ * atual do modelo.
+ */
+async function syncManifestoVehicleMetadata() {
+  const [vehicles, manifestos] = await Promise.all([
+    prisma.veiculo.findMany({
+      select: { id: true, placa: true, modelo: true },
+    }),
+    prisma.manifesto.findMany({
+      select: { id: true, veiculoCodigo: true, placaVeiculo: true, modeloVeiculo: true },
+    }),
+  ]);
+
+  if (!vehicles.length || !manifestos.length) return;
+
+  const byId = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
+  const byPlate = new Map(
+    vehicles
+      .map((vehicle) => [normalizeKeyPart(vehicle.placa), vehicle] as const)
+      .filter(([plate]) => Boolean(plate)),
+  );
+
+  const updates = manifestos.flatMap((manifesto) => {
+    const vehicle =
+      (manifesto.veiculoCodigo ? byId.get(manifesto.veiculoCodigo) : undefined) ??
+      byPlate.get(normalizeKeyPart(manifesto.placaVeiculo));
+
+    if (!vehicle) return [];
+
+    const placaVeiculo = formatPlate(vehicle.placa);
+    const modeloVeiculo = vehicle.modelo ?? "";
+    const veiculoCodigo = vehicle.id;
+
+    if (
+      manifesto.veiculoCodigo === veiculoCodigo &&
+      formatPlate(manifesto.placaVeiculo) === placaVeiculo &&
+      (manifesto.modeloVeiculo ?? "") === modeloVeiculo
+    ) {
+      return [];
+    }
+
+    return [
+      prisma.manifesto.update({
+        where: { id: manifesto.id },
+        data: { veiculoCodigo, placaVeiculo, modeloVeiculo },
+        select: { id: true },
+      }),
+    ];
+  });
+
+  if (updates.length) await prisma.$transaction(updates);
+}
+
 function uniqueSorted(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) =>
     left.localeCompare(right, "pt-BR", { numeric: true }),
@@ -224,6 +283,10 @@ const nested = (items: any[], fallbackClientId: string) => {
 
 export const manifestosService = {
   async list() {
+    // Atualiza automaticamente placa/modelo dos romaneios antigos a partir do
+    // cadastro atual de veículos antes de devolver a listagem.
+    await syncManifestoVehicleMetadata();
+
     // A listagem não transporta os PDFs em base64. Em lotes grandes isso
     // representava dezenas/centenas de MB baixados novamente após importar.
     const [items, withPdf] = await Promise.all([
@@ -242,6 +305,7 @@ export const manifestosService = {
   },
 
   async get(id: string) {
+    await syncManifestoVehicleMetadata();
     const item = await prisma.manifesto.findUnique({ where: { id }, include });
     if (!item) throw new AppError(404, "Romaneio não encontrado.");
     return serialize(item);
