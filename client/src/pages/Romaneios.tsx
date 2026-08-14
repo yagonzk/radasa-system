@@ -793,60 +793,101 @@ export default function Romaneios() {
       return;
     }
 
-    const headers = [
-      "Romaneio",
-      "Data",
-      "Cliente - Código",
-      "Cliente",
-      "Produto - Código",
-      "Produto",
-      "NF",
-      "Série",
-      "Quantidade",
-      "Valor unitário",
-      "Valor total",
-      "Cobrança",
-      "Pago pelo cliente",
-      "Placa",
-      "Modelo",
-      "Transportadora",
-    ];
+    // Estrutura inspirada na planilha "resumo registro de viagens":
+    // uma linha para LEBRINHA, uma para CLIENTE e uma de TOTAL por placa,
+    // separando os valores da 1ª e da 2ª quinzena.
+    // Quando os filtros abrangem mais de um mês, cada mês é exportado
+    // separadamente na coluna Mês/Ano para que o CSV continue tabular.
+    type TravelSummary = {
+      lebrinhaPrimeira: number;
+      lebrinhaSegunda: number;
+      clientePrimeira: number;
+      clienteSegunda: number;
+    };
 
-    const rows = filtered.flatMap((romaneio) =>
-      orderRomaneioItemsByClient(
-        romaneio.produtos,
-        (item) => item.clienteId ?? romaneio.clienteId,
-        (item) => produtoById(item.produtoId)?.nome ?? "",
-      ).map(({ item }) => {
-        const cliente = clienteById(item.clienteId ?? romaneio.clienteId);
-        const produto = produtoById(item.produtoId);
+    const summaryByMonthAndPlate = new Map<string, Map<string, TravelSummary>>();
+
+    filtered.forEach((romaneio) => {
+      const dateParts = romaneio.dataManifesto.split("-").map(Number);
+      const year = dateParts[0];
+      const month = dateParts[1];
+      const day = dateParts[2];
+      if (!year || !month || !day) return;
+
+      const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+      const plate = (romaneio.placaVeiculo || "SEM PLACA")
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
+
+      let monthSummary = summaryByMonthAndPlate.get(monthKey);
+      if (!monthSummary) {
+        monthSummary = new Map<string, TravelSummary>();
+        summaryByMonthAndPlate.set(monthKey, monthSummary);
+      }
+
+      let plateSummary = monthSummary.get(plate);
+      if (!plateSummary) {
+        plateSummary = {
+          lebrinhaPrimeira: 0,
+          lebrinhaSegunda: 0,
+          clientePrimeira: 0,
+          clienteSegunda: 0,
+        };
+        monthSummary.set(plate, plateSummary);
+      }
+
+      romaneio.produtos.forEach((item) => {
         const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
-        return [
-          item.romaneio || romaneio.romaneios || "",
-          formatDate(romaneio.dataManifesto),
-          cliente?.codigoInterno || "",
-          cliente?.nomeFantasia || "",
-          produto?.codigoInterno || "",
-          produto?.nome || "",
-          item.notaFiscal || "",
-          item.serieNf || "",
-          csvNumber(item.quantidade),
-          csvNumber(item.valorUnitario),
-          csvNumber(item.valorTotal),
-          tipo,
-          tipo === "Receber c/ Cliente"
-            ? item.pagoCliente === true
-              ? "Sim"
-              : item.pagoCliente === false
-                ? "Não"
-                : "Pendente"
-            : "",
-          romaneio.placaVeiculo || "",
-          romaneio.modeloVeiculo || "",
-          romaneio.transportadoraNome || "",
-        ];
-      }),
-    );
+        const valor = Number(item.valorTotal || 0);
+        const primeiraQuinzena = day <= 15;
+
+        if (tipo === "Receber c/ Cliente") {
+          if (primeiraQuinzena) plateSummary!.clientePrimeira += valor;
+          else plateSummary!.clienteSegunda += valor;
+          return;
+        }
+
+        // O resumo financeiro da Lebrinha considera cobranças e bonificações.
+        // Vasilhames não entram no faturamento monetário desta planilha.
+        if (tipo === "Acertar c/ Lebrinha" || tipo === "Bonificação - Lebrinha") {
+          if (primeiraQuinzena) plateSummary!.lebrinhaPrimeira += valor;
+          else plateSummary!.lebrinhaSegunda += valor;
+        }
+      });
+    });
+
+    const monthNames = [
+      "JAN", "FEV", "MAR", "ABR", "MAI", "JUN",
+      "JUL", "AGO", "SET", "OUT", "NOV", "DEZ",
+    ];
+    const formatMonthKey = (monthKey: string) => {
+      const [year, month] = monthKey.split("-").map(Number);
+      return `${monthNames[month - 1] ?? String(month).padStart(2, "0")}/${year}`;
+    };
+    const csvMoney = (value: number) =>
+      Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const headers = ["Mês/Ano", "Placa", "Tipo", "1ª", "2ª", "Total"];
+    const rows: string[][] = [];
+
+    Array.from(summaryByMonthAndPlate.entries())
+      .sort(([monthA], [monthB]) => monthA.localeCompare(monthB))
+      .forEach(([monthKey, plateMap]) => {
+        Array.from(plateMap.entries())
+          .sort(([plateA], [plateB]) => plateA.localeCompare(plateB, "pt-BR", { numeric: true }))
+          .forEach(([plate, values]) => {
+            const lebrinhaTotal = values.lebrinhaPrimeira + values.lebrinhaSegunda;
+            const clienteTotal = values.clientePrimeira + values.clienteSegunda;
+            const primeiraTotal = values.lebrinhaPrimeira + values.clientePrimeira;
+            const segundaTotal = values.lebrinhaSegunda + values.clienteSegunda;
+
+            rows.push(
+              [formatMonthKey(monthKey), plate, "LEBRINHA", csvMoney(values.lebrinhaPrimeira), csvMoney(values.lebrinhaSegunda), csvMoney(lebrinhaTotal)],
+              [formatMonthKey(monthKey), plate, "CLIENTE", csvMoney(values.clientePrimeira), csvMoney(values.clienteSegunda), csvMoney(clienteTotal)],
+              [formatMonthKey(monthKey), plate, "TOTAL", csvMoney(primeiraTotal), csvMoney(segundaTotal), csvMoney(lebrinhaTotal + clienteTotal)],
+            );
+          });
+      });
 
     const csv = [headers, ...rows]
       .map((row) => row.map(csvCell).join(";"))
@@ -855,12 +896,12 @@ export default function Romaneios() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `romaneios-filtrados-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.download = `resumo-registro-viagens-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
-    toast.success(`${filtered.length} romaneio(s) exportado(s) em CSV.`);
+    toast.success(`Resumo de ${filtered.length} romaneio(s) exportado em CSV.`);
   };
 
   const saveImportedRomaneio = async (result: PdfResponse, file: File) => {
@@ -1443,7 +1484,7 @@ export default function Romaneios() {
               variant="outline"
               disabled={filtered.length === 0}
               onClick={downloadFilteredRomaneiosCsv}
-              title="Baixar todos os romaneios que correspondem aos filtros atuais"
+              title="Exportar resumo por mês, placa e quinzena conforme os filtros atuais"
             >
               <FileDown className="mr-2 h-4 w-4" />
               Exportar CSV
