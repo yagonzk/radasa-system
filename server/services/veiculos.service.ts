@@ -82,7 +82,10 @@ export const veiculosService = {
         ...(createdAt ? { createdAt: new Date(createdAt) } : {}),
       },
     });
-    await syncVehicleIntoManifestos(item);
+    // A sincronização dos romaneios não deve impedir o cadastro do veículo.
+    // A tela de Romaneios também enriquece modelo/placa em memória, então mesmo
+    // que a persistência histórica falhe momentaneamente a listagem continua funcionando.
+    await syncVehicleIntoManifestos(item).catch(() => undefined);
     return serialize(item);
   },
 
@@ -104,7 +107,7 @@ export const veiculosService = {
 
     // Mudanças de modelo/placa passam a refletir imediatamente em todos os
     // romaneios já cadastrados desse veículo.
-    await syncVehicleIntoManifestos(item, current.placa);
+    await syncVehicleIntoManifestos(item, current.placa).catch(() => undefined);
     return serialize(item);
   },
 

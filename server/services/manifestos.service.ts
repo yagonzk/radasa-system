@@ -37,63 +37,36 @@ function formatPlate(value: unknown) {
   return `${normalized.slice(0, 3)}-${normalized.slice(3)}`;
 }
 
-/**
- * Mantém os dados de veículo dos romaneios sincronizados com o cadastro atual.
- *
- * Historicamente placa/modelo foram gravados como texto no manifesto. Isso fazia
- * com que romaneios antigos continuassem exibindo "Modelo não informado" mesmo
- * após o modelo ser preenchido em Cadastros > Veículos. A placa (ou o ID salvo)
- * passa a funcionar como vínculo lógico e o cadastro de veículos vira a fonte
- * atual do modelo.
- */
-async function syncManifestoVehicleMetadata() {
-  const [vehicles, manifestos] = await Promise.all([
-    prisma.veiculo.findMany({
-      select: { id: true, placa: true, modelo: true },
-    }),
-    prisma.manifesto.findMany({
-      select: { id: true, veiculoCodigo: true, placaVeiculo: true, modeloVeiculo: true },
-    }),
-  ]);
+type VehicleMetadata = { id: string; placa: string; modelo: string | null };
 
-  if (!vehicles.length || !manifestos.length) return;
+function buildVehicleLookups(vehicles: VehicleMetadata[]) {
+  return {
+    byId: new Map(vehicles.map((vehicle) => [vehicle.id, vehicle])),
+    byPlate: new Map(
+      vehicles
+        .map((vehicle) => [normalizeKeyPart(vehicle.placa), vehicle] as const)
+        .filter(([plate]) => Boolean(plate)),
+    ),
+  };
+}
 
-  const byId = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
-  const byPlate = new Map(
-    vehicles
-      .map((vehicle) => [normalizeKeyPart(vehicle.placa), vehicle] as const)
-      .filter(([plate]) => Boolean(plate)),
-  );
+function enrichManifestoVehicle<T extends {
+  veiculoCodigo?: string | null;
+  placaVeiculo?: string | null;
+  modeloVeiculo?: string | null;
+}>(item: T, lookups: ReturnType<typeof buildVehicleLookups>) {
+  const vehicle =
+    (item.veiculoCodigo ? lookups.byId.get(item.veiculoCodigo) : undefined) ??
+    lookups.byPlate.get(normalizeKeyPart(item.placaVeiculo));
 
-  const updates = manifestos.flatMap((manifesto) => {
-    const vehicle =
-      (manifesto.veiculoCodigo ? byId.get(manifesto.veiculoCodigo) : undefined) ??
-      byPlate.get(normalizeKeyPart(manifesto.placaVeiculo));
+  if (!vehicle) return item;
 
-    if (!vehicle) return [];
-
-    const placaVeiculo = formatPlate(vehicle.placa);
-    const modeloVeiculo = vehicle.modelo ?? "";
-    const veiculoCodigo = vehicle.id;
-
-    if (
-      manifesto.veiculoCodigo === veiculoCodigo &&
-      formatPlate(manifesto.placaVeiculo) === placaVeiculo &&
-      (manifesto.modeloVeiculo ?? "") === modeloVeiculo
-    ) {
-      return [];
-    }
-
-    return [
-      prisma.manifesto.update({
-        where: { id: manifesto.id },
-        data: { veiculoCodigo, placaVeiculo, modeloVeiculo },
-        select: { id: true },
-      }),
-    ];
-  });
-
-  if (updates.length) await prisma.$transaction(updates);
+  return {
+    ...item,
+    veiculoCodigo: vehicle.id,
+    placaVeiculo: formatPlate(vehicle.placa),
+    modeloVeiculo: vehicle.modelo ?? item.modeloVeiculo ?? "",
+  };
 }
 
 function uniqueSorted(values: string[]) {
@@ -283,13 +256,11 @@ const nested = (items: any[], fallbackClientId: string) => {
 
 export const manifestosService = {
   async list() {
-    // Atualiza automaticamente placa/modelo dos romaneios antigos a partir do
-    // cadastro atual de veículos antes de devolver a listagem.
-    await syncManifestoVehicleMetadata();
-
-    // A listagem não transporta os PDFs em base64. Em lotes grandes isso
-    // representava dezenas/centenas de MB baixados novamente após importar.
-    const [items, withPdf] = await Promise.all([
+    // Importante: esta rota é somente leitura. Não fazemos UPDATE automático
+    // ao abrir Romaneios, porque qualquer falha de escrita bloquearia a listagem
+    // inteira e faria os dados parecerem ausentes. O modelo/placa atuais são
+    // enriquecidos em memória a partir de Cadastros > Veículos.
+    const [items, withPdf, vehicles] = await Promise.all([
       prisma.manifesto.findMany({
         include,
         omit: { pdfUrl: true },
@@ -299,16 +270,29 @@ export const manifestosService = {
         where: { pdfUrl: { not: null } },
         select: { id: true },
       }),
+      prisma.veiculo.findMany({
+        select: { id: true, placa: true, modelo: true },
+      }),
     ]);
     const pdfIds = new Set(withPdf.map((item) => item.id));
-    return items.map((item) => serialize({ ...item, pdfStored: pdfIds.has(item.id) }));
+    const vehicleLookups = buildVehicleLookups(vehicles);
+    return items.map((item) =>
+      serialize({
+        ...enrichManifestoVehicle(item, vehicleLookups),
+        pdfStored: pdfIds.has(item.id),
+      }),
+    );
   },
 
   async get(id: string) {
-    await syncManifestoVehicleMetadata();
-    const item = await prisma.manifesto.findUnique({ where: { id }, include });
+    const [item, vehicles] = await Promise.all([
+      prisma.manifesto.findUnique({ where: { id }, include }),
+      prisma.veiculo.findMany({
+        select: { id: true, placa: true, modelo: true },
+      }),
+    ]);
     if (!item) throw new AppError(404, "Romaneio não encontrado.");
-    return serialize(item);
+    return serialize(enrichManifestoVehicle(item, buildVehicleLookups(vehicles)));
   },
 
   async create(input: any) {
