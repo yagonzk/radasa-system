@@ -19,6 +19,34 @@ const select = {
 export const usuariosService = {
   list: () => prisma.user.findMany({ select, orderBy: { name: "asc" } }),
 
+  pending: () =>
+    prisma.user.findMany({
+      where: { active: false },
+      select,
+      orderBy: { createdAt: "asc" },
+    }),
+
+  async approve(id: string) {
+    const user = await prisma.user.findUnique({ where: { id }, select });
+    if (!user) throw new AppError(404, "Usuário não encontrado.");
+    if (user.active) return user;
+
+    return prisma.user.update({
+      where: { id },
+      select,
+      data: { active: true },
+    });
+  },
+
+  async reject(id: string) {
+    const user = await prisma.user.findUnique({ where: { id }, select: { id: true, active: true } });
+    if (!user) throw new AppError(404, "Usuário não encontrado.");
+    if (user.active) throw new AppError(409, "Somente contas pendentes podem ser recusadas por esta tela.");
+
+    await prisma.user.delete({ where: { id } });
+    return { message: "Solicitação de conta recusada." };
+  },
+
   async get(id: string) {
     const user = await prisma.user.findUnique({ where: { id }, select });
     if (!user) throw new AppError(404, "Usuário não encontrado.");

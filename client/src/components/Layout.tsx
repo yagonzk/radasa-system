@@ -1,6 +1,6 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes, FileBadge2, ChevronDown, ChevronRight, FilePlus2, History, UserRound, Settings2, BadgeDollarSign } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes, FileBadge2, ChevronDown, ChevronRight, FilePlus2, History, UserRound, Settings2, BadgeDollarSign, ShieldCheck } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useState } from "react";
@@ -11,6 +11,7 @@ interface NavItem {
   href: string;
   icon: ReactNode;
   matchPaths: string[];
+  adminOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -62,6 +63,13 @@ const navItems: NavItem[] = [
     icon: <CircleDotDashed className="h-[18px] w-[18px]" />,
     matchPaths: ["/pneus"],
   },
+  {
+    label: "Aprovação de contas",
+    href: "/aprovacao-contas",
+    icon: <ShieldCheck className="h-[18px] w-[18px]" />,
+    matchPaths: ["/aprovacao-contas"],
+    adminOnly: true,
+  },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -93,7 +101,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map((item) => {
+          {navItems.filter((item) => !item.adminOnly || user?.role === "ADMIN").map((item) => {
             const active = isActive(item);
             return (
               <Link

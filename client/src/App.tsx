@@ -17,6 +17,7 @@ import Logs from "./pages/Logs";
 import Abastecimentos from "./pages/Abastecimentos";
 import Pneus from "./pages/Pneus";
 import Estoque from "./pages/Estoque";
+import AprovacaoContas from "./pages/AprovacaoContas";
 import CiotGerar from "./pages/CiotGerar";
 import CiotGerados from "./pages/CiotGerados";
 import CiotConfiguracao from "./pages/CiotConfiguracao";
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/ciot" component={CiotGerar} />
       <Route path="/pneus" component={Pneus} />
       <Route path="/estoque" component={Estoque} />
+      <Route path="/aprovacao-contas" component={AprovacaoContas} />
       <Route path="/perfil" component={Perfil} />
       <Route path="/alterar-senha" component={ChangePassword} />
       <Route path="/logs" component={Logs} />

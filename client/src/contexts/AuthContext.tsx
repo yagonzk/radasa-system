@@ -14,6 +14,7 @@ export type AuthUser = {
 };
 
 type AuthResponse = { token: string; user: AuthUser };
+type RegisterResponse = { message: string };
 
 type RegisterInput = { name: string; username: string; email: string; password: string };
 export type UpdateProfileInput = { name: string; email: string; telefone: string; cpf: string; fotoPerfil?: string | null };
@@ -22,7 +23,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
   login: (identifier: string, password: string) => Promise<void>;
-  register: (input: RegisterInput) => Promise<void>;
+  register: (input: RegisterInput) => Promise<string>;
   updateProfile: (input: UpdateProfileInput) => Promise<AuthUser>;
   logout: () => void;
 };
@@ -60,8 +61,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const register = async (input: RegisterInput) => {
-    const { data } = await api.post<AuthResponse>("/auth/register", input);
-    await finishAuthentication(data);
+    const { data } = await api.post<RegisterResponse>("/auth/register", input);
+    return data.message;
   };
 
   const updateProfile = async (input: UpdateProfileInput) => {

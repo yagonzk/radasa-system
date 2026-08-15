@@ -49,8 +49,12 @@ export const authService = {
       },
     });
 
-    if (!user || !user.active || !(await bcrypt.compare(password, user.passwordHash))) {
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw new AppError(401, "Usuário, e-mail ou senha inválidos.");
+    }
+
+    if (!user.active) {
+      throw new AppError(403, "Sua conta está aguardando aprovação do administrador.");
     }
 
     return { token: signToken(user), user: publicUser(user) };
@@ -77,16 +81,20 @@ export const authService = {
       throw new AppError(409, "Este e-mail já está cadastrado.");
     }
 
-    const user = await prisma.user.create({
+    await prisma.user.create({
       data: {
         name: input.name.trim(),
         username,
         email,
         passwordHash: await bcrypt.hash(input.password, 12),
+        role: "VISUALIZACAO",
+        active: false,
       },
     });
 
-    return { token: signToken(user), user: publicUser(user) };
+    return {
+      message: "Conta criada com sucesso e enviada para aprovação do administrador.",
+    };
   },
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {

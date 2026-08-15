@@ -45,13 +45,16 @@ export default function Auth() {
     }
     setSubmitting(true);
     try {
-      await register({
+      const message = await register({
         name: registerData.name,
         username: registerData.username,
         email: registerData.email,
         password: registerData.password,
       });
-      toast.success("Conta criada com sucesso.");
+      toast.success(message);
+      setLoginData((current) => ({ ...current, identifier: registerData.username }));
+      setRegisterData({ name: "", username: "", email: "", password: "", confirmPassword: "" });
+      setMode("login");
     } catch (error) {
       toast.error(getApiMessage(error, "Não foi possível criar sua conta."));
     } finally {
@@ -143,8 +146,11 @@ export default function Auth() {
               <span className="relative block"><LockKeyhole className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input className={inputClass} type={showPassword ? "text" : "password"} value={registerData.confirmPassword} onChange={(e) => setRegisterData(v => ({ ...v, confirmPassword: e.target.value }))} placeholder="Repita sua senha" autoComplete="new-password" minLength={8} required /></span>
             </label>
             <button disabled={submitting} className="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 text-base font-bold text-white shadow-lg shadow-blue-500/20 transition hover:brightness-105 disabled:opacity-60 sm:col-span-2">
-              {submitting ? "Criando conta..." : "Criar conta"}
+              {submitting ? "Enviando solicitação..." : "Criar conta"}
             </button>
+            <p className="text-center text-xs text-muted-foreground sm:col-span-2">
+              Novas contas precisam ser aprovadas por um administrador antes do primeiro acesso.
+            </p>
           </form>
         )}
 
