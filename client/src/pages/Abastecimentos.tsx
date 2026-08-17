@@ -2873,10 +2873,11 @@ export default function Abastecimentos() {
   const mediaKmLitro = useMemo(() => {
     let kmRodados = 0;
     let litrosAbastecidos = 0;
-    const idsFiltrados = new Set(filteredItems.map((item) => item.id));
     const porVeiculo = new Map<string, Abastecimento[]>();
 
-    items.forEach((item) => {
+    // A média deve considerar somente os lançamentos que passaram pelos filtros atuais.
+    // Para cada placa, o primeiro e o último odômetro do período definem os KM rodados.
+    filteredItems.forEach((item) => {
       porVeiculo.set(item.veiculoId, [...(porVeiculo.get(item.veiculoId) ?? []), item]);
     });
 
@@ -2888,26 +2889,31 @@ export default function Abastecimentos() {
           a.createdAt.localeCompare(b.createdAt),
       );
 
-      for (let index = 1; index < cronologicos.length; index += 1) {
-        const atual = cronologicos[index];
-        const anterior = cronologicos[index - 1];
-        if (!idsFiltrados.has(atual.id)) continue;
+      if (cronologicos.length < 2) return;
 
-        const kmRodadosNoPeriodo = atual.hodometro - anterior.hodometro;
-        const litrosQueEntraramNaBomba = (atual.produtos ?? []).reduce(
-          (sum, produto) => sum + produto.quantidadeLitros,
-          0,
-        );
+      const primeiro = cronologicos[0];
+      const ultimo = cronologicos[cronologicos.length - 1];
+      // Odômetros crescem com o uso do veículo; usamos a diferença positiva entre
+      // o último e o primeiro lançamento dentro do intervalo filtrado.
+      const diferencaKm = ultimo.hodometro - primeiro.hodometro;
+      const litrosDaPlacaNoPeriodo = cronologicos.reduce(
+        (total, abastecimento) =>
+          total +
+          (abastecimento.produtos ?? []).reduce(
+            (subtotal, produto) => subtotal + produto.quantidadeLitros,
+            0,
+          ),
+        0,
+      );
 
-        if (kmRodadosNoPeriodo > 0 && litrosQueEntraramNaBomba > 0) {
-          kmRodados += kmRodadosNoPeriodo;
-          litrosAbastecidos += litrosQueEntraramNaBomba;
-        }
+      if (diferencaKm > 0 && litrosDaPlacaNoPeriodo > 0) {
+        kmRodados += diferencaKm;
+        litrosAbastecidos += litrosDaPlacaNoPeriodo;
       }
     });
 
     return litrosAbastecidos > 0 ? kmRodados / litrosAbastecidos : 0;
-  }, [filteredItems, items]);
+  }, [filteredItems]);
 
   const filterOptions = (key: keyof Filters): string[] => {
     if (key === "cliente") return clientes.map((item) => formatClienteResumo(item));
