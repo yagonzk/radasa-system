@@ -129,6 +129,7 @@ function formatLitros(value: number) {
 }
 
 function formatOdometro(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "—";
   return `${value.toLocaleString("pt-BR", {
     maximumFractionDigits: 1,
   })} km`;
@@ -534,9 +535,6 @@ function BatchXmlDialog({
     const pendencias: string[] = [];
     if (!item.clienteId) pendencias.push("Selecione o posto/cliente");
     if (!item.veiculoId) pendencias.push("Selecione o veículo");
-    if (!item.hodometro.trim() || parseNumber(item.hodometro) <= 0) {
-      pendencias.push("Informe o odômetro");
-    }
     if (!item.documento.dataEmissao) pendencias.push("Data não encontrada");
     if (!item.documento.chaveNfe) pendencias.push("Chave da NF-e não encontrada");
     if (!item.produtos.length) pendencias.push("Nenhum produto encontrado");
@@ -1104,11 +1102,7 @@ function BatchXmlDialog({
 
   const importAll = async () => {
     const validItems = items.filter(
-      (item) =>
-        item.status === "COMPLETO" &&
-        item.documento &&
-        item.hodometro.trim() &&
-        parseNumber(item.hodometro) > 0,
+      (item) => item.status === "COMPLETO" && item.documento,
     );
 
     if (!validItems.length) {
@@ -1165,7 +1159,7 @@ function BatchXmlDialog({
           item.documento!.informacoesComplementares,
         dataEmissao: item.documento!.dataEmissao,
         valorDesconto: item.documento!.totais.desconto,
-        hodometro: parseNumber(item.hodometro),
+        hodometro: item.hodometro.trim() ? parseNumber(item.hodometro) : 0,
         xmlUrl: item.xmlUrl,
         pdfUrl: item.pdfUrl,
         produtos: item.produtos.map(
@@ -1432,7 +1426,7 @@ function BatchXmlDialog({
             "",
           item.documento?.emitente.cnpj ?? "",
           item.documento?.placa ?? "",
-          item.hodometro,
+          parseNumber(item.hodometro) > 0 ? item.hodometro : "",
           litros.toFixed(3).replace(".", ","),
           Math.max(
             0,
@@ -1763,7 +1757,7 @@ function BatchXmlDialog({
                               hodometro: event.target.value,
                             }))
                           }
-                          placeholder="Ex.: 231481"
+                          placeholder="Opcional (ex.: 231481)"
                           inputMode="decimal"
                         />
                         {item.documento.hodometroOrigem && (
@@ -2049,7 +2043,7 @@ function AbastecimentoForm({
         produtos: editing.produtos ?? [],
         valorDesconto: editing.valorDesconto ? String(editing.valorDesconto) : "",
         veiculoId: editing.veiculoId,
-        hodometro: String(editing.hodometro),
+        hodometro: editing.hodometro > 0 ? String(editing.hodometro) : "",
         pdfUrl: editing.pdfUrl ?? null,
         xmlUrl: (editing as typeof editing & { xmlUrl?: string | null }).xmlUrl ?? null,
         chaveNfe: editing.chaveNfe ?? "",
@@ -2410,8 +2404,8 @@ function AbastecimentoForm({
     if (valorDesconto < 0) return toast.error("Informe um valor de desconto válido.");
     if (valorDesconto > valorBruto) return toast.error("O valor do desconto não pode ser maior que o valor bruto.");
     if (!form.veiculoId) return toast.error("Selecione a placa.");
-    const hodometro = parseNumber(form.hodometro);
-    if (hodometro < 0 || !form.hodometro.trim()) return toast.error("Informe o odômetro.");
+    const hodometro = form.hodometro.trim() ? parseNumber(form.hodometro) : 0;
+    if (hodometro < 0) return toast.error("Informe um odômetro válido ou deixe o campo em branco.");
 
     const possuiProdutoInvalido = form.produtos.some(
       (item) =>
@@ -2585,7 +2579,7 @@ function AbastecimentoForm({
           </div>
           <div className="space-y-1.5">
             <Label className="flex items-center gap-1.5">
-              Odômetro *
+              Odômetro
               {odometroMenorQueUltimo && <AlertTriangle className="h-4 w-4 text-destructive" aria-label="Odômetro menor que o último cadastrado" />}
             </Label>
             <Input
@@ -2594,7 +2588,7 @@ function AbastecimentoForm({
               step="0.1"
               value={form.hodometro}
               onChange={(event) => setForm((current) => ({ ...current, hodometro: event.target.value }))}
-              placeholder="0"
+              placeholder="Opcional"
             />
             {odometroMenorQueUltimo && (
               <p className="flex items-center gap-1.5 text-sm font-medium text-destructive">
@@ -2943,21 +2937,25 @@ export default function Abastecimentos() {
     });
 
     porVeiculo.forEach((registros) => {
-      const cronologicos = [...registros].sort(
-        (a, b) =>
-          a.dataEmissao.localeCompare(b.dataEmissao) ||
-          a.hodometro - b.hodometro ||
-          a.createdAt.localeCompare(b.createdAt),
-      );
+      // Lançamentos sem odômetro continuam contando nos litros do período, mas não
+      // podem ser usados como referência para o primeiro/último KM da placa.
+      const cronologicosComOdometro = registros
+        .filter((item) => Number(item.hodometro) > 0)
+        .sort(
+          (a, b) =>
+            a.dataEmissao.localeCompare(b.dataEmissao) ||
+            a.hodometro - b.hodometro ||
+            a.createdAt.localeCompare(b.createdAt),
+        );
 
-      if (cronologicos.length < 2) return;
+      if (cronologicosComOdometro.length < 2) return;
 
-      const primeiro = cronologicos[0];
-      const ultimo = cronologicos[cronologicos.length - 1];
+      const primeiro = cronologicosComOdometro[0];
+      const ultimo = cronologicosComOdometro[cronologicosComOdometro.length - 1];
       // Odômetros crescem com o uso do veículo; usamos a diferença positiva entre
-      // o último e o primeiro lançamento dentro do intervalo filtrado.
+      // o último e o primeiro lançamento com KM informado dentro do intervalo filtrado.
       const diferencaKm = ultimo.hodometro - primeiro.hodometro;
-      const litrosDaPlacaNoPeriodo = cronologicos.reduce(
+      const litrosDaPlacaNoPeriodo = registros.reduce(
         (total, abastecimento) =>
           total +
           (abastecimento.produtos ?? []).reduce(

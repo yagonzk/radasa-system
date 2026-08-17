@@ -151,7 +151,6 @@ abastecimentosXmlRoutes.post(
               const missing: string[] = [];
               if (!sugestoes.cliente) missing.push("cliente/posto");
               if (!sugestoes.veiculo) missing.push("veículo");
-              if (document.hodometro === null) missing.push("odômetro");
               if (
                 sugestoes.produtos.some(
                   (item) =>
@@ -274,7 +273,7 @@ abastecimentosXmlRoutes.post("/importar-lote", async (req, res, next) => {
         clienteId: String(item?.clienteId ?? "").trim(),
         veiculoId: String(item?.veiculoId ?? "").trim(),
         chaveNfe: String(item?.chaveNfe ?? "").replace(/\D/g, ""),
-        hodometro: Number(item?.hodometro),
+        hodometro: Number(item?.hodometro ?? 0),
         produtos: Array.isArray(item?.produtos) ? item.produtos : [],
       }))
       .filter(
@@ -283,7 +282,7 @@ abastecimentosXmlRoutes.post("/importar-lote", async (req, res, next) => {
           !item.veiculoId ||
           item.chaveNfe.length !== 44 ||
           !Number.isFinite(item.hodometro) ||
-          item.hodometro <= 0 ||
+          item.hodometro < 0 ||
           !item.produtos.length ||
           item.produtos.some((produto: any) => {
             const produtoId = String(produto?.produtoId ?? "").trim();

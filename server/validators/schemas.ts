@@ -164,7 +164,7 @@ export const abastecimentoBody = z.object({
   produtos: z.array(abastecimentoProdutoBody).min(1, "Adicione pelo menos um produto."),
   valorDesconto: z.coerce.number().finite().min(0).optional().default(0),
   valorTotal: money.optional(),
-  hodometro: z.coerce.number().finite().min(0),
+  hodometro: z.coerce.number().finite().min(0).optional().default(0),
   pdfUrl: z.string().max(20_000_000).optional().nullable().or(z.literal("")),
   xmlUrl: z.string().max(20_000_000).optional().nullable().or(z.literal("")),
   chaveNfe: z.string().trim().max(44).optional().nullable().or(z.literal("")),

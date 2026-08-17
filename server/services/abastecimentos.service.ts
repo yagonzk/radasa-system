@@ -276,7 +276,7 @@ function buildHeader(input: any, produtos: ReturnType<typeof buildProducts>) {
     dataEmissao: parseDateOnly(input.dataEmissao),
     valorDesconto,
     valorTotal: Number((valorBruto - valorDesconto).toFixed(2)),
-    hodometro: Number(input.hodometro),
+    hodometro: Number.isFinite(Number(input.hodometro)) && Number(input.hodometro) > 0 ? Number(input.hodometro) : 0,
     pdfUrl: input.pdfUrl || null,
     xmlUrl: input.xmlUrl || null,
     ...(input.createdAt ? { createdAt: new Date(input.createdAt) } : {}),
@@ -317,7 +317,7 @@ export interface AbastecimentoImportacaoItem {
   informacoesComplementares?: string;
   dataEmissao: string;
   valorDesconto?: number;
-  hodometro: number;
+  hodometro?: number;
   xmlUrl?: string | null;
   pdfUrl?: string | null;
   produtos: Array<{
