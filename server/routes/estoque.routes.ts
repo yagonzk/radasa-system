@@ -5,11 +5,17 @@ import {
   bodySchema,
   estoqueMovimentacaoBody,
   estoqueProdutoBody,
+  estoqueTipoProdutoBody,
   idParamsSchema,
 } from "../validators/schemas.js";
 import { estoqueController } from "../controllers/estoque.controller.js";
 
 export const estoqueRoutes = Router();
+
+// Tipos próprios do Almoxarifado. Não usa categorias/produtos da aba Cadastros.
+estoqueRoutes.get("/tipos", asyncHandler(estoqueController.listTiposProduto));
+estoqueRoutes.post("/tipos", validate(bodySchema(estoqueTipoProdutoBody)), asyncHandler(estoqueController.createTipoProduto));
+estoqueRoutes.delete("/tipos/:id", validate(idParamsSchema), asyncHandler(estoqueController.removeTipoProduto));
 
 // Cadastro próprio do estoque: não usa /produtos (aba Cadastros).
 estoqueRoutes.get("/produtos", asyncHandler(estoqueController.listProdutos));

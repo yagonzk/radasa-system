@@ -93,11 +93,19 @@ export const produtoBody = z.object({
   createdAt: z.string().optional(),
 });
 
+export const estoqueTipoProdutoBody = z.object({
+  id: id.optional(),
+  nome: z.string().trim().min(1).max(80),
+  createdAt: z.string().optional(),
+});
+
 export const estoqueProdutoBody = z.object({
   id: id.optional(),
   nome: text(),
-  codigoInterno: text(100),
-  categoria: z.enum(["Produtos de Piscina", "Peças", "Ferramentas"]),
+  // No cadastro novo o backend gera automaticamente RAD-00001, RAD-00002, ...
+  // Mantido opcional para compatibilidade com versões anteriores do frontend.
+  codigoInterno: z.string().trim().max(100).optional().default(""),
+  categoria: z.string().trim().min(1).max(80),
   createdAt: z.string().optional(),
 });
 

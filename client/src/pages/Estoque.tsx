@@ -3,6 +3,7 @@ import Layout from "@/components/Layout";
 import {
   useEstoque,
   useEstoqueProdutos,
+  useEstoqueTipos,
   type CategoriaEstoque,
   type EstoqueMovimentacao,
   type EstoqueProduto,
@@ -37,12 +38,6 @@ import {
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 
-const CATEGORIAS_ESTOQUE: CategoriaEstoque[] = [
-  "Produtos de Piscina",
-  "Peças",
-  "Ferramentas",
-];
-
 type ViewMode = "ESTOQUE" | "ENTRADAS" | "SAIDAS";
 type CategoriaFiltro = "TODOS" | CategoriaEstoque;
 
@@ -72,6 +67,11 @@ const fileToDataUrl = (file: File) =>
 
 export default function Estoque() {
   const {
+    items: tiposProduto,
+    create: createTipoProduto,
+    remove: removeTipoProduto,
+  } = useEstoqueTipos();
+  const {
     items: produtos,
     create: createProduto,
     update: updateProduto,
@@ -91,8 +91,17 @@ export default function Estoque() {
 
   const [productOpen, setProductOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<EstoqueProduto | null>(null);
-  const [productForm, setProductForm] = useState(() => emptyProductForm("Produtos de Piscina"));
+  const [productForm, setProductForm] = useState(() => emptyProductForm(""));
   const [savingProduct, setSavingProduct] = useState(false);
+
+  const [typeManagerOpen, setTypeManagerOpen] = useState(false);
+  const [newTypeName, setNewTypeName] = useState("");
+  const [savingType, setSavingType] = useState(false);
+
+  const categoriasEstoque = useMemo(
+    () => tiposProduto.map((tipo) => tipo.nome),
+    [tiposProduto],
+  );
 
   const produtosFiltrados = useMemo(
     () => categoriaFiltro === "TODOS" ? produtos : produtos.filter((produto) => produto.categoria === categoriaFiltro),
@@ -126,8 +135,18 @@ export default function Estoque() {
   };
 
   const openCreateProduct = () => {
+    const categoriaInicial = categoriaFiltro !== "TODOS" && categoriasEstoque.includes(categoriaFiltro)
+      ? categoriaFiltro
+      : categoriasEstoque[0];
+
+    if (!categoriaInicial) {
+      toast.error("Cadastre um tipo de produto antes de criar um produto no almoxarifado.");
+      setTypeManagerOpen(true);
+      return;
+    }
+
     setEditingProduct(null);
-    setProductForm(emptyProductForm(categoriaFiltro === "TODOS" ? "Produtos de Piscina" : categoriaFiltro));
+    setProductForm(emptyProductForm(categoriaInicial));
     setProductOpen(true);
   };
 
@@ -151,8 +170,8 @@ export default function Estoque() {
         await updateProduto(editingProduct.id, productForm);
         toast.success("Produto do almoxarifado atualizado.");
       } else {
-        await createProduto(productForm);
-        toast.success("Produto criado no almoxarifado.");
+        const novoProduto = await createProduto(productForm);
+        toast.success(`Produto criado com o código ${novoProduto.codigoInterno}.`);
       }
       setProductOpen(false);
       setEditingProduct(null);
@@ -172,6 +191,41 @@ export default function Estoque() {
       toast.success("Produto do almoxarifado excluído.");
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Não foi possível excluir o produto.");
+    }
+  };
+
+  const submitTipoProduto = async (event: FormEvent) => {
+    event.preventDefault();
+    const nome = newTypeName.trim();
+    if (!nome || savingType) return;
+
+    setSavingType(true);
+    try {
+      const criado = await createTipoProduto({ nome });
+      setNewTypeName("");
+      setCategoriaFiltro(criado.nome);
+      if (productOpen) {
+        setProductForm((current) => ({ ...current, categoria: criado.nome }));
+      }
+      toast.success("Tipo de produto criado no almoxarifado.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível criar o tipo de produto.");
+    } finally {
+      setSavingType(false);
+    }
+  };
+
+  const deleteTipoProduto = async (tipo: { id: string; nome: string }) => {
+    if (!window.confirm(`Remover o tipo de produto "${tipo.nome}"?`)) return;
+    try {
+      await removeTipoProduto(tipo.id);
+      if (categoriaFiltro === tipo.nome) setCategoriaFiltro("TODOS");
+      if (productForm.categoria === tipo.nome) {
+        setProductForm((current) => ({ ...current, categoria: "" }));
+      }
+      toast.success("Tipo de produto removido.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível remover o tipo de produto.");
     }
   };
 
@@ -285,19 +339,31 @@ export default function Estoque() {
               <TabsTrigger value="SAIDAS">Saída</TabsTrigger>
             </TabsList>
 
-            <div className="w-full sm:w-[260px]">
+            <div className="w-full sm:w-[330px]">
               <Label className="mb-1.5 block text-xs text-muted-foreground">Tipo de produto</Label>
-              <Select value={categoriaFiltro} onValueChange={(value) => setCategoriaFiltro(value as CategoriaFiltro)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="TODOS">Todos os tipos</SelectItem>
-                  {CATEGORIAS_ESTOQUE.map((category) => (
-                    <SelectItem key={category} value={category}>{category}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={categoriaFiltro} onValueChange={(value) => setCategoriaFiltro(value as CategoriaFiltro)}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TODOS">Todos os tipos</SelectItem>
+                    {categoriasEstoque.map((category) => (
+                      <SelectItem key={category} value={category}>{category}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  onClick={() => setTypeManagerOpen(true)}
+                  title="Criar ou remover tipos de produto"
+                  aria-label="Gerenciar tipos de produto"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -337,28 +403,106 @@ export default function Estoque() {
               </Field>
               <Field label="Código interno">
                 <Input
-                  required
-                  value={productForm.codigoInterno}
-                  onChange={(event) => setProductForm({ ...productForm, codigoInterno: event.target.value })}
-                  placeholder="Ex: EST-001"
+                  value={editingProduct ? productForm.codigoInterno : ""}
+                  disabled
+                  placeholder={editingProduct ? undefined : "Gerado automaticamente: RAD-00001, RAD-00002..."}
                 />
+                {!editingProduct && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    O código será criado automaticamente ao cadastrar o produto.
+                  </p>
+                )}
               </Field>
               <Field label="Tipo de produto">
-                <Select
-                  value={productForm.categoria}
-                  onValueChange={(value) => setProductForm({ ...productForm, categoria: value as CategoriaEstoque })}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIAS_ESTOQUE.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select
+                    value={productForm.categoria}
+                    onValueChange={(value) => setProductForm({ ...productForm, categoria: value as CategoriaEstoque })}
+                  >
+                    <SelectTrigger className="flex-1"><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
+                    <SelectContent>
+                      {categoriasEstoque.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    onClick={() => setTypeManagerOpen(true)}
+                    title="Criar ou remover tipos de produto"
+                    aria-label="Gerenciar tipos de produto"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </Field>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setProductOpen(false)}>Cancelar</Button>
-                <Button type="submit" disabled={savingProduct}>{savingProduct ? "Salvando..." : editingProduct ? "Salvar alterações" : "Cadastrar produto"}</Button>
+                <Button type="submit" disabled={savingProduct || !productForm.categoria}>{savingProduct ? "Salvando..." : editingProduct ? "Salvar alterações" : "Cadastrar produto"}</Button>
               </DialogFooter>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={typeManagerOpen} onOpenChange={(value) => { setTypeManagerOpen(value); if (!value) setNewTypeName(""); }}>
+          <DialogContent className="sm:max-w-[540px]">
+            <DialogHeader>
+              <DialogTitle>Tipos de produto do almoxarifado</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-5">
+              <form onSubmit={submitTipoProduto} className="space-y-2">
+                <Label htmlFor="novo-tipo-produto">Novo tipo de produto</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="novo-tipo-produto"
+                    value={newTypeName}
+                    onChange={(event) => setNewTypeName(event.target.value)}
+                    placeholder="Ex: EPI, Material elétrico, Limpeza..."
+                    maxLength={80}
+                  />
+                  <Button type="submit" disabled={savingType || !newTypeName.trim()}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    {savingType ? "Adicionando..." : "Adicionar"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Esta lista pertence somente ao Almoxarifado e não utiliza os produtos ou categorias da aba Cadastros.
+                </p>
+              </form>
+
+              <div className="space-y-2">
+                <Label>Tipos cadastrados</Label>
+                <div className="max-h-[300px] space-y-2 overflow-y-auto rounded-lg border p-2">
+                  {tiposProduto.map((tipo) => {
+                    const quantidadeProdutos = produtos.filter((produto) => produto.categoria === tipo.nome).length;
+                    return (
+                      <div key={tipo.id} className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{tipo.nome}</p>
+                          <p className="text-xs text-muted-foreground">{quantidadeProdutos} produto(s) vinculado(s)</p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="shrink-0 text-destructive hover:text-destructive"
+                          onClick={() => void deleteTipoProduto(tipo)}
+                          title={quantidadeProdutos > 0 ? "Remova ou altere os produtos vinculados antes de excluir este tipo" : "Remover tipo"}
+                          aria-label={`Remover tipo ${tipo.nome}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                  {!tiposProduto.length && (
+                    <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+                      Nenhum tipo de produto cadastrado.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 

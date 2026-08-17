@@ -31,7 +31,8 @@ export interface Empresa {
 }
 
 export interface Produto { id: string; nome: string; codigoInterno: string; categoriaEstoque: string; createdAt: string; }
-export type CategoriaEstoque = "Produtos de Piscina" | "Peças" | "Ferramentas";
+export type CategoriaEstoque = string;
+export interface EstoqueTipoProduto { id: string; nome: string; createdAt: string; }
 export interface EstoqueProduto { id: string; nome: string; codigoInterno: string; categoria: CategoriaEstoque; createdAt: string; }
 export type TipoMovimentacaoEstoque = "ENTRADA" | "SAIDA";
 export interface EstoqueMovimentacao { id:string; produtoId:string; tipo:TipoMovimentacaoEstoque; quantidade:number; valorUnitario:number; valorTotal:number; data:string; observacoes?:string|null; pdfUrl?:string|null; pdfName?:string|null; produto:EstoqueProduto; createdAt:string; }
@@ -363,6 +364,7 @@ export const useChapas = () => useApiCrud<Chapa>("chapas", "Chapa");
 export const useClientes = () => useApiCrud<Cliente>("clientes", "Cliente");
 export const useEmpresa = () => useApiCrud<Empresa>("empresa", "Empresa");
 export const useProdutos = () => useApiCrud<Produto>("produtos", "Produto");
+export const useEstoqueTipos = () => useApiCrud<EstoqueTipoProduto>("estoque/tipos", "Tipo de produto do almoxarifado");
 export const useEstoqueProdutos = () => useApiCrud<EstoqueProduto>("estoque/produtos", "Produto do almoxarifado");
 export const useLocais = () => useApiCrud<Local>("locais", "Local");
 export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");

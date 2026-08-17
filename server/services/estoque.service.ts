@@ -2,7 +2,10 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
 
-const CATEGORIAS_ESTOQUE = ["Produtos de Piscina", "Peças", "Ferramentas"] as const;
+const serializeTipoProduto = (item: any) => ({
+  ...item,
+  createdAt: created(item.createdAt),
+});
 
 const serializeProduto = (item: any) => ({
   ...item,
@@ -21,8 +24,15 @@ const serialize = (item: any) => ({
   createdAt: created(item.createdAt),
 });
 
-function categoriaValida(value: unknown) {
-  return CATEGORIAS_ESTOQUE.includes(value as (typeof CATEGORIAS_ESTOQUE)[number]);
+async function resolveCategoria(value: unknown) {
+  const nome = String(value ?? "").trim();
+  if (!nome) throw new AppError(400, "Informe o tipo de produto do almoxarifado.");
+
+  const tipo = await prisma.estoqueTipoProduto.findFirst({
+    where: { nome: { equals: nome, mode: "insensitive" } },
+  });
+  if (!tipo) throw new AppError(400, "Tipo de produto não cadastrado no almoxarifado.");
+  return tipo.nome;
 }
 
 async function saldoProduto(produtoId: string, excludeId?: string) {
@@ -37,6 +47,48 @@ async function saldoProduto(produtoId: string, excludeId?: string) {
 }
 
 export const estoqueService = {
+  async listTiposProduto() {
+    return (
+      await prisma.estoqueTipoProduto.findMany({ orderBy: { nome: "asc" } })
+    ).map(serializeTipoProduto);
+  },
+
+  async createTipoProduto(data: any) {
+    const nome = String(data.nome ?? "").trim();
+    if (!nome) throw new AppError(400, "Informe o nome do tipo de produto.");
+
+    const existente = await prisma.estoqueTipoProduto.findFirst({
+      where: { nome: { equals: nome, mode: "insensitive" } },
+    });
+    if (existente) throw new AppError(409, "Este tipo de produto já está cadastrado no almoxarifado.");
+
+    const item = await prisma.estoqueTipoProduto.create({
+      data: {
+        ...(data.id ? { id: String(data.id) } : {}),
+        nome,
+        ...(data.createdAt ? { createdAt: new Date(data.createdAt) } : {}),
+      },
+    });
+    return serializeTipoProduto(item);
+  },
+
+  async removeTipoProduto(id: string) {
+    const item = await prisma.estoqueTipoProduto.findUnique({ where: { id } });
+    if (!item) throw new AppError(404, "Tipo de produto não encontrado.");
+
+    const produtosVinculados = await prisma.estoqueProduto.count({
+      where: { categoria: item.nome },
+    });
+    if (produtosVinculados > 0) {
+      throw new AppError(
+        409,
+        `O tipo "${item.nome}" está sendo usado por ${produtosVinculados} produto(s) e não pode ser removido.`,
+      );
+    }
+
+    await prisma.estoqueTipoProduto.delete({ where: { id } });
+  },
+
   async listProdutos() {
     return (
       await prisma.estoqueProduto.findMany({
@@ -46,45 +98,59 @@ export const estoqueService = {
   },
 
   async createProduto(data: any) {
-    if (!categoriaValida(data.categoria)) throw new AppError(400, "Categoria do almoxarifado inválida.");
-    const codigoInterno = String(data.codigoInterno ?? "").trim();
+    const categoria = await resolveCategoria(data.categoria);
     const nome = String(data.nome ?? "").trim();
+    const { createdAt, codigoInterno: _codigoIgnorado, ...rest } = data;
 
-    const existente = await prisma.estoqueProduto.findFirst({ where: { codigoInterno } });
-    if (existente) throw new AppError(409, "Já existe um produto do almoxarifado com este código interno.");
+    // O código do produto é controlado exclusivamente pelo Almoxarifado.
+    // Um advisory lock evita que dois cadastros simultâneos recebam o mesmo número.
+    const item = await prisma.$transaction(async (tx) => {
+      await tx.$queryRawUnsafe(
+        "SELECT pg_advisory_xact_lock(hashtext('radasa_almoxarifado_codigo_produto'))",
+      );
 
-    const { createdAt, ...rest } = data;
-    const item = await prisma.estoqueProduto.create({
-      data: {
-        ...rest,
-        nome,
-        codigoInterno,
-        ...(createdAt ? { createdAt: new Date(createdAt) } : {}),
-      },
+      const codigos = await tx.estoqueProduto.findMany({
+        where: { codigoInterno: { startsWith: "RAD-" } },
+        select: { codigoInterno: true },
+      });
+
+      const maiorNumero = codigos.reduce((maior: number, produto: { codigoInterno: string }) => {
+        const match = /^RAD-(\d+)$/.exec(produto.codigoInterno.trim().toUpperCase());
+        if (!match) return maior;
+        const numero = Number(match[1]);
+        return Number.isFinite(numero) ? Math.max(maior, numero) : maior;
+      }, 0);
+
+      const codigoInterno = `RAD-${String(maiorNumero + 1).padStart(5, "0")}`;
+
+      return tx.estoqueProduto.create({
+        data: {
+          ...rest,
+          nome,
+          codigoInterno,
+          categoria,
+          ...(createdAt ? { createdAt: new Date(createdAt) } : {}),
+        },
+      });
     });
+
     return serializeProduto(item);
   },
 
   async updateProduto(id: string, data: any) {
     const atual = await prisma.estoqueProduto.findUnique({ where: { id } });
     if (!atual) throw new AppError(404, "Produto do almoxarifado não encontrado.");
-    if (data.categoria !== undefined && !categoriaValida(data.categoria)) {
-      throw new AppError(400, "Categoria do almoxarifado inválida.");
-    }
 
-    const codigoInterno = data.codigoInterno === undefined ? atual.codigoInterno : String(data.codigoInterno).trim();
-    const duplicado = await prisma.estoqueProduto.findFirst({
-      where: { codigoInterno, id: { not: id } },
-    });
-    if (duplicado) throw new AppError(409, "Já existe um produto do almoxarifado com este código interno.");
-
-    const { createdAt, ...rest } = data;
+    const categoria = data.categoria === undefined ? atual.categoria : await resolveCategoria(data.categoria);
+    const { createdAt: _createdAt, codigoInterno: _codigoIgnorado, ...rest } = data;
     const item = await prisma.estoqueProduto.update({
       where: { id },
       data: {
         ...rest,
+        categoria,
         ...(data.nome !== undefined ? { nome: String(data.nome).trim() } : {}),
-        ...(data.codigoInterno !== undefined ? { codigoInterno } : {}),
+        // Código interno é imutável após a criação para preservar a sequência RAD-00001...
+        codigoInterno: atual.codigoInterno,
       },
     });
     return serializeProduto(item);
