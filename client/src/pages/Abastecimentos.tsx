@@ -3158,52 +3158,70 @@ export default function Abastecimentos() {
     };
   }, [filteredItems, produtos]);
 
-  const mediaKmLitro = useMemo(() => {
+  const mediaKmLitroResumo = useMemo(() => {
     let kmRodados = 0;
-    let litrosAbastecidos = 0;
+    let litrosDiesel = 0;
+    let placasCalculadas = 0;
     const porVeiculo = new Map<string, Abastecimento[]>();
 
-    // A média deve considerar somente os lançamentos que passaram pelos filtros atuais.
-    // Para cada placa, o primeiro e o último odômetro do período definem os KM rodados.
+    // IMPORTANTE: a média usa exatamente o mesmo recorte da tabela. Portanto,
+    // qualquer filtro ativo (data, posto, placa, produto etc.) altera imediatamente
+    // os registros disponíveis para a conta.
     filteredItems.forEach((item) => {
+      const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+
+      // ARLA não participa da média de KM/L nem como litros e nem como referência
+      // de odômetro. Uma NF somente de ARLA é totalmente ignorada neste cálculo.
+      if (combustiveis.dieselLitros <= 0) return;
+
       const veiculo = resolveAbastecimentoVehicle(item, veiculos);
       const plateKey = normalizeVehicleKey(veiculo?.placa || item.placaXml) || item.veiculoId;
       porVeiculo.set(plateKey, [...(porVeiculo.get(plateKey) ?? []), item]);
     });
 
-    porVeiculo.forEach((registros) => {
-      // Lançamentos sem odômetro continuam contando nos litros do período, mas não
-      // podem ser usados como referência para o primeiro/último KM da placa.
-      const cronologicosComOdometro = registros
+    porVeiculo.forEach((registrosDiesel) => {
+      const cronologicosComOdometro = registrosDiesel
         .filter((item) => Number(item.hodometro) > 0)
-        .sort(
-          (a, b) =>
-            a.dataEmissao.localeCompare(b.dataEmissao) ||
-            a.hodometro - b.hodometro ||
-            a.createdAt.localeCompare(b.createdAt),
-        );
+        .sort((a, b) => {
+          const dataA = abastecimentoDateKey(a.dataEmissao);
+          const dataB = abastecimentoDateKey(b.dataEmissao);
+          return (
+            dataA.localeCompare(dataB) ||
+            Number(a.hodometro) - Number(b.hodometro) ||
+            String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""))
+          );
+        });
 
+      // Sem dois odômetros válidos dentro do recorte FILTRADO não existe distância
+      // suficiente para calcular a média daquela placa. Não reutilizamos KM de fora
+      // do período nem mantemos o resultado anterior.
       if (cronologicosComOdometro.length < 2) return;
 
       const primeiro = cronologicosComOdometro[0];
       const ultimo = cronologicosComOdometro[cronologicosComOdometro.length - 1];
-      // Odômetros crescem com o uso do veículo; usamos a diferença positiva entre
-      // o último e o primeiro lançamento com KM informado dentro do intervalo filtrado.
-      const diferencaKm = ultimo.hodometro - primeiro.hodometro;
-      const litrosDaPlacaNoPeriodo = registros.reduce(
+      const diferencaKm = Math.abs(Number(ultimo.hodometro) - Number(primeiro.hodometro));
+      const litrosDaPlacaNoFiltro = registrosDiesel.reduce(
         (total, abastecimento) =>
           total + abastecimentoFuelBreakdown(abastecimento, produtos).dieselLitros,
         0,
       );
 
-      if (diferencaKm > 0 && litrosDaPlacaNoPeriodo > 0) {
+      if (diferencaKm > 0 && litrosDaPlacaNoFiltro > 0) {
         kmRodados += diferencaKm;
-        litrosAbastecidos += litrosDaPlacaNoPeriodo;
+        litrosDiesel += litrosDaPlacaNoFiltro;
+        placasCalculadas += 1;
       }
     });
 
-    return litrosAbastecidos > 0 ? kmRodados / litrosAbastecidos : 0;
+    return {
+      valor: litrosDiesel > 0 ? kmRodados / litrosDiesel : 0,
+      kmRodados,
+      litrosDiesel,
+      placasCalculadas,
+    };
   }, [filteredItems, produtos, veiculos]);
+
+  const mediaKmLitro = mediaKmLitroResumo.valor;
 
   const filterOptions = (key: keyof Filters): string[] => {
     // As opções de cada coluna também respeitam os demais filtros ativos.
@@ -3421,6 +3439,11 @@ export default function Abastecimentos() {
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Gauge className="h-4 w-4" /> Média de KM/L</p>
             <p className="mt-2 text-2xl font-bold">{mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {mediaKmLitroResumo.placasCalculadas > 0
+                ? `${mediaKmLitroResumo.kmRodados.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km ÷ ${mediaKmLitroResumo.litrosDiesel.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} L Diesel · ${mediaKmLitroResumo.placasCalculadas} placa(s)`
+                : "Sem dois odômetros Diesel válidos no recorte filtrado."}
+            </p>
           </div>
         </div>
 
