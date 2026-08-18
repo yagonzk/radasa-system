@@ -21,6 +21,22 @@ const upload = multer({
 
 export const abastecimentosXmlRoutes = Router();
 
+function normalizeFuelText(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function xmlProductKind(product: any): "DIESEL" | "ARLA" | "OUTRO" {
+  const text = normalizeFuelText(
+    [product?.nome, product?.combustivel?.descricaoAnp].filter(Boolean).join(" "),
+  );
+  if (/\barla(?:\s*32)?\b|agente\s+redutor|ureia\s+automotiva/.test(text)) return "ARLA";
+  if (/\bdiesel\b|\bs\s*-?\s*10\b|\bs10\b/.test(text)) return "DIESEL";
+  return "OUTRO";
+}
+
 abastecimentosXmlRoutes.post(
   "/interpretar",
   upload.array("arquivos", 1000),
@@ -221,14 +237,30 @@ abastecimentosXmlRoutes.post(
           invalidos: visibleResults.filter((item) => item.status === "INVALIDO")
             .length,
           jaCadastrados,
+          // "Litros" operacionais representam somente combustível Diesel.
+          // ARLA é mantido separado e nunca participa da média de KM/L.
           litros: visibleResults.reduce(
             (sum: number, item: any) =>
               sum +
               (item.documento?.produtos ?? []).reduce(
-                (
-                  productSum: number,
-                  product: { quantidade?: number | string | null },
-                ) => productSum + Number(product.quantidade ?? 0),
+                (productSum: number, product: any) =>
+                  productSum +
+                  (xmlProductKind(product) === "DIESEL"
+                    ? Number(product.quantidade ?? 0)
+                    : 0),
+                0,
+              ),
+            0,
+          ),
+          litrosArla: visibleResults.reduce(
+            (sum: number, item: any) =>
+              sum +
+              (item.documento?.produtos ?? []).reduce(
+                (productSum: number, product: any) =>
+                  productSum +
+                  (xmlProductKind(product) === "ARLA"
+                    ? Number(product.quantidade ?? 0)
+                    : 0),
                 0,
               ),
             0,

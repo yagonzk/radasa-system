@@ -2,6 +2,10 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { parseDateOnly } from "../utils/date.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
+import {
+  resolveOrCreatePostoFromEmitente,
+  syncHistoricalAbastecimentoPostos,
+} from "./abastecimento-posto.service.js";
 
 const include = { produtos: true } as const;
 
@@ -352,7 +356,16 @@ async function importarItem(
     };
   }
 
-  await ensureClienteVeiculo(tx, input.clienteId, input.veiculoId);
+  const resolvedClienteId = await resolveOrCreatePostoFromEmitente(
+    tx,
+    input,
+    input.clienteId,
+  );
+  if (!resolvedClienteId) {
+    throw new AppError(400, "Não foi possível identificar o posto emitente da NF-e.");
+  }
+
+  await ensureClienteVeiculo(tx, resolvedClienteId, input.veiculoId);
   const resolvedProducts = await buildImportedProducts(tx, input.produtos);
   const produtos = resolvedProducts.produtos;
 
@@ -360,6 +373,7 @@ async function importarItem(
     ...buildHeader(
       {
         ...input,
+        clienteId: resolvedClienteId,
         chaveNfe,
       },
       produtos,
@@ -409,6 +423,15 @@ async function importarItem(
 
 export const abastecimentosService = {
   async list() {
+    // Corrige automaticamente registros antigos que ficaram associados ao posto
+    // errado (ex.: Pasqualotto) usando o CNPJ/nome do emitente já salvo na NF-e.
+    // Falhas nessa manutenção nunca podem impedir a listagem dos abastecimentos.
+    try {
+      await syncHistoricalAbastecimentoPostos();
+    } catch (error) {
+      console.error("[Abastecimentos] Falha ao sincronizar postos históricos:", error);
+    }
+
     return (await prisma.abastecimento.findMany({
       include,
       orderBy: [{ dataEmissao: "desc" }, { createdAt: "desc" }, { hodometro: "desc" }],
@@ -423,10 +446,22 @@ export const abastecimentosService = {
 
   async create(input: any) {
     const produtos = buildProducts(input.produtos);
-    await ensureReferences(input.clienteId, input.veiculoId, produtos.map((p) => p.produtoId));
+    const resolvedClienteId = await prisma.$transaction((tx) =>
+      resolveOrCreatePostoFromEmitente(tx, input, input.clienteId),
+    );
+    if (!resolvedClienteId) {
+      throw new AppError(400, "Selecione o posto/cliente do abastecimento.");
+    }
+
+    const normalizedInput = { ...input, clienteId: resolvedClienteId };
+    await ensureReferences(
+      resolvedClienteId,
+      input.veiculoId,
+      produtos.map((p) => p.produtoId),
+    );
     return serialize(await prisma.abastecimento.create({
       data: {
-        ...buildHeader(input, produtos),
+        ...buildHeader(normalizedInput, produtos),
         produtos: { create: produtos },
       },
       include,
@@ -484,6 +519,14 @@ export const abastecimentosService = {
       pdfUrl: input.pdfUrl === undefined ? current.pdfUrl : input.pdfUrl,
       xmlUrl: input.xmlUrl === undefined ? current.xmlUrl : input.xmlUrl,
     };
+    const resolvedClienteId = await prisma.$transaction((tx) =>
+      resolveOrCreatePostoFromEmitente(tx, merged, merged.clienteId),
+    );
+    if (!resolvedClienteId) {
+      throw new AppError(400, "Selecione o posto/cliente do abastecimento.");
+    }
+    merged.clienteId = resolvedClienteId;
+
     const produtos = buildProducts(merged.produtos);
     await ensureReferences(merged.clienteId, merged.veiculoId, produtos.map((p) => p.produtoId));
     return serialize(await prisma.$transaction(async (tx: any) => {

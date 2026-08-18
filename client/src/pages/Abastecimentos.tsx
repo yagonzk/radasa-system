@@ -7,6 +7,8 @@ import {
   useVeiculos,
   type Abastecimento,
   type AbastecimentoProduto,
+  type Cliente,
+  type Produto,
   type Veiculo,
 } from "@/lib/store";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
@@ -193,6 +195,119 @@ function resolveAbastecimentoVehicle(item: Abastecimento, vehicles: Veiculo[]) {
   );
 
   return enriched ?? linked ?? vehicles.find((vehicle) => normalizeVehicleKey(vehicle.placa) === plateKey);
+}
+
+function onlyDigits(value: unknown) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function resolveAbastecimentoPosto(
+  item: Abastecimento,
+  clientes: Cliente[],
+): Cliente | undefined {
+  const emitenteCnpj = onlyDigits(item.emitenteCnpj);
+  const linked = clientes.find((cliente) => cliente.id === item.clienteId);
+  const linkedMatchesEmitente =
+    !emitenteCnpj || onlyDigits(linked?.cnpj) === emitenteCnpj;
+
+  if (emitenteCnpj.length === 14) {
+    const exact = clientes.find(
+      (cliente) => onlyDigits(cliente.cnpj) === emitenteCnpj,
+    );
+    if (exact) return exact;
+  }
+
+  const emitenteNome = String(
+    item.emitenteNomeFantasia || item.emitenteRazaoSocial || "",
+  ).trim();
+
+  if (emitenteNome || emitenteCnpj) {
+    // Mesmo antes de o hook de clientes atualizar após o backfill do backend,
+    // mostramos o posto oficial preservado na própria NF-e.
+    return {
+      id: linkedMatchesEmitente && linked ? linked.id : item.clienteId,
+      nomeFantasia: String(item.emitenteNomeFantasia || emitenteNome || "Posto não identificado"),
+      razaoSocial: String(item.emitenteRazaoSocial || emitenteNome || ""),
+      codigoInterno: linkedMatchesEmitente ? linked?.codigoInterno || "" : "",
+      cnpj: emitenteCnpj || (linkedMatchesEmitente ? linked?.cnpj || "" : ""),
+      email: linkedMatchesEmitente ? linked?.email || "" : "",
+      telefone: linkedMatchesEmitente ? linked?.telefone || "" : "",
+      enderecoFiscal:
+        [item.emitenteEndereco, item.emitenteCidade, item.emitenteUf]
+          .filter(Boolean)
+          .join(" - ") ||
+        (linkedMatchesEmitente ? linked?.enderecoFiscal || "" : ""),
+      createdAt: linkedMatchesEmitente ? linked?.createdAt || item.createdAt : item.createdAt,
+    };
+  }
+
+  return linked;
+}
+
+type FuelKind = "DIESEL" | "ARLA" | "OUTRO";
+
+function classifyFuelLabel(value: unknown): FuelKind {
+  const text = normalize(String(value ?? ""));
+  if (/\barla(?:\s*32)?\b|agente\s+redutor|ureia\s+automotiva/.test(text)) return "ARLA";
+  if (/\bdiesel\b|\bs\s*-?\s*10\b|\bs10\b/.test(text)) return "DIESEL";
+  return "OUTRO";
+}
+
+function classifyProduct(produto?: Produto | null): FuelKind {
+  if (!produto) return "OUTRO";
+  return classifyFuelLabel(`${produto.nome} ${produto.codigoInterno}`);
+}
+
+function abastecimentoFuelBreakdown(
+  item: Abastecimento,
+  produtos: Produto[],
+) {
+  let dieselLitros = 0;
+  let dieselValor = 0;
+  let arlaLitros = 0;
+  let arlaValor = 0;
+  let outrosLitros = 0;
+  let outrosValor = 0;
+
+  (item.produtos ?? []).forEach((entry) => {
+    const cadastro = produtos.find((produto) => produto.id === entry.produtoId);
+    const kind = classifyProduct(cadastro);
+    const litros = Number(entry.quantidadeLitros || 0);
+    const valor = Number(entry.valorTotal || 0);
+
+    if (kind === "DIESEL") {
+      dieselLitros += litros;
+      dieselValor += valor;
+    } else if (kind === "ARLA") {
+      arlaLitros += litros;
+      arlaValor += valor;
+    } else {
+      outrosLitros += litros;
+      outrosValor += valor;
+    }
+  });
+
+  return {
+    dieselLitros,
+    dieselValor,
+    arlaLitros,
+    arlaValor,
+    outrosLitros,
+    outrosValor,
+  };
+}
+
+function batchFuelKind(product: BatchXmlRow["produtos"][number]): FuelKind {
+  return classifyFuelLabel(
+    [
+      product.cadastroNome,
+      product.cadastroCodigo,
+      product.produtoXml.nome,
+      product.produtoXml.combustivel?.descricaoAnp,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
 }
 
 function fileToDataUrl(file: File) {
@@ -647,23 +762,14 @@ function BatchXmlDialog({
 
     if (existing && !correcaoSincronizacao) return null;
 
-    const cliente =
-      clientes.find(
-        (item) =>
-          supplierCnpj && onlyDigits(item.cnpj) === supplierCnpj,
-      ) ??
-      clientes.find((item) => {
-        if (!normalizedSupplier) return false;
-        const candidate = normalize(
-          `${item.nomeFantasia ?? ""} ${item.razaoSocial ?? ""}`,
-        );
-        const candidateTrimmed = candidate.trim();
-        return (
-          candidateTrimmed.length >= 3 &&
-          (candidate.includes(normalizedSupplier) ||
-            normalizedSupplier.includes(candidateTrimmed))
-        );
-      });
+    const cliente = supplierCnpj
+      ? clientes.find((item) => onlyDigits(item.cnpj) === supplierCnpj)
+      : clientes.find((item) => {
+          if (!normalizedSupplier) return false;
+          return [item.nomeFantasia, item.razaoSocial].some(
+            (candidate) => normalize(String(candidate ?? "")).trim() === normalizedSupplier.trim(),
+          );
+        });
 
     const veiculo = normalizedPlate
       ? veiculos.find(
@@ -683,6 +789,7 @@ function BatchXmlDialog({
         .split(/[^a-z0-9]+/)
         .filter((token) => token.length >= 3);
 
+      const sourceKind = classifyFuelLabel(produtoPdf.descricao);
       const ranked = produtosCombustivel
         .map((produto) => {
           const targetCode = normalize(String(produto.codigoInterno ?? "")).replace(
@@ -690,11 +797,19 @@ function BatchXmlDialog({
             "",
           );
           const targetName = normalize(produto.nome);
+          const targetKind = classifyProduct(produto);
           const targetTokens = new Set(
             targetName
               .split(/[^a-z0-9]+/)
               .filter((token) => token.length >= 3),
           );
+          // ARLA e Diesel nunca podem ser associados entre si.
+          if (
+            (sourceKind === "ARLA" || sourceKind === "DIESEL") &&
+            targetKind !== sourceKind
+          ) {
+            return { produto, score: -1000 };
+          }
           let score = 0;
           if (sourceCode && targetCode && sourceCode === targetCode) score += 100;
           if (sourceName && targetName && sourceName === targetName) score += 90;
@@ -1394,7 +1509,8 @@ function BatchXmlDialog({
         "CNPJ Emitente",
         "Placa",
         "Odometro",
-        "Litros",
+        "Litros Diesel",
+        "Litros ARLA",
         "Valor calculado",
         "Pendencias",
         "Mensagem",
@@ -1403,7 +1519,19 @@ function BatchXmlDialog({
         .join(";"),
       ...items.map((item) => {
         const litros = item.produtos.reduce(
-          (sum, product) => sum + parseNumber(product.quantidadeLitros),
+          (sum, product) =>
+            sum +
+            (batchFuelKind(product) === "DIESEL"
+              ? parseNumber(product.quantidadeLitros)
+              : 0),
+          0,
+        );
+        const litrosArla = item.produtos.reduce(
+          (sum, product) =>
+            sum +
+            (batchFuelKind(product) === "ARLA"
+              ? parseNumber(product.quantidadeLitros)
+              : 0),
           0,
         );
         const valorEditado = item.produtos.reduce(
@@ -1428,6 +1556,7 @@ function BatchXmlDialog({
           item.documento?.placa ?? "",
           parseNumber(item.hodometro) > 0 ? item.hodometro : "",
           litros.toFixed(3).replace(".", ","),
+          litrosArla.toFixed(3).replace(".", ","),
           Math.max(
             0,
             valorEditado - Number(item.documento?.totais.desconto || 0),
@@ -1467,7 +1596,24 @@ function BatchXmlDialog({
       sum +
       item.produtos.reduce(
         (productSum, product) =>
-          productSum + parseNumber(product.quantidadeLitros),
+          productSum +
+          (batchFuelKind(product) === "DIESEL"
+            ? parseNumber(product.quantidadeLitros)
+            : 0),
+        0,
+      ),
+    0,
+  );
+
+  const totalArlaLiters = items.reduce(
+    (sum, item) =>
+      sum +
+      item.produtos.reduce(
+        (productSum, product) =>
+          productSum +
+          (batchFuelKind(product) === "ARLA"
+            ? parseNumber(product.quantidadeLitros)
+            : 0),
         0,
       ),
     0,
@@ -1623,12 +1769,13 @@ function BatchXmlDialog({
 
         {!!items.length && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
               <BatchSummary label="Total" value={items.length} />
               <BatchSummary label="Completos" value={completeCount} tone="success" />
               <BatchSummary label="Pendentes" value={pendingCount} tone="warning" />
               <BatchSummary label="Inválidos" value={invalidCount} tone="error" />
-              <BatchSummary label="Litros" value={formatLitros(totalLiters)} />
+              <BatchSummary label="Diesel" value={formatLitros(totalLiters)} />
+              <BatchSummary label="ARLA" value={formatLitros(totalArlaLiters)} />
               <BatchSummary label="Valor" value={formatBRL(totalValue)} />
             </div>
 
@@ -2112,15 +2259,19 @@ function AbastecimentoForm({
 
   const matchCliente = (result: DocumentoAbastecimentoInterpretado) => {
     const cnpj = digits(result.fornecedorCnpj ?? "");
-    const name = normalizeText(result.fornecedorNome ?? "");
-    return clientes.find((cliente) => {
-      const clienteCnpj = digits(
-        String((cliente as typeof cliente & { cnpj?: string }).cnpj ?? ""),
+    if (cnpj) {
+      return clientes.find(
+        (cliente) => digits(String(cliente.cnpj ?? "")) === cnpj,
       );
-      if (cnpj && clienteCnpj === cnpj) return true;
-      const fantasia = normalizeText(cliente.nomeFantasia);
-      return name.length >= 4 && (fantasia.includes(name) || name.includes(fantasia));
-    });
+    }
+
+    const name = normalizeText(result.fornecedorNome ?? "");
+    if (!name) return undefined;
+    return clientes.find(
+      (cliente) =>
+        normalizeText(cliente.nomeFantasia) === name ||
+        normalizeText(cliente.razaoSocial ?? "") === name,
+    );
   };
 
   const matchVeiculo = (plate?: string) => {
@@ -2547,14 +2698,14 @@ function AbastecimentoForm({
 
         <div className="grid min-w-0 gap-4 py-2 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Cliente *</Label>
+            <Label>Posto *</Label>
             <SearchableSelect
               value={form.clienteId}
               onChange={(value) => setForm((current) => ({ ...current, clienteId: value }))}
               options={clienteOptions}
-              placeholder="Selecione o cliente"
-              searchPlaceholder="Pesquisar cliente..."
-              emptyText="Nenhum cliente encontrado."
+              placeholder="Selecione o posto"
+              searchPlaceholder="Pesquisar posto..."
+              emptyText="Nenhum posto encontrado."
             />
           </div>
           <div className="space-y-1.5">
@@ -2849,15 +3000,16 @@ export default function Abastecimentos() {
   const filteredItems = useMemo(() => {
     return [...items]
       .filter((item) => {
-        const cliente = clientes.find((entry) => entry.id === item.clienteId);
+        const cliente = resolveAbastecimentoPosto(item, clientes);
         const veiculo = resolveAbastecimentoVehicle(item, veiculos);
         const nomesProdutos = (item.produtos ?? []).map((entry) => {
           const produto = produtos.find((candidate) => candidate.id === entry.produtoId);
           return `${produto?.nome ?? ""} ${produto?.codigoInterno ?? ""}`;
         }).join(" ");
-        const litros = (item.produtos ?? []).reduce((sum, entry) => sum + entry.quantidadeLitros, 0);
+        const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+        const litros = combustiveis.dieselLitros;
         const valorUnitarioMedio = litros > 0
-          ? (item.produtos ?? []).reduce((sum, entry) => sum + entry.valorTotal, 0) / litros
+          ? combustiveis.dieselValor / litros
           : 0;
 
         if (
@@ -2906,9 +3058,16 @@ export default function Abastecimentos() {
   }, [currentPage, totalPages]);
 
   const totals = useMemo(() => {
-    const litros = filteredItems.reduce(
-      (sum, item) => sum + (item.produtos ?? []).reduce((productSum, produto) => productSum + produto.quantidadeLitros, 0),
-      0
+    const combustiveis = filteredItems.reduce(
+      (acc, item) => {
+        const atual = abastecimentoFuelBreakdown(item, produtos);
+        acc.dieselLitros += atual.dieselLitros;
+        acc.dieselValor += atual.dieselValor;
+        acc.arlaLitros += atual.arlaLitros;
+        acc.arlaValor += atual.arlaValor;
+        return acc;
+      },
+      { dieselLitros: 0, dieselValor: 0, arlaLitros: 0, arlaValor: 0 },
     );
     const valor = filteredItems.reduce((sum, item) => sum + item.valorTotal, 0);
     const descontos = filteredItems.reduce(
@@ -2916,12 +3075,17 @@ export default function Abastecimentos() {
       0,
     );
     return {
-      litros,
+      litros: combustiveis.dieselLitros,
+      litrosArla: combustiveis.arlaLitros,
+      valorDiesel: combustiveis.dieselValor,
+      valorArla: combustiveis.arlaValor,
       valor,
       descontos,
-      media: litros > 0 ? valor / litros : 0,
+      media: combustiveis.dieselLitros > 0
+        ? combustiveis.dieselValor / combustiveis.dieselLitros
+        : 0,
     };
-  }, [filteredItems]);
+  }, [filteredItems, produtos]);
 
   const mediaKmLitro = useMemo(() => {
     let kmRodados = 0;
@@ -2957,11 +3121,7 @@ export default function Abastecimentos() {
       const diferencaKm = ultimo.hodometro - primeiro.hodometro;
       const litrosDaPlacaNoPeriodo = registros.reduce(
         (total, abastecimento) =>
-          total +
-          (abastecimento.produtos ?? []).reduce(
-            (subtotal, produto) => subtotal + produto.quantidadeLitros,
-            0,
-          ),
+          total + abastecimentoFuelBreakdown(abastecimento, produtos).dieselLitros,
         0,
       );
 
@@ -2972,10 +3132,19 @@ export default function Abastecimentos() {
     });
 
     return litrosAbastecidos > 0 ? kmRodados / litrosAbastecidos : 0;
-  }, [filteredItems, veiculos]);
+  }, [filteredItems, produtos, veiculos]);
 
   const filterOptions = (key: keyof Filters): string[] => {
-    if (key === "cliente") return clientes.map((item) => formatClienteResumo(item));
+    if (key === "cliente") {
+      return Array.from(
+        new Set(
+          items
+            .map((item) => resolveAbastecimentoPosto(item, clientes))
+            .filter((item): item is Cliente => Boolean(item))
+            .map((item) => formatClienteResumo(item)),
+        ),
+      ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+    }
     if (key === "produto") return produtos.map((item) => `${item.nome} - ${item.codigoInterno}`);
     if (key === "placa") {
       return Array.from(
@@ -2990,11 +3159,14 @@ export default function Abastecimentos() {
       ).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
     }
     if (key === "subcategoriaVeiculo") return ["Caminhão", "Carro", "Moto", ...(veiculos.some((item) => !item.subcategoria) ? ["Sem categoria"] : [])];
-    if (key === "litros") return Array.from(new Set<string>(items.map((item) => formatLitros((item.produtos ?? []).reduce((sum, produto) => sum + produto.quantidadeLitros, 0)))));
+    if (key === "litros") return Array.from(new Set<string>(items.map((item) => formatLitros(abastecimentoFuelBreakdown(item, produtos).dieselLitros))));
     if (key === "valorUnitario") return Array.from(new Set<string>(items.map((item) => {
-      const litros = (item.produtos ?? []).reduce((sum, produto) => sum + produto.quantidadeLitros, 0);
-      const bruto = (item.produtos ?? []).reduce((sum, produto) => sum + produto.valorTotal, 0);
-      return formatBRL(litros > 0 ? bruto / litros : 0);
+      const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+      return formatBRL(
+        combustiveis.dieselLitros > 0
+          ? combustiveis.dieselValor / combustiveis.dieselLitros
+          : 0,
+      );
     })));
     if (key === "valorDesconto") return Array.from(new Set<string>(items.map((item) => formatBRL(item.valorDesconto))));
     if (key === "valorTotal") return Array.from(new Set<string>(items.map((item) => formatBRL(item.valorTotal))));
@@ -3003,10 +3175,10 @@ export default function Abastecimentos() {
   };
 
   const columns: Array<{ key: keyof Filters; label: string; align?: "right"; date?: boolean }> = [
-    { key: "cliente", label: "Cliente" },
+    { key: "cliente", label: "Posto" },
     { key: "emissao", label: "Emissão", date: true },
     { key: "produto", label: "Produtos" },
-    { key: "litros", label: "Litros", align: "right" },
+    { key: "litros", label: "Diesel / ARLA", align: "right" },
     { key: "valorUnitario", label: "Valor unitário", align: "right" },
     { key: "valorDesconto", label: "Valor desconto", align: "right" },
     { key: "valorTotal", label: "Valor total", align: "right" },
@@ -3043,20 +3215,31 @@ export default function Abastecimentos() {
     }
 
     const metricas = [
-      relatorioOpcoes.totalLitros && ["Total de litros", formatLitros(totals.litros)],
+      relatorioOpcoes.totalLitros && ["Litros Diesel", formatLitros(totals.litros)],
+      relatorioOpcoes.totalLitros && ["Litros ARLA", formatLitros(totals.litrosArla)],
       relatorioOpcoes.totalGasto && ["Valor total", formatBRL(totals.valor)],
-      relatorioOpcoes.custoLitro && ["Custo médio por litro", formatBRL(totals.media)],
+      relatorioOpcoes.custoLitro && ["Custo médio Diesel/L", formatBRL(totals.media)],
       relatorioOpcoes.mediaKmLitro && ["Média de KM/L", `${mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L`],
-      relatorioOpcoes.postos && ["Postos no período", String(new Set(filteredItems.map((item) => item.clienteId)).size)],
+      relatorioOpcoes.postos && [
+        "Postos no período",
+        String(
+          new Set(
+            filteredItems.map((item) => {
+              const posto = resolveAbastecimentoPosto(item, clientes);
+              return onlyDigits(item.emitenteCnpj) || posto?.id || posto?.nomeFantasia || item.clienteId;
+            }),
+          ).size,
+        ),
+      ],
     ].filter(Boolean) as Array<[string, string]>;
     const linhas = filteredItems.map((item) => {
-      const cliente = clientes.find((entry) => entry.id === item.clienteId);
+      const cliente = resolveAbastecimentoPosto(item, clientes);
       const veiculo = resolveAbastecimentoVehicle(item, veiculos);
-      const litros = (item.produtos ?? []).reduce((sum, produto) => sum + produto.quantidadeLitros, 0);
-      return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia ?? "Não identificado")}</td><td>${escapeReportText(formatVehiclePlateModel(veiculo, item.placaXml))}</td><td>${escapeReportText(formatSubcategoriaVeiculo(veiculo?.subcategoria))}</td><td>${escapeReportText(formatLitros(litros))}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`;
+      const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+      return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia ?? "Não identificado")}</td><td>${escapeReportText(formatVehiclePlateModel(veiculo, item.placaXml))}</td><td>${escapeReportText(formatSubcategoriaVeiculo(veiculo?.subcategoria))}</td><td>${escapeReportText(formatLitros(combustiveis.dieselLitros))}</td><td>${escapeReportText(formatLitros(combustiveis.arlaLitros))}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`;
     }).join("");
 
-    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Abastecimentos</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:9px;border:1px solid #dbe3f0}td:nth-child(6),td:nth-child(7){text-align:right}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}}</style></head><body><h1>Relatório de Abastecimentos</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${filteredItems.length} registro(s) conforme os filtros ativos.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Notas fiscais</h2><table><thead><tr><th>NF</th><th>Emissão</th><th>Posto/Cliente</th><th>Placa / Modelo</th><th>Subcategoria</th><th>Litros</th><th>Valor total</th></tr></thead><tbody>${linhas}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
+    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Abastecimentos</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:9px;border:1px solid #dbe3f0}td:nth-child(6),td:nth-child(7),td:nth-child(8){text-align:right}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}}</style></head><body><h1>Relatório de Abastecimentos</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${filteredItems.length} registro(s) conforme os filtros ativos.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Notas fiscais</h2><table><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa / Modelo</th><th>Subcategoria</th><th>Diesel</th><th>ARLA</th><th>Valor total</th></tr></thead><tbody>${linhas}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
     reportWindow.document.close();
     setRelatorioOpen(false);
   };
@@ -3080,10 +3263,14 @@ export default function Abastecimentos() {
           </div>
         </div>
 
-        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4" /> Total de litros</p>
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4" /> Litros Diesel</p>
             <p className="mt-2 whitespace-nowrap text-2xl font-bold tabular-nums">{formatLitros(totals.litros)}</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4" /> Litros ARLA</p>
+            <p className="mt-2 whitespace-nowrap text-2xl font-bold tabular-nums">{formatLitros(totals.litrosArla)}</p>
           </div>
           <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Banknote className="h-4 w-4 shrink-0" /> <span className="truncate">Valor total</span></p>
@@ -3120,7 +3307,7 @@ export default function Abastecimentos() {
             </div>
           </div>
           <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4 shrink-0" /> <span className="truncate">Média de R$/L</span></p>
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4 shrink-0" /> <span className="truncate">Média R$/L Diesel</span></p>
             <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
               <p className="min-w-0 whitespace-nowrap text-2xl font-bold tabular-nums">
                 {visibleSummaryValues.mediaLitro ? formatBRL(totals.media) : "R$ ••••••"}
@@ -3230,16 +3417,22 @@ export default function Abastecimentos() {
                 {filteredItems.length === 0 ? (
                   <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">Nenhum abastecimento encontrado.</td></tr>
                 ) : paginatedItems.map((item) => {
-                  const cliente = clientes.find((entry) => entry.id === item.clienteId);
+                  const cliente = resolveAbastecimentoPosto(item, clientes);
                   const veiculo = resolveAbastecimentoVehicle(item, veiculos);
-                  const litros = (item.produtos ?? []).reduce((sum, produto) => sum + produto.quantidadeLitros, 0);
-                  const bruto = (item.produtos ?? []).reduce((sum, produto) => sum + produto.valorTotal, 0);
+                  const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+                  const litros = combustiveis.dieselLitros;
+                  const bruto = combustiveis.dieselValor;
                   return (
                     <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30">
                       <td className="overflow-hidden px-3 py-3 align-middle"><ClienteIdentity cliente={cliente} /></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle text-muted-foreground"><span className="block whitespace-nowrap">{formatDate(item.dataEmissao)}</span></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle font-medium"><span className="block whitespace-nowrap">{item.produtos.length} produto(s)</span></td>
-                      <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums"><span className="block whitespace-nowrap">{formatLitros(litros)}</span></td>
+                      <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums">
+                        <span className="block whitespace-nowrap font-medium">Diesel {formatLitros(litros)}</span>
+                        {combustiveis.arlaLitros > 0 && (
+                          <span className="block whitespace-nowrap text-[11px] text-muted-foreground">ARLA {formatLitros(combustiveis.arlaLitros)}</span>
+                        )}
+                      </td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums"><span className="block whitespace-nowrap">{formatBRL(litros > 0 ? bruto / litros : 0)}</span></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums text-muted-foreground"><span className="block whitespace-nowrap">{formatBRL(item.valorDesconto)}</span></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle font-bold tabular-nums text-primary"><span className="block whitespace-nowrap">{formatBRL(item.valorTotal)}</span></td>
@@ -3336,7 +3529,7 @@ export default function Abastecimentos() {
           <p className="text-sm text-muted-foreground">Selecione as informações que devem aparecer no relatório. Os filtros aplicados na tabela também serão respeitados.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             {([
-              ["totalLitros", "Total de litros"],
+              ["totalLitros", "Litros por tipo (Diesel / ARLA)"],
               ["totalGasto", "Valor total gasto"],
               ["custoLitro", "Custo médio por litro"],
               ["mediaKmLitro", "Média de KM/L"],
@@ -3394,12 +3587,12 @@ export default function Abastecimentos() {
         <DialogContent className="max-h-[94vh] max-w-4xl overflow-y-auto">
           <DialogHeader><DialogTitle>Detalhes do Abastecimento</DialogTitle></DialogHeader>
           {viewing && (() => {
-            const cliente = clientes.find((item) => item.id === viewing.clienteId);
+            const cliente = resolveAbastecimentoPosto(viewing, clientes);
             const veiculo = resolveAbastecimentoVehicle(viewing, veiculos);
             const bruto = viewing.produtos.reduce((sum, produto) => sum + produto.valorTotal, 0);
             return (
               <div className="space-y-4 rounded-xl bg-muted/30 p-4">
-                <div className="flex items-start justify-between gap-4"><span className="text-muted-foreground">Cliente</span><ClienteIdentity cliente={cliente} align="right" /></div>
+                <div className="flex items-start justify-between gap-4"><span className="text-muted-foreground">Posto</span><ClienteIdentity cliente={cliente} align="right" /></div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div><p className="text-xs text-muted-foreground">Emissão</p><p className="font-medium">{formatDate(viewing.dataEmissao)}</p></div>
                   <div><p className="text-xs text-muted-foreground">Placa / Modelo</p><p className="font-medium">{formatVehiclePlateModel(veiculo, viewing.placaXml)}</p></div>
@@ -3441,10 +3634,14 @@ export default function Abastecimentos() {
                   <div className="space-y-2">
                     {viewing.produtos.map((item, index) => {
                       const produto = produtos.find((entry) => entry.id === item.produtoId);
+                      const tipoCombustivel = classifyProduct(produto);
                       return (
                         <div key={`${item.produtoId}-${index}`} className="rounded-lg border border-border bg-background/40 px-3 py-2">
                           <div className="flex justify-between gap-3"><p className="font-medium">{produto?.nome ?? "—"} - {produto?.codigoInterno ?? "—"}</p><strong>{formatBRL(item.valorTotal)}</strong></div>
-                          <p className="text-xs text-muted-foreground">{formatLitros(item.quantidadeLitros)} × {formatBRL(item.valorUnitario)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {tipoCombustivel !== "OUTRO" && <span className="mr-2 font-semibold">{tipoCombustivel}</span>}
+                            {formatLitros(item.quantidadeLitros)} × {formatBRL(item.valorUnitario)}
+                          </p>
                         </div>
                       );
                     })}

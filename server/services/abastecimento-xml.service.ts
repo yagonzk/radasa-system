@@ -1,5 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import { prisma } from "../lib/prisma.js";
+import { resolveOrCreatePostoFromEmitente } from "./abastecimento-posto.service.js";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -611,8 +612,13 @@ function findClienteSuggestionFromContext(
 ) {
   const cnpj = document.emitente.cnpj;
   if (cnpj) {
-    const exact = context.clientes.find((cliente) => cliente.cnpj === cnpj);
-    if (exact) return exact;
+    const exact = context.clientes.find(
+      (cliente) => onlyDigits(cliente.cnpj) === onlyDigits(cnpj),
+    );
+    // Se a NF-e possui CNPJ do emitente, nunca fazemos fallback por palavras
+    // do nome. Isso impedia notas de postos diferentes de caírem no mesmo
+    // cadastro por termos genéricos como COMERCIO ou COMBUSTIVEIS.
+    return exact ?? null;
   }
 
   const name = firstText(
@@ -621,19 +627,13 @@ function findClienteSuggestionFromContext(
   );
   if (!name) return null;
 
-  const words = normalizeSearch(name)
-    .split(" ")
-    .filter((word) => word.length >= 3)
-    .slice(0, 3);
-  if (!words.length) return null;
-
+  const normalizedName = normalizeSearch(name);
   return (
-    context.clientes.find((cliente) => {
-      const candidate = normalizeSearch(
-        `${cliente.nomeFantasia} ${cliente.razaoSocial}`,
-      );
-      return words.some((word) => candidate.includes(word));
-    }) ?? null
+    context.clientes.find((cliente) =>
+      [cliente.nomeFantasia, cliente.razaoSocial].some(
+        (candidate) => normalizeSearch(candidate) === normalizedName,
+      ),
+    ) ?? null
   );
 }
 
@@ -651,7 +651,7 @@ async function findClienteSuggestion(document: AbastecimentoXmlInterpretado) {
       },
     });
 
-    if (exact) return exact;
+    return exact ?? null;
   }
 
   const name = firstText(
@@ -661,19 +661,12 @@ async function findClienteSuggestion(document: AbastecimentoXmlInterpretado) {
 
   if (!name) return null;
 
-  const words = normalizeSearch(name)
-    .split(" ")
-    .filter((word) => word.length >= 3)
-    .slice(0, 3);
-
-  if (!words.length) return null;
-
   return prisma.cliente.findFirst({
     where: {
-      OR: words.flatMap((word) => [
-        { nomeFantasia: { contains: word, mode: "insensitive" } },
-        { razaoSocial: { contains: word, mode: "insensitive" } },
-      ]),
+      OR: [
+        { nomeFantasia: { equals: name, mode: "insensitive" } },
+        { razaoSocial: { equals: name, mode: "insensitive" } },
+      ],
     },
     select: {
       id: true,
@@ -765,6 +758,45 @@ async function findVehicleSuggestion(plate: string) {
   return bestMatches.length === 1 ? bestMatches[0].vehicle : null;
 }
 
+
+function fuelSignature(value: unknown) {
+  const normalized = normalizeSearch(String(value ?? ""));
+
+  if (/\barla\s*32\b|\barla\b|agente\s+redutor|ureia\s+automotiva/.test(normalized)) return "arla";
+  if (/\bgnv\b|gas natural veicular/.test(normalized)) return "gnv";
+  if (/etanol|alcool/.test(normalized)) return "etanol";
+  if (/gasolina/.test(normalized)) {
+    return /aditiv/.test(normalized) ? "gasolina-aditivada" : "gasolina";
+  }
+  if (/diesel|\bs\s*-?\s*10\b|\bs10\b/.test(normalized)) {
+    if (/s\s*-?\s*10|s10/.test(normalized)) return "diesel-s10";
+    if (/s\s*500|s500/.test(normalized)) return "diesel-s500";
+    return "diesel";
+  }
+
+  return "";
+}
+
+function xmlFuelSignature(product: AbastecimentoXmlProduto) {
+  return fuelSignature(
+    [product.nome, product.combustivel?.descricaoAnp, product.combustivel?.codigoAnp]
+      .filter(Boolean)
+      .join(" "),
+  );
+}
+
+function compatibleFuelSignature(source: string, candidateName: string) {
+  if (!source) return true;
+  const target = fuelSignature(candidateName);
+  if (!target) return false;
+  if (source === target) return true;
+
+  // "DIESEL" genérico pode casar com S10/S500 somente quando o XML também não
+  // trouxe a especificação. ARLA nunca pode casar com Diesel e vice-versa.
+  if (source === "diesel" && target.startsWith("diesel")) return true;
+  if (target === "diesel" && source.startsWith("diesel")) return true;
+  return false;
+}
 
 function isFuelProduct(product: AbastecimentoXmlProduto) {
   if (product.combustivel) return true;
@@ -865,6 +897,7 @@ async function createFuelProductIfMissing(product: AbastecimentoXmlProduto) {
 
 async function findProductSuggestion(product: AbastecimentoXmlProduto) {
   const code = product.codigo.trim();
+  const sourceSignature = xmlFuelSignature(product);
 
   if (code) {
     const byCode = await prisma.produto.findFirst({
@@ -882,20 +915,33 @@ async function findProductSuggestion(product: AbastecimentoXmlProduto) {
       },
     });
 
-    if (byCode) return { ...byCode, criadoAutomaticamente: false };
+    if (byCode && compatibleFuelSignature(sourceSignature, byCode.nome)) {
+      return { ...byCode, criadoAutomaticamente: false };
+    }
   }
 
   const normalizedName = normalizeSearch(
     product.combustivel?.descricaoAnp || product.nome,
   );
 
+  const exactName = await prisma.produto.findFirst({
+    where: {
+      categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
+      nome: { equals: product.combustivel?.descricaoAnp || product.nome, mode: "insensitive" },
+    },
+    select: { id: true, nome: true, codigoInterno: true },
+  });
+  if (exactName && compatibleFuelSignature(sourceSignature, exactName.nome)) {
+    return { ...exactName, criadoAutomaticamente: false };
+  }
+
   const terms = normalizedName
     .split(" ")
     .filter((term) => term.length >= 3)
     .slice(0, 4);
 
-  const matched = terms.length
-    ? await prisma.produto.findFirst({
+  const candidates = terms.length
+    ? await prisma.produto.findMany({
         where: {
           categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
           OR: terms.map((term) => ({
@@ -910,10 +956,23 @@ async function findProductSuggestion(product: AbastecimentoXmlProduto) {
           nome: true,
           codigoInterno: true,
         },
+        take: 30,
       })
-    : null;
+    : [];
 
-  if (matched) return { ...matched, criadoAutomaticamente: false };
+  const ranked = candidates
+    .filter((candidate) => compatibleFuelSignature(sourceSignature, candidate.nome))
+    .map((candidate) => {
+      const candidateName = normalizeSearch(candidate.nome);
+      const hits = terms.filter((term) => candidateName.includes(term)).length;
+      return { candidate, hits };
+    })
+    .filter((entry) => entry.hits > 0)
+    .sort((a, b) => b.hits - a.hits);
+
+  if (ranked.length) {
+    return { ...ranked[0].candidate, criadoAutomaticamente: false };
+  }
 
   // Não cria cadastro durante a simples leitura/conferência do XML.
   // Se o usuário efetivar o lançamento, o serviço de importação cria o
@@ -925,11 +984,13 @@ function findProductInContext(
   product: AbastecimentoXmlProduto,
   context: AbastecimentoSuggestionContext,
 ) {
+  const sourceSignature = xmlFuelSignature(product);
   const code = normalizeSearch(product.codigo).replace(/\s+/g, "");
   if (code) {
     const byCode = context.produtos.find(
       (candidate) =>
-        normalizeSearch(candidate.codigoInterno).replace(/\s+/g, "") === code,
+        normalizeSearch(candidate.codigoInterno).replace(/\s+/g, "") === code &&
+        compatibleFuelSignature(sourceSignature, candidate.nome),
     );
     if (byCode) return { ...byCode, criadoAutomaticamente: false };
   }
@@ -943,13 +1004,16 @@ function findProductInContext(
     .slice(0, 4);
 
   const exactName = context.produtos.find(
-    (candidate) => normalizeSearch(candidate.nome) === normalizedName,
+    (candidate) =>
+      normalizeSearch(candidate.nome) === normalizedName &&
+      compatibleFuelSignature(sourceSignature, candidate.nome),
   );
   if (exactName) return { ...exactName, criadoAutomaticamente: false };
 
   if (!terms.length) return null;
 
   const ranked = context.produtos
+    .filter((candidate) => compatibleFuelSignature(sourceSignature, candidate.nome))
     .map((candidate) => {
       const candidateName = normalizeSearch(candidate.nome);
       const hits = terms.filter((term) => candidateName.includes(term)).length;
@@ -978,15 +1042,44 @@ export async function sugerirVinculosAbastecimento(
   document: AbastecimentoXmlInterpretado,
   context?: AbastecimentoSuggestionContext,
 ) {
-  const [cliente, veiculo] = context
-    ? [
-        findClienteSuggestionFromContext(document, context),
-        findVehicleSuggestionFromContext(document.placa, context),
-      ]
-    : await Promise.all([
-        findClienteSuggestion(document),
-        findVehicleSuggestion(document.placa),
-      ]);
+  let cliente = context
+    ? findClienteSuggestionFromContext(document, context)
+    : await findClienteSuggestion(document);
+  const veiculo = context
+    ? findVehicleSuggestionFromContext(document.placa, context)
+    : await findVehicleSuggestion(document.placa);
+
+  // Quando o emitente ainda não existe no cadastro, cria o posto pelo CNPJ e
+  // dados oficiais da NF-e. Assim a importação já nasce vinculada ao posto
+  // correto e não exige escolher manualmente um cliente aproximado.
+  if (!cliente && (document.emitente.cnpj || document.emitente.razaoSocial || document.emitente.nomeFantasia)) {
+    const clienteId = await prisma.$transaction((tx) =>
+      resolveOrCreatePostoFromEmitente(
+        tx,
+        {
+          emitenteCnpj: document.emitente.cnpj,
+          emitenteRazaoSocial: document.emitente.razaoSocial,
+          emitenteNomeFantasia: document.emitente.nomeFantasia,
+          emitenteEndereco: document.emitente.endereco,
+          emitenteCidade: document.emitente.cidade,
+          emitenteUf: document.emitente.uf,
+        },
+        null,
+      ),
+    );
+
+    if (clienteId) {
+      cliente = await prisma.cliente.findUnique({
+        where: { id: clienteId },
+        select: {
+          id: true,
+          nomeFantasia: true,
+          razaoSocial: true,
+          cnpj: true,
+        },
+      });
+    }
+  }
 
   // Nesta etapa apenas tenta associar produtos já existentes. Produtos novos
   // são cadastrados automaticamente somente ao confirmar o lançamento.
