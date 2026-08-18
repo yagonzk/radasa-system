@@ -144,6 +144,22 @@ function normalize(value: string) {
     .toLocaleLowerCase("pt-BR");
 }
 
+function abastecimentoDateKey(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  // A API normalmente devolve YYYY-MM-DD. O slice também protege registros
+  // antigos que eventualmente tenham sido serializados como ISO completo.
+  const isoPrefix = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoPrefix) return isoPrefix[1];
+
+  // Compatibilidade defensiva com registros antigos em DD/MM/YYYY.
+  const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+
+  return raw;
+}
+
 function normalizeVehicleKey(value: unknown) {
   return String(value ?? "")
     .toUpperCase()
@@ -2986,6 +3002,48 @@ const emptyFilters: Filters = {
   hodometro: "",
 };
 
+function matchesAbastecimentoFilters(
+  item: Abastecimento,
+  filters: Filters,
+  clientes: Cliente[],
+  produtos: Produto[],
+  veiculos: Veiculo[],
+  ignoredKeys: ReadonlySet<keyof Filters> = new Set(),
+) {
+  const cliente = resolveAbastecimentoPosto(item, clientes);
+  const veiculo = resolveAbastecimentoVehicle(item, veiculos);
+  const nomesProdutos = (item.produtos ?? []).map((entry) => {
+    const produto = produtos.find((candidate) => candidate.id === entry.produtoId);
+    return `${produto?.nome ?? ""} ${produto?.codigoInterno ?? ""}`;
+  }).join(" ");
+  const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+  const litros = combustiveis.dieselLitros;
+  const valorUnitarioMedio = litros > 0 ? combustiveis.dieselValor / litros : 0;
+  const dataEmissao = abastecimentoDateKey(item.dataEmissao);
+
+  if (!ignoredKeys.has("cliente") && filters.cliente && !matchesPostoFilter(cliente, filters.cliente)) return false;
+  if (!ignoredKeys.has("produto") && filters.produto && !normalize(nomesProdutos).includes(normalize(filters.produto))) return false;
+  if (
+    !ignoredKeys.has("placa") &&
+    filters.placa &&
+    !normalizeVehicleSearch(formatVehiclePlateModel(veiculo, item.placaXml)).includes(normalizeVehicleSearch(filters.placa))
+  ) return false;
+  if (
+    !ignoredKeys.has("subcategoriaVeiculo") &&
+    filters.subcategoriaVeiculo &&
+    formatSubcategoriaVeiculo(veiculo?.subcategoria) !== filters.subcategoriaVeiculo
+  ) return false;
+  if (!ignoredKeys.has("emissao") && filters.emissao && dataEmissao < filters.emissao) return false;
+  if (!ignoredKeys.has("emissaoAte") && filters.emissaoAte && dataEmissao > filters.emissaoAte) return false;
+  if (!ignoredKeys.has("litros") && filters.litros && !normalize(formatLitros(litros)).includes(normalize(filters.litros))) return false;
+  if (!ignoredKeys.has("valorUnitario") && filters.valorUnitario && !normalize(formatBRL(valorUnitarioMedio)).includes(normalize(filters.valorUnitario))) return false;
+  if (!ignoredKeys.has("valorDesconto") && filters.valorDesconto && !normalize(formatBRL(item.valorDesconto)).includes(normalize(filters.valorDesconto))) return false;
+  if (!ignoredKeys.has("valorTotal") && filters.valorTotal && !normalize(formatBRL(item.valorTotal)).includes(normalize(filters.valorTotal))) return false;
+  if (!ignoredKeys.has("hodometro") && filters.hodometro && !normalize(formatOdometro(item.hodometro)).includes(normalize(filters.hodometro))) return false;
+
+  return true;
+}
+
 interface RelatorioAbastecimentoOpcoes {
   mediaKmLitro: boolean;
   custoLitro: boolean;
@@ -3046,40 +3104,11 @@ export default function Abastecimentos() {
 
   const filteredItems = useMemo(() => {
     return [...items]
-      .filter((item) => {
-        const cliente = resolveAbastecimentoPosto(item, clientes);
-        const veiculo = resolveAbastecimentoVehicle(item, veiculos);
-        const nomesProdutos = (item.produtos ?? []).map((entry) => {
-          const produto = produtos.find((candidate) => candidate.id === entry.produtoId);
-          return `${produto?.nome ?? ""} ${produto?.codigoInterno ?? ""}`;
-        }).join(" ");
-        const combustiveis = abastecimentoFuelBreakdown(item, produtos);
-        const litros = combustiveis.dieselLitros;
-        const valorUnitarioMedio = litros > 0
-          ? combustiveis.dieselValor / litros
-          : 0;
-
-        if (filters.cliente && !matchesPostoFilter(cliente, filters.cliente)) {
-          return false;
-        }
-        if (filters.produto && !normalize(nomesProdutos).includes(normalize(filters.produto))) return false;
-        if (
-          filters.placa &&
-          !normalizeVehicleSearch(formatVehiclePlateModel(veiculo, item.placaXml)).includes(
-            normalizeVehicleSearch(filters.placa),
-          )
-        ) return false;
-        if (filters.subcategoriaVeiculo && formatSubcategoriaVeiculo(veiculo?.subcategoria) !== filters.subcategoriaVeiculo) return false;
-        if (filters.emissao && item.dataEmissao < filters.emissao) return false;
-        if (filters.emissaoAte && item.dataEmissao > filters.emissaoAte) return false;
-        if (filters.litros && !normalize(formatLitros(litros)).includes(normalize(filters.litros))) return false;
-        if (filters.valorUnitario && !normalize(formatBRL(valorUnitarioMedio)).includes(normalize(filters.valorUnitario))) return false;
-        if (filters.valorDesconto && !normalize(formatBRL(item.valorDesconto)).includes(normalize(filters.valorDesconto))) return false;
-        if (filters.valorTotal && !normalize(formatBRL(item.valorTotal)).includes(normalize(filters.valorTotal))) return false;
-        if (filters.hodometro && !normalize(formatOdometro(item.hodometro)).includes(normalize(filters.hodometro))) return false;
-        return true;
-      })
-      .sort((a, b) => b.dataEmissao.localeCompare(a.dataEmissao) || b.hodometro - a.hodometro);
+      .filter((item) => matchesAbastecimentoFilters(item, filters, clientes, produtos, veiculos))
+      .sort((a, b) =>
+        abastecimentoDateKey(b.dataEmissao).localeCompare(abastecimentoDateKey(a.dataEmissao)) ||
+        b.hodometro - a.hodometro,
+      );
   }, [clientes, filters, items, produtos, veiculos]);
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
@@ -3177,21 +3206,37 @@ export default function Abastecimentos() {
   }, [filteredItems, produtos, veiculos]);
 
   const filterOptions = (key: keyof Filters): string[] => {
+    // As opções de cada coluna também respeitam os demais filtros ativos.
+    // Ex.: depois de filtrar agosto, o filtro de Posto mostra apenas postos que
+    // possuem abastecimentos naquele recorte, evitando opções que retornam vazio.
+    const ignoredKeys = key === "emissao"
+      ? new Set<keyof Filters>(["emissao", "emissaoAte"])
+      : new Set<keyof Filters>([key]);
+    const sourceItems = items.filter((item) =>
+      matchesAbastecimentoFilters(item, filters, clientes, produtos, veiculos, ignoredKeys),
+    );
+
     if (key === "cliente") {
       return Array.from(
         new Set(
-          items
+          sourceItems
             .map((item) => resolveAbastecimentoPosto(item, clientes))
             .filter((item): item is Cliente => Boolean(item))
             .map((item) => formatClienteResumo(item)),
         ),
       ).sort((a, b) => a.localeCompare(b, "pt-BR"));
     }
-    if (key === "produto") return produtos.map((item) => `${item.nome} - ${item.codigoInterno}`);
+    if (key === "produto") {
+      const productIds = new Set(sourceItems.flatMap((item) => (item.produtos ?? []).map((entry) => entry.produtoId)));
+      return produtos
+        .filter((item) => productIds.has(item.id))
+        .map((item) => `${item.nome} - ${item.codigoInterno}`)
+        .sort((a, b) => a.localeCompare(b, "pt-BR"));
+    }
     if (key === "placa") {
       return Array.from(
         new Set(
-          items
+          sourceItems
             .map((item) => {
               const veiculo = resolveAbastecimentoVehicle(item, veiculos);
               return formatVehiclePlateModel(veiculo, item.placaXml);
@@ -3200,19 +3245,23 @@ export default function Abastecimentos() {
         ),
       ).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
     }
-    if (key === "subcategoriaVeiculo") return ["Caminhão", "Carro", "Moto", ...(veiculos.some((item) => !item.subcategoria) ? ["Sem categoria"] : [])];
-    if (key === "litros") return Array.from(new Set<string>(items.map((item) => formatLitros(abastecimentoFuelBreakdown(item, produtos).dieselLitros))));
-    if (key === "valorUnitario") return Array.from(new Set<string>(items.map((item) => {
+    if (key === "subcategoriaVeiculo") {
+      return Array.from(
+        new Set(
+          sourceItems.map((item) =>
+            formatSubcategoriaVeiculo(resolveAbastecimentoVehicle(item, veiculos)?.subcategoria),
+          ),
+        ),
+      ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+    }
+    if (key === "litros") return Array.from(new Set<string>(sourceItems.map((item) => formatLitros(abastecimentoFuelBreakdown(item, produtos).dieselLitros))));
+    if (key === "valorUnitario") return Array.from(new Set<string>(sourceItems.map((item) => {
       const combustiveis = abastecimentoFuelBreakdown(item, produtos);
-      return formatBRL(
-        combustiveis.dieselLitros > 0
-          ? combustiveis.dieselValor / combustiveis.dieselLitros
-          : 0,
-      );
+      return formatBRL(combustiveis.dieselLitros > 0 ? combustiveis.dieselValor / combustiveis.dieselLitros : 0);
     })));
-    if (key === "valorDesconto") return Array.from(new Set<string>(items.map((item) => formatBRL(item.valorDesconto))));
-    if (key === "valorTotal") return Array.from(new Set<string>(items.map((item) => formatBRL(item.valorTotal))));
-    if (key === "hodometro") return Array.from(new Set<string>(items.map((item) => formatOdometro(item.hodometro))));
+    if (key === "valorDesconto") return Array.from(new Set<string>(sourceItems.map((item) => formatBRL(item.valorDesconto))));
+    if (key === "valorTotal") return Array.from(new Set<string>(sourceItems.map((item) => formatBRL(item.valorTotal))));
+    if (key === "hodometro") return Array.from(new Set<string>(sourceItems.map((item) => formatOdometro(item.hodometro))));
     return [];
   };
 
@@ -3305,6 +3354,10 @@ export default function Abastecimentos() {
           </div>
         </div>
 
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Filter className="h-3.5 w-3.5" />
+          <span>Indicadores calculados sobre {filteredItems.length} abastecimento(s) conforme todos os filtros ativos.</span>
+        </div>
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4" /> Litros Diesel</p>
