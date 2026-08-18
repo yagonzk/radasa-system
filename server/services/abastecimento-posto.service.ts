@@ -73,8 +73,8 @@ function postoPayload(input: AbastecimentoEmitentePosto) {
  * Quando há CNPJ no XML/PDF, nunca usa aproximação por palavras do nome: isso
  * evita que termos genéricos como COMERCIO/COMBUSTIVEIS associem a nota a outro posto.
  *
- * Deve ser executado dentro de uma transação Prisma para que o advisory lock
- * proteja importações paralelas do mesmo emitente.
+ * Pode ser executado dentro da mesma transação Prisma do lançamento.
+ * A resolução prioriza CNPJ exato e evita aproximação por palavras.
  */
 export async function resolveOrCreatePostoFromEmitente(
   tx: any,
@@ -86,9 +86,10 @@ export async function resolveOrCreatePostoFromEmitente(
   const nome = firstText(payload.nomeFantasia, payload.razaoSocial);
 
   if (cnpj.length === 14) {
-    const lockKey = `radasa:posto-abastecimento:${cnpj}`;
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
-
+    // Não usamos advisory lock aqui. Em conexões Neon/pooled/serverless esse
+    // lock pode falhar ou prender a confirmação do XML, mesmo quando a
+    // conferência já apareceu como COMPLETA. Primeiro reaproveitamos o posto
+    // existente pelo CNPJ e só criamos quando realmente necessário.
     let existing = await tx.cliente.findFirst({
       where: { cnpj },
       select: {
@@ -146,9 +147,6 @@ export async function resolveOrCreatePostoFromEmitente(
   // Isso mantém PDFs antigos utilizáveis sem repetir o erro de vincular tudo ao
   // primeiro cliente que compartilha uma palavra genérica.
   if (nome) {
-    const lockKey = `radasa:posto-abastecimento:nome:${normalizeText(nome)}`;
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
-
     const existing = await tx.cliente.findFirst({
       where: {
         OR: [

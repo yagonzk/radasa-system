@@ -1288,6 +1288,7 @@ function BatchXmlDialog({
       }));
 
       const failedIds = new Set<string>();
+      const failedMessages = new Map<string, string>();
       const successfulIds = new Set<string>();
       const summary = {
         criados: 0,
@@ -1382,13 +1383,24 @@ function BatchXmlDialog({
 
             if (result.acao === "ERRO") {
               failedIds.add(item.id);
+              failedMessages.set(
+                item.id,
+                result.erro || "Falha na importação deste documento.",
+              );
             } else {
               successfulIds.add(item.id);
             }
           });
-        } catch (error) {
+        } catch (error: any) {
           console.error("Falha ao importar lote de abastecimentos", error);
-          batch.items.forEach((item) => failedIds.add(item.id));
+          const message =
+            error?.response?.data?.message ??
+            error?.message ??
+            "Falha na importação deste documento.";
+          batch.items.forEach((item) => {
+            failedIds.add(item.id);
+            failedMessages.set(item.id, message);
+          });
           summary.erros += batch.items.length;
         } finally {
           importedProgress += batch.payload.length;
@@ -1421,7 +1433,9 @@ function BatchXmlDialog({
               ? {
                   ...item,
                   status: "ERRO" as const,
-                  importMessage: "Falha na importação deste documento.",
+                  importMessage:
+                    failedMessages.get(item.id) ||
+                    "Falha na importação deste documento.",
                 }
               : item,
           ),

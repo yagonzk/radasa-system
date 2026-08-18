@@ -309,8 +309,17 @@ abastecimentosXmlRoutes.post("/importar-lote", async (req, res, next) => {
         produtos: Array.isArray(item?.produtos) ? item.produtos : [],
       }))
       .filter(
-        (item: any) =>
-          !item.clienteId ||
+        (item: any) => {
+          const original = itens[item.index] ?? {};
+          const emitenteCnpj = String(original?.emitenteCnpj ?? "").replace(/\D/g, "");
+          const emitenteNome = String(
+            original?.emitenteNomeFantasia ?? original?.emitenteRazaoSocial ?? "",
+          ).trim();
+          const podeResolverPosto =
+            Boolean(item.clienteId) || emitenteCnpj.length === 14 || Boolean(emitenteNome);
+
+          return (
+          !podeResolverPosto ||
           !item.veiculoId ||
           item.chaveNfe.length !== 44 ||
           !Number.isFinite(item.hodometro) ||
@@ -330,7 +339,9 @@ abastecimentosXmlRoutes.post("/importar-lote", async (req, res, next) => {
               !Number.isFinite(Number(produto?.valorUnitario)) ||
               Number(produto?.valorUnitario) < 0
             );
-          }),
+          })
+          );
+        },
       );
 
     if (invalidos.length) {

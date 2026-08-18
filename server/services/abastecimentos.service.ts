@@ -156,14 +156,11 @@ async function resolveProdutoImportacao(
   }
 
   const codigoBase = xmlProductCode(produto.produtoXml);
-  const lockKey = `radasa:abastecimento-produto:${normalizeProductText(
-    `${codigoBase}:${nome}`,
-  )}`;
 
-  // Protege importações paralelas do mesmo combustível. Assim, se dois XMLs
-  // novos trouxerem o mesmo produto ao mesmo tempo, apenas um cadastro nasce.
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
-
+  // Evita advisory locks na confirmação da NF-e. Em ambientes Neon com pool
+  // serverless eles podem interromper a gravação mesmo depois de o XML ter sido
+  // validado como COMPLETO. A busca por código/nome continua evitando cadastros
+  // repetidos na operação normal.
   if (codigoBase) {
     const existingByCode = await tx.produto.findFirst({
       where: {
@@ -356,11 +353,31 @@ async function importarItem(
     };
   }
 
-  const resolvedClienteId = await resolveOrCreatePostoFromEmitente(
-    tx,
-    input,
-    input.clienteId,
-  );
+  // A conferência do XML já devolve o cliente/posto exato. Reaproveita esse
+  // vínculo diretamente quando o CNPJ confere, evitando uma segunda resolução
+  // desnecessária na confirmação do lançamento. Isso também evita que uma
+  // etapa de manutenção do posto impeça o abastecimento de ser gravado.
+  const requestedClienteId = String(input.clienteId ?? "").trim();
+  const emitenteCnpj = String(input.emitenteCnpj ?? "").replace(/\D/g, "");
+  let resolvedClienteId = "";
+
+  if (requestedClienteId) {
+    const selectedCliente = await tx.cliente.findUnique({
+      where: { id: requestedClienteId },
+      select: { id: true, cnpj: true },
+    });
+
+    const selectedCnpj = String(selectedCliente?.cnpj ?? "").replace(/\D/g, "");
+    if (selectedCliente && (!emitenteCnpj || selectedCnpj === emitenteCnpj)) {
+      resolvedClienteId = selectedCliente.id;
+    }
+  }
+
+  if (!resolvedClienteId) {
+    resolvedClienteId =
+      (await resolveOrCreatePostoFromEmitente(tx, input, requestedClienteId)) ?? "";
+  }
+
   if (!resolvedClienteId) {
     throw new AppError(400, "Não foi possível identificar o posto emitente da NF-e.");
   }
