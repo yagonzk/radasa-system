@@ -244,6 +244,39 @@ function resolveAbastecimentoPosto(
   return linked;
 }
 
+function matchesPostoFilter(cliente: Cliente | undefined, filterValue: string) {
+  if (!filterValue) return true;
+  if (!cliente) return false;
+
+  const selected = String(filterValue).trim();
+  const formatted = formatClienteResumo(cliente);
+
+  // As opções do filtro são exibidas com nome + CNPJ + código. Antes, o valor
+  // completo selecionado era comparado com um texto de busca sem os separadores
+  // "•"/"Cód.", fazendo postos válidos (ex.: MAE CAROLINA) retornarem zero itens.
+  if (normalize(formatted).trim() === normalize(selected).trim()) return true;
+
+  const selectedParts = selected.split("•").map((part) => part.trim());
+  const selectedName = selectedParts[0] ?? "";
+  const selectedCnpj = onlyDigits(selectedParts[1] ?? "");
+
+  if (selectedCnpj.length === 14 && onlyDigits(cliente.cnpj) === selectedCnpj) {
+    return true;
+  }
+
+  if (selectedName) {
+    const normalizedSelectedName = normalize(selectedName).trim();
+    const names = [cliente.nomeFantasia, cliente.razaoSocial]
+      .map((value) => normalize(String(value ?? "")).trim())
+      .filter(Boolean);
+    if (names.includes(normalizedSelectedName)) return true;
+  }
+
+  // Mantém compatibilidade caso o estado do filtro venha de uma versão anterior
+  // ou seja preenchido por texto simples em vez da opção formatada.
+  return normalize(clienteSearchText(cliente)).includes(normalize(selected));
+}
+
 type FuelKind = "DIESEL" | "ARLA" | "OUTRO";
 
 function classifyFuelLabel(value: unknown): FuelKind {
@@ -3026,12 +3059,7 @@ export default function Abastecimentos() {
           ? combustiveis.dieselValor / litros
           : 0;
 
-        if (
-          filters.cliente &&
-          !normalize(cliente ? clienteSearchText(cliente) : "").includes(
-            normalize(filters.cliente),
-          )
-        ) {
+        if (filters.cliente && !matchesPostoFilter(cliente, filters.cliente)) {
           return false;
         }
         if (filters.produto && !normalize(nomesProdutos).includes(normalize(filters.produto))) return false;
