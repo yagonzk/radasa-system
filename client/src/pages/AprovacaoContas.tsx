@@ -89,7 +89,7 @@ export default function AprovacaoContas() {
   if (user?.role !== "ADMIN") {
     return (
       <Layout>
-        <div className="mx-auto max-w-3xl rounded-xl border bg-card p-8 text-center">
+        <div className="mx-auto w-full max-w-3xl rounded-xl border bg-card p-5 text-center sm:p-8">
           <ShieldCheck className="mx-auto h-10 w-10 text-muted-foreground" />
           <h1 className="mt-4 text-xl font-bold">Acesso restrito</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -102,7 +102,7 @@ export default function AprovacaoContas() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-5xl space-y-5">
+      <div className="mx-auto w-full min-w-0 max-w-5xl space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">

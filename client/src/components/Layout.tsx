@@ -1,9 +1,9 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes, FileBadge2, ChevronDown, ChevronRight, FilePlus2, History, UserRound, Settings2, BadgeDollarSign, ShieldCheck } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes, FileBadge2, ChevronDown, ChevronRight, FilePlus2, History, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface NavItem {
@@ -77,7 +77,12 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
   const [ciotOpen, setCiotOpen] = useState(() => location.startsWith("/ciot"));
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isDark = theme === "dark";
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location]);
   const initials = user?.name?.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "U";
 
   const isActive = (item: NavItem) =>
@@ -86,27 +91,50 @@ export default function Layout({ children }: { children: ReactNode }) {
     );
 
   return (
-    <div className={cn("flex min-h-screen bg-background", isDark && "dark")}>
+    <div className={cn("flex min-h-screen min-w-0 bg-background", isDark && "dark")}>
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-30 bg-black/45 backdrop-blur-[1px] lg:hidden"
+          aria-label="Fechar menu"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="fixed left-0 top-0 z-30 flex h-screen w-[220px] flex-col border-r border-sidebar-border bg-sidebar shadow-sm">
+      <aside
+        className={cn(
+          "fixed left-0 top-0 z-40 flex h-screen w-[220px] flex-col border-r border-sidebar-border bg-sidebar shadow-sm transition-transform duration-200 lg:translate-x-0",
+          mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border">
+        <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
             <Truck className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="font-display text-[14px] font-bold text-sidebar-foreground leading-tight">
+          <span className="font-display text-[14px] font-bold leading-tight text-sidebar-foreground">
             Radasa System
           </span>
+          <button
+            type="button"
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-sidebar-accent lg:hidden"
+            aria-label="Fechar menu"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {navItems.filter((item) => !item.adminOnly || user?.role === "ADMIN").map((item) => {
             const active = isActive(item);
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setMobileMenuOpen(false)}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-150",
                   active
@@ -155,6 +183,7 @@ export default function Layout({ children }: { children: ReactNode }) {
               <div className="ml-4 space-y-1 border-l border-sidebar-border pl-3">
                 <Link
                   href="/ciot/gerar"
+                  onClick={() => setMobileMenuOpen(false)}
                   className={cn(
                     "flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors",
                     location.startsWith("/ciot/gerar")
@@ -168,6 +197,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
                 <Link
                   href="/ciot/gerados"
+                  onClick={() => setMobileMenuOpen(false)}
                   className={cn(
                     "flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors",
                     location.startsWith("/ciot/gerados")
@@ -181,6 +211,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
                 <Link
                   href="/ciot/configuracao"
+                  onClick={() => setMobileMenuOpen(false)}
                   className={cn(
                     "flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors",
                     location.startsWith("/ciot/configuracao")
@@ -206,7 +237,7 @@ export default function Layout({ children }: { children: ReactNode }) {
               <DropdownMenuContent side="top" align="start" className="w-48">
                 <DropdownMenuItem asChild><Link href="/perfil" className="flex cursor-pointer items-center gap-2"><UserRound className="h-4 w-4"/>Meu perfil</Link></DropdownMenuItem>
                 <DropdownMenuItem asChild><Link href="/alterar-senha" className="flex cursor-pointer items-center gap-2"><KeyRound className="h-4 w-4"/>Alterar senha</Link></DropdownMenuItem>
-                <DropdownMenuItem asChild><Link href="/logs" className="flex cursor-pointer items-center gap-2"><ScrollText className="h-4 w-4"/>Ver logs</Link></DropdownMenuItem>
+                {user?.role === "ADMIN" && <DropdownMenuItem asChild><Link href="/logs" className="flex cursor-pointer items-center gap-2"><ScrollText className="h-4 w-4"/>Ver logs</Link></DropdownMenuItem>}
               </DropdownMenuContent>
             </DropdownMenu>
             <div className="min-w-0 flex-1">
@@ -231,11 +262,30 @@ export default function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <div className="ml-[220px] flex min-h-screen flex-1 flex-col">
-        <main className="flex-1 p-6 lg:p-8 min-h-0">{children}</main>
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:ml-[220px]">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border/70 bg-background/95 px-3 backdrop-blur sm:px-4 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-card text-foreground shadow-sm"
+            aria-label="Abrir menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
+              <Truck className="h-4 w-4 text-primary-foreground" />
+            </div>
+            <span className="truncate font-display text-sm font-bold">Radasa System</span>
+          </div>
+        </header>
+
+        <main data-radasa-main className="min-h-0 min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 md:p-6 lg:p-6 xl:p-8">
+          <div className="w-full min-w-0 max-w-full">{children}</div>
+        </main>
 
         {/* Footer with theme toggle */}
-        <footer className="flex items-center justify-end px-6 py-3 lg:px-8 border-t border-border/50">
+        <footer className="flex items-center justify-end border-t border-border/50 px-3 py-3 sm:px-4 md:px-6 xl:px-8">
           <button
             onClick={toggleTheme}
             className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-accent-foreground hover:border-primary/30 active:scale-95"

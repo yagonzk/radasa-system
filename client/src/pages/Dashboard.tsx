@@ -55,11 +55,11 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto w-full min-w-0 max-w-7xl">
         {/* Top section: Hero + Next step card */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.6fr_1fr]">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] xl:gap-6">
           {/* Hero */}
-          <div className="rounded-2xl border border-border bg-card p-8">
+          <div className="min-w-0 rounded-2xl border border-border bg-card p-5 sm:p-6 xl:p-8">
             <span className="inline-block rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
               Visão administrativa
             </span>
@@ -94,7 +94,7 @@ export default function Dashboard() {
           </div>
 
           {/* Next step card (dark navy) */}
-          <div className="relative overflow-hidden rounded-2xl bg-[#0A0E21] p-8">
+          <div className="relative min-w-0 overflow-hidden rounded-2xl bg-[#0A0E21] p-5 sm:p-6 xl:p-8">
             {/* Abstract shapes */}
             <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-blue-500/10 blur-2xl" />
             <div className="pointer-events-none absolute -bottom-12 -left-8 h-32 w-32 rounded-full bg-blue-400/10 blur-xl" />
@@ -117,21 +117,21 @@ export default function Dashboard() {
         </div>
 
         {/* Metric cards */}
-        <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 xl:gap-4">
           {metrics.map((m) => (
             <div
               key={m.label}
-              className="rounded-xl border border-border bg-card p-5"
+              className="min-w-0 overflow-hidden rounded-xl border border-border bg-card p-4 sm:p-5"
             >
               <div
                 className={`flex h-10 w-10 items-center justify-center rounded-lg ${m.iconBg}`}
               >
                 {m.icon}
               </div>
-              <p className="mt-4 font-display text-3xl font-bold text-foreground">
+              <p className="mt-4 truncate font-display text-2xl font-bold text-foreground sm:text-3xl">
                 {m.value}
               </p>
-              <p className="mt-1 text-xs font-semibold tracking-wide text-muted-foreground">
+              <p className="mt-1 truncate text-xs font-semibold tracking-wide text-muted-foreground">
                 {m.label}
               </p>
             </div>

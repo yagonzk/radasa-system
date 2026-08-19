@@ -101,14 +101,14 @@ export default function Pneus() {
   ] as const;
 
   return <Layout>
-    <div className="space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div><h1 className="text-2xl font-bold tracking-tight">Pneus</h1><p className="text-sm text-muted-foreground">Gestão do ciclo de vida, estoque, custos e histórico dos pneus.</p></div>
         <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4"/>Novo pneu</Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {cards.map(([label, value, Icon]) => <Card key={label}><CardContent className="flex items-center justify-between p-4"><div><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-xl font-bold">{value}</p></div><Icon className="h-5 w-5 text-primary"/></CardContent></Card>)}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {cards.map(([label, value, Icon]) => <Card key={label} className="min-w-0 overflow-hidden"><CardContent className="flex min-w-0 items-center justify-between gap-3 p-4"><div className="min-w-0"><p className="truncate text-xs text-muted-foreground">{label}</p><p className="mt-1 truncate text-xl font-bold" title={String(value)}>{value}</p></div><Icon className="h-5 w-5 shrink-0 text-primary"/></CardContent></Card>)}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

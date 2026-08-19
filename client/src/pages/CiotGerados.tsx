@@ -165,7 +165,7 @@ export default function CiotGeradosPage() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">
             CIOTs gerados

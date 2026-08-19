@@ -315,7 +315,7 @@ export default function Estoque() {
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="w-full min-w-0 space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Almoxarifado</h1>
@@ -367,7 +367,7 @@ export default function Estoque() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 xl:gap-4">
             <Card title="Entradas" value={totalEntradas} icon={<ArrowDownToLine className="h-4 w-4" />} />
             <Card title="Saídas" value={totalSaidas} icon={<ArrowUpFromLine className="h-4 w-4" />} />
             <Card title="Saldo atual" value={totalEstoque} icon={<Boxes className="h-4 w-4" />} />

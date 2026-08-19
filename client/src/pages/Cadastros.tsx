@@ -31,7 +31,7 @@ export default function Cadastros() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto w-full min-w-0 max-w-6xl">
         <div className="mb-6">
           <h1 className="font-display text-2xl font-bold text-foreground">
             Cadastros
@@ -42,7 +42,7 @@ export default function Cadastros() {
         </div>
 
         <Tabs defaultValue={activeTab} className="w-full">
-          <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
             <TabsTrigger value="motoristas">Motoristas</TabsTrigger>
             <TabsTrigger value="chapas">Chapas</TabsTrigger>
             <TabsTrigger value="clientes">Clientes</TabsTrigger>

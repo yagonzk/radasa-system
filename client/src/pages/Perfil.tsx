@@ -72,9 +72,9 @@ export default function Perfil() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto w-full min-w-0 max-w-3xl">
         <div className="mb-6"><h1 className="font-display text-2xl font-bold">Meu perfil</h1><p className="mt-1 text-sm text-muted-foreground">Atualize seus dados pessoais. O nome de usuário não pode ser alterado.</p></div>
-        <form onSubmit={handleSubmit} className="rounded-2xl border bg-card p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
           <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row">
             <div className="relative h-28 w-28 overflow-hidden rounded-full border-4 border-background bg-primary text-primary-foreground shadow">
               {fotoPerfil ? <img src={fotoPerfil} alt="Foto de perfil" className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-3xl font-bold">{initials}</div>}

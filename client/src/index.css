@@ -200,3 +200,42 @@
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
 input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
+
+/* ===== RESPONSIVIDADE GLOBAL DO SISTEMA ===== */
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+[data-radasa-main],
+[data-radasa-main] > div,
+[data-radasa-main] > div > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-radasa-main] h1,
+[data-radasa-main] h2,
+[data-radasa-main] h3,
+[data-radasa-main] p {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 639px) {
+  [data-radasa-main] h1 {
+    font-size: 1.35rem;
+    line-height: 1.75rem;
+  }
+
+  [data-radasa-main] .rounded-xl,
+  [data-radasa-main] .rounded-2xl {
+    max-width: 100%;
+  }
+}

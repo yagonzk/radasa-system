@@ -1233,7 +1233,7 @@ export default function CiotGerarPage() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-[1800px] space-y-8 px-6">
+      <div className="mx-auto w-full min-w-0 max-w-[1800px] space-y-6 px-0 sm:space-y-8 sm:px-2 xl:px-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl font-bold">Gerar CIOTs</h1>
@@ -1388,7 +1388,7 @@ export default function CiotGerarPage() {
       </Dialog>
 
       <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
-        <DialogContent className="flex h-[96vh] w-[97vw] max-w-[1900px] flex-col overflow-hidden p-8">
+        <DialogContent className="flex h-[96vh] w-[97vw] max-w-[1900px] flex-col overflow-hidden p-3 sm:p-5 lg:p-8">
           <DialogHeader>
             <DialogTitle>
               {editing ? "Editar CIOT" : "Emissão de CIOT"}
@@ -1396,7 +1396,7 @@ export default function CiotGerarPage() {
           </DialogHeader>
 
           <div className="flex min-h-0 flex-1 flex-col gap-6">
-            <div className="grid shrink-0 grid-cols-5 overflow-hidden rounded-xl border">
+            <div className="grid shrink-0 grid-cols-2 overflow-hidden rounded-xl border sm:grid-cols-3 lg:grid-cols-5">
               {stepLabels.map((item) => {
                 const active = step === item.id;
                 const done = completedSteps.has(item.id);

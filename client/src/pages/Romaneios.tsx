@@ -1482,7 +1482,7 @@ export default function Romaneios() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-[1500px] space-y-5">
+      <div className="mx-auto w-full min-w-0 max-w-[1500px] space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl font-bold">Romaneios</h1>
@@ -1513,7 +1513,7 @@ export default function Romaneios() {
           </div>
         </div>
 
-        <div className="grid grid-cols-6 gap-2 xl:gap-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 xl:gap-3">
           {[
             { label: "Romaneios", value: filtered.length, Icon: FileText },
             {

@@ -106,7 +106,7 @@ export default function Fechamentos() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto w-full min-w-0 max-w-6xl">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -133,7 +133,7 @@ export default function Fechamentos() {
                   Motorista
                 </Label>
                 <Select value={filterMotorista} onValueChange={setFilterMotorista}>
-                  <SelectTrigger className="w-56">
+                  <SelectTrigger className="w-full sm:w-56">
                     <SelectValue placeholder="Todos os motoristas" />
                   </SelectTrigger>
                   <SelectContent>
@@ -182,7 +182,7 @@ export default function Fechamentos() {
               )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={handleExportCSV}>
                 <FileDown className="mr-1.5 h-4 w-4" />
                 Exportar CSV

@@ -238,7 +238,7 @@ export default function CiotConfiguracaoPage() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto w-full min-w-0 max-w-6xl space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl font-bold">Configuração ANTT</h1>
