@@ -95,6 +95,8 @@ export interface Abastecimento {
   hodometro: number;
   pdfUrl?: string | null;
   xmlUrl?: string | null;
+  pdfStored?: boolean;
+  xmlStored?: boolean;
   createdAt: string;
 }
 export type StatusCiot =

@@ -256,11 +256,10 @@ const nested = (items: any[], fallbackClientId: string) => {
 
 export const manifestosService = {
   async list() {
-    // Importante: esta rota é somente leitura. Não fazemos UPDATE automático
-    // ao abrir Romaneios, porque qualquer falha de escrita bloquearia a listagem
-    // inteira e faria os dados parecerem ausentes. O modelo/placa atuais são
-    // enriquecidos em memória a partir de Cadastros > Veículos.
-    const [items, withPdf, vehicles] = await Promise.all([
+    // Listagem principal: evita reler toda a tabela de veículos aqui. O frontend
+    // já carrega Cadastros > Veículos em paralelo e faz o enriquecimento atual
+    // de placa/modelo em memória. Isso elimina uma consulta redundante ao Neon.
+    const [items, withPdf] = await Promise.all([
       prisma.manifesto.findMany({
         include,
         omit: { pdfUrl: true },
@@ -270,15 +269,11 @@ export const manifestosService = {
         where: { pdfUrl: { not: null } },
         select: { id: true },
       }),
-      prisma.veiculo.findMany({
-        select: { id: true, placa: true, modelo: true },
-      }),
     ]);
     const pdfIds = new Set(withPdf.map((item) => item.id));
-    const vehicleLookups = buildVehicleLookups(vehicles);
     return items.map((item) =>
       serialize({
-        ...enrichManifestoVehicle(item, vehicleLookups),
+        ...item,
         pdfStored: pdfIds.has(item.id),
       }),
     );

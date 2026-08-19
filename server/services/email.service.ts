@@ -1,18 +1,19 @@
+import { createHash } from "node:crypto";
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 
-export type RadasaEmailBinding = {
-  send(message: {
-    to: string | { email: string; name?: string };
-    from: string | { email: string; name?: string };
-    subject: string;
-    html?: string;
-    text?: string;
-  }): Promise<{ messageId: string }>;
+type ResendApiResponse = {
+  id?: string;
+  message?: string;
+  name?: string;
+  statusCode?: number;
 };
 
-function getEmailBinding(): RadasaEmailBinding | undefined {
-  return (globalThis as typeof globalThis & { __RADASA_EMAIL?: RadasaEmailBinding }).__RADASA_EMAIL;
+function getResendApiKey() {
+  const runtimeKey = (
+    globalThis as typeof globalThis & { __RADASA_RESEND_API_KEY?: string }
+  ).__RADASA_RESEND_API_KEY;
+  return runtimeKey || env.RESEND_API_KEY;
 }
 
 function escapeHtml(value: string) {
@@ -24,15 +25,25 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
+function resendIdempotencyKey(resetUrl: string) {
+  const hash = createHash("sha256").update(resetUrl).digest("hex");
+  return `password-reset/${hash}`;
+}
+
 export const emailService = {
   isConfigured() {
-    return Boolean(getEmailBinding());
+    return Boolean(getResendApiKey());
   },
 
-  async sendPasswordReset(input: { to: string; name: string; resetUrl: string; expiresMinutes: number }) {
-    const binding = getEmailBinding();
-    if (!binding) {
-      throw new Error("Cloudflare Email Service binding EMAIL não está disponível.");
+  async sendPasswordReset(input: {
+    to: string;
+    name: string;
+    resetUrl: string;
+    expiresMinutes: number;
+  }) {
+    const apiKey = getResendApiKey();
+    if (!apiKey) {
+      throw new Error("RESEND_API_KEY não está configurada no Worker.");
     }
 
     const safeName = escapeHtml(input.name || "usuário");
@@ -73,17 +84,32 @@ export const emailService = {
 </html>`;
 
     try {
-      const result = await binding.send({
-        to: { email: input.to, name: input.name || undefined },
-        from: { email: env.EMAIL_FROM_ADDRESS, name: "Radasa System" },
-        subject,
-        html,
-        text,
+      const response = await fetch(`${env.RESEND_API_URL.replace(/\/$/, "")}/emails`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": resendIdempotencyKey(input.resetUrl),
+        },
+        body: JSON.stringify({
+          from: `${env.EMAIL_FROM_NAME} <${env.EMAIL_FROM_ADDRESS}>`,
+          to: [input.to],
+          subject,
+          html,
+          text,
+        }),
       });
-      logger.info({ messageId: result.messageId, to: input.to }, "E-mail de recuperação de senha enviado.");
-      return result;
+
+      const result = (await response.json().catch(() => ({}))) as ResendApiResponse;
+      if (!response.ok || !result.id) {
+        const detail = result.message || result.name || `HTTP ${response.status}`;
+        throw new Error(`Resend recusou o envio: ${detail}`);
+      }
+
+      logger.info({ messageId: result.id, to: input.to }, "E-mail de recuperação de senha enviado via Resend.");
+      return { messageId: result.id };
     } catch (error) {
-      logger.error({ error, to: input.to }, "Falha ao enviar e-mail de recuperação de senha.");
+      logger.error({ error, to: input.to }, "Falha ao enviar e-mail de recuperação de senha via Resend.");
       throw error;
     }
   },

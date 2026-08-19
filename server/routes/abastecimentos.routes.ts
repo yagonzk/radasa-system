@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { crudRoutes } from "./crud.routes.js";
 import { abastecimentosController } from "../controllers/abastecimentos.controller.js";
+import { abastecimentosService } from "../services/abastecimentos.service.js";
 import { abastecimentoBody } from "../validators/schemas.js";
 import {
   interpretarDocumentoAbastecimento,
@@ -46,6 +47,19 @@ abastecimentosRoutes.post(
     }
   },
 );
+
+abastecimentosRoutes.get("/:id/documento/:tipo", async (req, res, next) => {
+  try {
+    const tipo = String(req.params.tipo ?? "").toLowerCase();
+    if (tipo !== "pdf" && tipo !== "xml") {
+      res.status(400).json({ message: "Tipo de documento inválido." });
+      return;
+    }
+    res.json(await abastecimentosService.getDocumento(req.params.id, tipo));
+  } catch (error) {
+    next(error);
+  }
+});
 
 abastecimentosRoutes.use(
   crudRoutes(abastecimentosController, abastecimentoBody),

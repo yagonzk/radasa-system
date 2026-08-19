@@ -367,7 +367,7 @@ export default function Romaneios() {
   const toggleSummaryValue = (label: string) => {
     setVisibleSummaryValues((current) => ({ ...current, [label]: !current[label] }));
   };
-  const { items: romaneios, create, update, remove, replaceLocalItem, refresh: refreshRomaneios } = useRomaneios();
+  const { items: sourceRomaneios, create, update, remove, replaceLocalItem, refresh: refreshRomaneios } = useRomaneios();
   const { items: clientes, refresh: refreshClientes } = useClientes();
   const { items: produtos, refresh: refreshProdutos } = useProdutos();
   const { items: veiculos, refresh: refreshVeiculos } = useVeiculos();
@@ -457,6 +457,32 @@ export default function Romaneios() {
     if (ranked.length > 1 && ranked[0].distance === ranked[1].distance) return undefined;
     return ranked[0].veiculo;
   };
+
+  const romaneios = useMemo(() => {
+    const byId = new Map(veiculos.map((veiculo) => [veiculo.id, veiculo]));
+    const byPlate = new Map(
+      veiculos
+        .map((veiculo) => [normalizePlate(veiculo.placa), veiculo] as const)
+        .filter(([plate]) => Boolean(plate)),
+    );
+
+    // O cadastro de veículos já chega em paralelo à listagem. Enriquecemos o
+    // modelo/placa no navegador em vez de fazer uma segunda leitura de veículos
+    // dentro da própria query de Romaneios. Isso preserva o backfill visual das
+    // versões anteriores e reduz uma ida extra ao banco a cada abertura.
+    return sourceRomaneios.map((romaneio) => {
+      const veiculo =
+        (romaneio.veiculoCodigo ? byId.get(romaneio.veiculoCodigo) : undefined) ??
+        byPlate.get(normalizePlate(romaneio.placaVeiculo));
+      if (!veiculo) return romaneio;
+      return {
+        ...romaneio,
+        veiculoCodigo: veiculo.id,
+        placaVeiculo: formatPlate(veiculo.placa),
+        modeloVeiculo: veiculo.modelo ?? romaneio.modeloVeiculo ?? "",
+      };
+    });
+  }, [sourceRomaneios, veiculos]);
 
   const bindImportedVehicle = (result: PdfResponse, sourceVehicles: Veiculo[] = veiculos) => {
     // Segunda barreira de segurança no frontend: o total exibido na revisão e

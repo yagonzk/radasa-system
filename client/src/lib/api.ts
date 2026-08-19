@@ -25,7 +25,7 @@ api.interceptors.response.use(
   }
 );
 
-type ResourceCacheEntry = { data: unknown; expiresAt: number };
+type ResourceCacheEntry = { data: unknown; expiresAt: number; savedAt: number };
 type BootstrapResponse = {
   data?: Record<string, unknown>;
   errors?: Record<string, string>;
@@ -41,25 +41,99 @@ const BATCHABLE_RESOURCES = new Set([
   "veiculos", "viagens", "fechamentos", "manifestos", "abastecimentos", "pneus",
 ]);
 
+// Cadastros mudam pouco e podem ser reaproveitados entre navegações/reloads da
+// mesma aba. O dado persistido é mostrado imediatamente e a atualização acontece
+// em segundo plano, sem a tela voltar a ficar vazia enquanto o Neon responde.
+const SESSION_CACHE_RESOURCES = new Set([
+  "motoristas", "chapas", "clientes", "empresa", "produtos", "locais", "veiculos",
+  "manifestos", "abastecimentos",
+]);
+const SESSION_CACHE_PREFIX = "radasa_resource_cache_v154:";
+const MAX_SESSION_CACHE_BYTES = 1_500_000;
+
 function resourceTtl(resource: string) {
-  if (["abastecimentos", "manifestos", "viagens", "fechamentos", "pneus"].includes(resource)) return 3_000;
-  return 15_000;
+  if (["abastecimentos", "manifestos", "viagens", "fechamentos", "pneus"].includes(resource)) return 30_000;
+  return 2 * 60_000;
 }
 
+function sessionKey(resource: string) {
+  return `${SESSION_CACHE_PREFIX}${resource}`;
+}
+
+function persistResource(resource: string, data: unknown, savedAt: number) {
+  if (!SESSION_CACHE_RESOURCES.has(resource) || typeof window === "undefined") return;
+  try {
+    const payload = JSON.stringify({ data, savedAt });
+    if (payload.length > MAX_SESSION_CACHE_BYTES) return;
+    window.sessionStorage.setItem(sessionKey(resource), payload);
+  } catch {
+    // Cache é apenas otimização. Quota/privacidade do navegador não pode impedir a aplicação.
+  }
+}
+
+function restoreSessionCache() {
+  if (typeof window === "undefined") return;
+  for (const resource of SESSION_CACHE_RESOURCES) {
+    try {
+      const raw = window.sessionStorage.getItem(sessionKey(resource));
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as { data?: unknown; savedAt?: number };
+      if (!Array.isArray(parsed.data)) continue;
+      const savedAt = Number(parsed.savedAt || 0);
+      resourceCache.set(resource, {
+        data: parsed.data,
+        // O snapshot da sessão serve para primeira pintura; deixamos expirado
+        // para que a montagem faça uma revalidação em background.
+        expiresAt: 0,
+        savedAt,
+      });
+    } catch {
+      window.sessionStorage.removeItem(sessionKey(resource));
+    }
+  }
+}
+
+restoreSessionCache();
+
 function saveResource(resource: string, data: unknown) {
-  resourceCache.set(resource, { data, expiresAt: Date.now() + resourceTtl(resource) });
+  const savedAt = Date.now();
+  resourceCache.set(resource, { data, expiresAt: savedAt + resourceTtl(resource), savedAt });
+  persistResource(resource, data, savedAt);
   return data;
 }
 
+/**
+ * Retorna inclusive um snapshot expirado. O hook usa isso apenas para evitar
+ * "piscar" a tela vazia; getResourceCollection continua conferindo o TTL e
+ * revalida em background quando necessário.
+ */
 export function peekResourceCollection<T>(resource: string): T[] | undefined {
+  const cached = resourceCache.get(resource);
+  if (!cached || !Array.isArray(cached.data)) return undefined;
+  return cached.data as T[];
+}
+
+function freshResourceCollection<T>(resource: string): T[] | undefined {
   const cached = resourceCache.get(resource);
   if (!cached || cached.expiresAt <= Date.now() || !Array.isArray(cached.data)) return undefined;
   return cached.data as T[];
 }
 
 export function invalidateResourceCache(resource?: string) {
-  if (resource) resourceCache.delete(resource);
-  else resourceCache.clear();
+  if (resource) {
+    resourceCache.delete(resource);
+    if (typeof window !== "undefined") {
+      try { window.sessionStorage.removeItem(sessionKey(resource)); } catch { /* noop */ }
+    }
+    return;
+  }
+
+  resourceCache.clear();
+  if (typeof window !== "undefined") {
+    for (const name of SESSION_CACHE_RESOURCES) {
+      try { window.sessionStorage.removeItem(sessionKey(name)); } catch { /* noop */ }
+    }
+  }
 }
 
 async function fetchResourceDirect(resource: string) {
@@ -125,11 +199,14 @@ function enqueueResource(resource: string) {
 }
 
 export function getResourceCollection<T>(resource: string, force = false): Promise<T[]> {
+  // Mesmo uma revalidação forçada compartilha a request já em andamento. Isso
+  // evita que componentes diferentes abram consultas duplicadas ao mesmo recurso.
+  const inflight = resourceInflight.get(resource);
+  if (inflight) return inflight as Promise<T[]>;
+
   if (!force) {
-    const cached = peekResourceCollection<T>(resource);
+    const cached = freshResourceCollection<T>(resource);
     if (cached) return Promise.resolve(cached);
-    const inflight = resourceInflight.get(resource);
-    if (inflight) return inflight as Promise<T[]>;
   }
 
   const request = (BATCHABLE_RESOURCES.has(resource)
@@ -137,9 +214,12 @@ export function getResourceCollection<T>(resource: string, force = false): Promi
     : fetchResourceDirect(resource)) as Promise<T[]>;
 
   resourceInflight.set(resource, request);
-  void request.finally(() => {
+  const releaseInflight = () => {
     if (resourceInflight.get(resource) === request) resourceInflight.delete(resource);
-  });
+  };
+  // Usamos os dois ramos de then em vez de finally solto para não criar uma
+  // Promise rejeitada sem consumidor quando a API falha.
+  void request.then(releaseInflight, releaseInflight);
   return request;
 }
 

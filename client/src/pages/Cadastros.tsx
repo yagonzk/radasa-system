@@ -1,6 +1,8 @@
 import Layout from "@/components/Layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRoute } from "wouter";
+import { useEffect } from "react";
+import { getResourceCollection } from "@/lib/api";
 import MotoristaTab from "@/components/cadastros/MotoristaTab";
 import ChapaTab from "@/components/cadastros/ChapaTab";
 import ClienteTab from "@/components/cadastros/ClienteTab";
@@ -12,6 +14,20 @@ import EmpresaTab from "@/components/cadastros/EmpresaTab";
 export default function Cadastros() {
   const [match, params] = useRoute("/cadastros/:tab");
   const activeTab = match ? params.tab : "motoristas";
+
+  useEffect(() => {
+    // A aba visível carrega normalmente. Logo depois, aquecemos em background os
+    // demais cadastros para que trocar entre Clientes/Produtos/Veículos/etc. seja
+    // praticamente instantâneo, sem bloquear a primeira pintura da página.
+    const timer = window.setTimeout(() => {
+      void Promise.allSettled(
+        ["motoristas", "chapas", "clientes", "produtos", "locais", "veiculos", "empresa"].map(
+          (resource) => getResourceCollection(resource, false),
+        ),
+      );
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   return (
     <Layout>

@@ -3092,6 +3092,7 @@ export default function Abastecimentos() {
   const [editing, setEditing] = useState<Abastecimento | null>(null);
   const [viewing, setViewing] = useState<Abastecimento | null>(null);
   const [downloadTarget, setDownloadTarget] = useState<Abastecimento | null>(null);
+  const [loadingDocumentItemId, setLoadingDocumentItemId] = useState<string | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string } | null>(null);
   const [relatorioOpen, setRelatorioOpen] = useState(false);
   const [relatorioOpcoes, setRelatorioOpcoes] = useState<RelatorioAbastecimentoOpcoes>(relatorioPadrao);
@@ -3315,6 +3316,66 @@ export default function Abastecimentos() {
     }
   };
 
+  const loadFullAbastecimento = async (item: Abastecimento) => {
+    const precisaPdf = Boolean(item.pdfStored) && !item.pdfUrl;
+    const precisaXml = Boolean(item.xmlStored) && !item.xmlUrl;
+    if (!precisaPdf && !precisaXml) return item;
+
+    const response = await api.get<Abastecimento>(`/abastecimentos/${item.id}`);
+    return response.data;
+  };
+
+  const handleEdit = async (item: Abastecimento) => {
+    setLoadingDocumentItemId(item.id);
+    try {
+      const completo = await loadFullAbastecimento(item);
+      setEditing(completo);
+      setFormOpen(true);
+    } catch (error) {
+      console.error(error);
+      toast.error("Não foi possível carregar os dados completos deste abastecimento.");
+    } finally {
+      setLoadingDocumentItemId((current) => current === item.id ? null : current);
+    }
+  };
+
+  const fetchStoredDocument = async (item: Abastecimento, tipo: "pdf" | "xml") => {
+    const inlineUrl = tipo === "pdf" ? item.pdfUrl : item.xmlUrl;
+    if (inlineUrl) return inlineUrl;
+
+    const response = await api.get<{ url: string }>(`/abastecimentos/${item.id}/documento/${tipo}`);
+    return response.data.url;
+  };
+
+  const handleDownloadStoredDocument = async (item: Abastecimento, tipo: "pdf" | "xml") => {
+    setLoadingDocumentItemId(item.id);
+    try {
+      const url = await fetchStoredDocument(item, tipo);
+      downloadAttachment(
+        url,
+        `abastecimento-${item.numeroNfe || item.id}.${tipo}`,
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error(`Não foi possível carregar o ${tipo.toUpperCase()} desta nota.`);
+    } finally {
+      setLoadingDocumentItemId((current) => current === item.id ? null : current);
+    }
+  };
+
+  const handlePreviewStoredPdf = async (item: Abastecimento) => {
+    setLoadingDocumentItemId(item.id);
+    try {
+      const url = await fetchStoredDocument(item, "pdf");
+      setPdfPreview({ url, title: `PDF do abastecimento ${item.numeroNfe || item.id}` });
+    } catch (error) {
+      console.error(error);
+      toast.error("Não foi possível carregar o PDF desta nota.");
+    } finally {
+      setLoadingDocumentItemId((current) => current === item.id ? null : current);
+    }
+  };
+
   const downloadPdf = (url: string, id: string) => {
     const link = document.createElement("a");
     link.href = url;
@@ -3418,73 +3479,73 @@ export default function Abastecimentos() {
           <Filter className="h-3.5 w-3.5" />
           <span>Indicadores calculados sobre {filteredItems.length} abastecimento(s) conforme todos os filtros ativos.</span>
         </div>
-        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4" /> Litros Diesel</p>
-            <p className="mt-2 whitespace-nowrap text-2xl font-bold tabular-nums">{formatLitros(totals.litros)}</p>
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-3 2xl:p-4">
+            <p className="flex min-h-8 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground 2xl:text-xs"><Fuel className="mt-0.5 h-4 w-4 shrink-0" /> <span>Litros Diesel</span></p>
+            <p className="mt-1 truncate text-xl font-bold tabular-nums 2xl:text-2xl" title={formatLitros(totals.litros)}>{formatLitros(totals.litros)}</p>
           </div>
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Gauge className="h-4 w-4" /> KM Rodado</p>
-            <p className="mt-2 whitespace-nowrap text-2xl font-bold tabular-nums">
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-3 2xl:p-4">
+            <p className="flex min-h-8 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground 2xl:text-xs"><Gauge className="mt-0.5 h-4 w-4 shrink-0" /> <span>KM Rodado</span></p>
+            <p className="mt-1 truncate text-xl font-bold tabular-nums 2xl:text-2xl" title={`${mediaKmLitroResumo.kmRodados.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km`}>
               {mediaKmLitroResumo.kmRodados.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km
             </p>
-            <p className="mt-1 text-[11px] text-muted-foreground">Conforme os filtros ativos.</p>
+            <p className="mt-1 truncate text-[10px] text-muted-foreground 2xl:text-[11px]">Conforme os filtros ativos.</p>
           </div>
-          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Banknote className="h-4 w-4 shrink-0" /> <span className="truncate">Valor total</span></p>
-            <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
-              <p className="min-w-0 whitespace-nowrap text-2xl font-bold text-primary tabular-nums">
-                {visibleSummaryValues.valorTotal ? formatBRL(totals.valor) : "R$ ••••••"}
-              </p>
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-3 2xl:p-4">
+            <div className="flex min-h-8 items-start justify-between gap-2">
+              <p className="flex min-w-0 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground 2xl:text-xs"><Banknote className="mt-0.5 h-4 w-4 shrink-0" /> <span>Valor total</span></p>
               <button
                 type="button"
                 onClick={() => toggleSummaryValue("valorTotal")}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={visibleSummaryValues.valorTotal ? "Ocultar valor total" : "Mostrar valor total"}
                 title={visibleSummaryValues.valorTotal ? "Ocultar valor" : "Mostrar valor"}
               >
                 {visibleSummaryValues.valorTotal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+            <p className="mt-1 truncate text-xl font-bold text-primary tabular-nums 2xl:text-2xl" title={visibleSummaryValues.valorTotal ? formatBRL(totals.valor) : "Valor oculto"}>
+              {visibleSummaryValues.valorTotal ? formatBRL(totals.valor) : "R$ ••••••"}
+            </p>
           </div>
-          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Banknote className="h-4 w-4 shrink-0" /> <span className="truncate">Total de descontos</span></p>
-            <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
-              <p className="min-w-0 whitespace-nowrap text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400">
-                {visibleSummaryValues.descontos ? formatBRL(totals.descontos) : "R$ ••••••"}
-              </p>
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-3 2xl:p-4">
+            <div className="flex min-h-8 items-start justify-between gap-2">
+              <p className="flex min-w-0 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground 2xl:text-xs"><Banknote className="mt-0.5 h-4 w-4 shrink-0" /> <span>Total de descontos</span></p>
               <button
                 type="button"
                 onClick={() => toggleSummaryValue("descontos")}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={visibleSummaryValues.descontos ? "Ocultar total de descontos" : "Mostrar total de descontos"}
                 title={visibleSummaryValues.descontos ? "Ocultar valor" : "Mostrar valor"}
               >
                 {visibleSummaryValues.descontos ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+            <p className="mt-1 truncate text-xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400 2xl:text-2xl" title={visibleSummaryValues.descontos ? formatBRL(totals.descontos) : "Valor oculto"}>
+              {visibleSummaryValues.descontos ? formatBRL(totals.descontos) : "R$ ••••••"}
+            </p>
           </div>
-          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4 shrink-0" /> <span className="truncate">Valor unitário Diesel</span></p>
-            <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
-              <p className="min-w-0 whitespace-nowrap text-2xl font-bold tabular-nums">
-                {visibleSummaryValues.mediaLitro ? formatBRL(totals.media) : "R$ ••••••"}
-              </p>
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-3 2xl:p-4">
+            <div className="flex min-h-8 items-start justify-between gap-2">
+              <p className="flex min-w-0 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground 2xl:text-xs"><Fuel className="mt-0.5 h-4 w-4 shrink-0" /> <span>Valor unitário Diesel</span></p>
               <button
                 type="button"
                 onClick={() => toggleSummaryValue("mediaLitro")}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={visibleSummaryValues.mediaLitro ? "Ocultar valor unitário do Diesel" : "Mostrar valor unitário do Diesel"}
                 title={visibleSummaryValues.mediaLitro ? "Ocultar valor" : "Mostrar valor"}
               >
                 {visibleSummaryValues.mediaLitro ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+            <p className="mt-1 truncate text-xl font-bold tabular-nums 2xl:text-2xl" title={visibleSummaryValues.mediaLitro ? formatBRL(totals.media) : "Valor oculto"}>
+              {visibleSummaryValues.mediaLitro ? formatBRL(totals.media) : "R$ ••••••"}
+            </p>
           </div>
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Gauge className="h-4 w-4" /> Média de KM/L</p>
-            <p className="mt-2 text-2xl font-bold">{mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-3 2xl:p-4">
+            <p className="flex min-h-8 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground 2xl:text-xs"><Gauge className="mt-0.5 h-4 w-4 shrink-0" /> <span>Média de KM/L</span></p>
+            <p className="mt-1 truncate text-xl font-bold tabular-nums 2xl:text-2xl" title={`${mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L`}>{mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L</p>
+            <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-muted-foreground 2xl:text-[11px]">
               {mediaKmLitroResumo.placasCalculadas > 0
                 ? `${mediaKmLitroResumo.kmRodados.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km ÷ ${mediaKmLitroResumo.litrosDiesel.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} L Diesel · ${mediaKmLitroResumo.placasCalculadas} placa(s)`
                 : "Sem dois odômetros Diesel válidos no recorte filtrado."}
@@ -3612,8 +3673,8 @@ export default function Abastecimentos() {
                       <td className="overflow-hidden px-3 py-3 align-middle">
                         <div className="flex w-full items-center justify-center gap-1">
                           <button type="button" onClick={() => setViewing(item)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-blue-500 hover:bg-blue-500/10 2xl:h-8 2xl:w-8" title="Visualizar"><Eye className="h-4 w-4" /></button>
-                          {(item.pdfUrl || item.xmlUrl) && <button type="button" onClick={() => setDownloadTarget(item)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-500/10 2xl:h-8 2xl:w-8" title="Baixar arquivos da nota"><Download className="h-4 w-4" /></button>}
-                          <button type="button" onClick={() => { setEditing(item); setFormOpen(true); }} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-amber-500 hover:bg-amber-500/10 2xl:h-8 2xl:w-8" title="Editar"><Pencil className="h-4 w-4" /></button>
+                          {(item.pdfUrl || item.xmlUrl || item.pdfStored || item.xmlStored) && <button type="button" onClick={() => setDownloadTarget(item)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-500/10 2xl:h-8 2xl:w-8" title="Baixar arquivos da nota"><Download className="h-4 w-4" /></button>}
+                          <button type="button" disabled={loadingDocumentItemId === item.id} onClick={() => void handleEdit(item)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-amber-500 hover:bg-amber-500/10 disabled:cursor-wait disabled:opacity-60 2xl:h-8 2xl:w-8" title="Editar">{loadingDocumentItemId === item.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}</button>
                           <button type="button" onClick={() => void handleDelete(item)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-destructive hover:bg-destructive/10 2xl:h-8 2xl:w-8" title="Excluir"><Trash2 className="h-4 w-4" /></button>
                         </div>
                       </td>
@@ -3718,14 +3779,14 @@ export default function Abastecimentos() {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">Escolha o arquivo que deseja baixar.</p>
           <div className="grid gap-2 sm:grid-cols-2">
-            {downloadTarget?.xmlUrl && (
-              <Button type="button" variant="outline" onClick={() => downloadAttachment(downloadTarget.xmlUrl!, `abastecimento-${downloadTarget.numeroNfe || downloadTarget.id}.xml`)}>
-                <FileCode2 className="mr-2 h-4 w-4" /> Baixar XML
+            {(downloadTarget?.xmlUrl || downloadTarget?.xmlStored) && (
+              <Button type="button" variant="outline" disabled={loadingDocumentItemId === downloadTarget.id} onClick={() => void handleDownloadStoredDocument(downloadTarget, "xml")}>
+                {loadingDocumentItemId === downloadTarget.id ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <FileCode2 className="mr-2 h-4 w-4" />} Baixar XML
               </Button>
             )}
-            {downloadTarget?.pdfUrl && (
-              <Button type="button" onClick={() => downloadAttachment(downloadTarget.pdfUrl!, `abastecimento-${downloadTarget.numeroNfe || downloadTarget.id}.pdf`)}>
-                <FileText className="mr-2 h-4 w-4" /> Baixar PDF
+            {(downloadTarget?.pdfUrl || downloadTarget?.pdfStored) && (
+              <Button type="button" disabled={loadingDocumentItemId === downloadTarget.id} onClick={() => void handleDownloadStoredDocument(downloadTarget, "pdf")}>
+                {loadingDocumentItemId === downloadTarget.id ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />} Baixar PDF
               </Button>
             )}
           </div>
@@ -3840,10 +3901,10 @@ export default function Abastecimentos() {
                   </div>
                 )}
 
-                {viewing.pdfUrl && (
+                {(viewing.pdfUrl || viewing.pdfStored) && (
                   <div className="grid grid-cols-2 gap-2 border-t border-border pt-3">
-                    <Button type="button" onClick={() => downloadPdf(viewing.pdfUrl!, viewing.id)}><Download className="mr-2 h-4 w-4" /> Baixar PDF</Button>
-                    <Button type="button" variant="outline" onClick={() => setPdfPreview({ url: viewing.pdfUrl!, title: `PDF do abastecimento ${viewing.id}` })}><Eye className="mr-2 h-4 w-4" /> Visualizar PDF</Button>
+                    <Button type="button" disabled={loadingDocumentItemId === viewing.id} onClick={() => void handleDownloadStoredDocument(viewing, "pdf")}>{loadingDocumentItemId === viewing.id ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} Baixar PDF</Button>
+                    <Button type="button" variant="outline" disabled={loadingDocumentItemId === viewing.id} onClick={() => void handlePreviewStoredPdf(viewing)}><Eye className="mr-2 h-4 w-4" /> Visualizar PDF</Button>
                   </div>
                 )}
               </div>

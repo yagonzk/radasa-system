@@ -4,16 +4,10 @@ import { createServer } from "node:http";
 import { createApp, registerErrors } from "../server/app.js";
 
 type HyperdriveBinding = { connectionString: string };
-type EmailBinding = {
-  send(message: {
-    to: string | { email: string; name?: string };
-    from: string | { email: string; name?: string };
-    subject: string;
-    html?: string;
-    text?: string;
-  }): Promise<{ messageId: string }>;
+type WorkerBindings = {
+  HYPERDRIVE?: HyperdriveBinding;
+  RESEND_API_KEY?: string;
 };
-type WorkerBindings = { HYPERDRIVE?: HyperdriveBinding; EMAIL?: EmailBinding };
 
 // Se o binding HYPERDRIVE estiver configurado no wrangler.jsonc, o Prisma usa
 // automaticamente a connection string acelerada. Sem binding, o projeto
@@ -25,10 +19,12 @@ if (hyperdrive?.connectionString) {
     hyperdrive.connectionString;
 }
 
-if (bindings.EMAIL) {
-  (globalThis as typeof globalThis & { __RADASA_EMAIL?: EmailBinding }).__RADASA_EMAIL =
-    bindings.EMAIL;
+if (bindings.RESEND_API_KEY) {
+  (
+    globalThis as typeof globalThis & { __RADASA_RESEND_API_KEY?: string }
+  ).__RADASA_RESEND_API_KEY = bindings.RESEND_API_KEY;
 }
+
 
 const app = createApp();
 registerErrors(app);

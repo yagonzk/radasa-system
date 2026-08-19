@@ -2,10 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { parseDateOnly } from "../utils/date.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
-import {
-  resolveOrCreatePostoFromEmitente,
-  syncHistoricalAbastecimentoPostos,
-} from "./abastecimento-posto.service.js";
+import { resolveOrCreatePostoFromEmitente } from "./abastecimento-posto.service.js";
 
 const include = { produtos: true } as const;
 
@@ -41,6 +38,10 @@ const serialize = (item: any) => ({
   valorCofins: number(item.valorCofins),
   informacoesComplementares: item.informacoesComplementares ?? "",
   dataEmissao: dateOnly(item.dataEmissao),
+  // Nas listagens os documentos pesados não são enviados. Apenas estes flags
+  // informam ao frontend que PDF/XML existem e podem ser carregados sob demanda.
+  pdfStored: item.pdfStored ?? Boolean(item.pdfUrl),
+  xmlStored: item.xmlStored ?? Boolean(item.xmlUrl),
   createdAt: created(item.createdAt),
   produtos: (item.produtos ?? []).map((produto: any) => ({
     produtoId: produto.produtoId,
@@ -440,25 +441,63 @@ async function importarItem(
 
 export const abastecimentosService = {
   async list() {
-    // Corrige automaticamente registros antigos que ficaram associados ao posto
-    // errado (ex.: Pasqualotto) usando o CNPJ/nome do emitente já salvo na NF-e.
-    // Falhas nessa manutenção nunca podem impedir a listagem dos abastecimentos.
-    try {
-      await syncHistoricalAbastecimentoPostos();
-    } catch (error) {
-      console.error("[Abastecimentos] Falha ao sincronizar postos históricos:", error);
-    }
+    // Listagem precisa ser estritamente leitura e leve. A sincronização histórica
+    // de postos era executada aqui e podia varrer/atualizar todo o banco antes de
+    // devolver a tela. Novos lançamentos já resolvem o posto na gravação, então a
+    // manutenção histórica não deve bloquear cada abertura de Abastecimentos.
+    //
+    // PDF/XML podem ter megabytes em base64. Eles ficam fora da listagem e são
+    // buscados apenas quando o usuário abre/edita/baixa uma nota específica.
+    const [items, documentState] = await Promise.all([
+      prisma.abastecimento.findMany({
+        include,
+        omit: { pdfUrl: true, xmlUrl: true },
+        orderBy: [{ dataEmissao: "desc" }, { createdAt: "desc" }, { hodometro: "desc" }],
+      }),
+      prisma.$queryRaw<Array<{ id: string; pdfStored: boolean; xmlStored: boolean }>>`
+        SELECT
+          "id",
+          ("pdfUrl" IS NOT NULL) AS "pdfStored",
+          ("xmlUrl" IS NOT NULL) AS "xmlStored"
+        FROM "abastecimentos"
+        WHERE "pdfUrl" IS NOT NULL OR "xmlUrl" IS NOT NULL
+      `,
+    ]);
 
-    return (await prisma.abastecimento.findMany({
-      include,
-      orderBy: [{ dataEmissao: "desc" }, { createdAt: "desc" }, { hodometro: "desc" }],
-    })).map(serialize);
+    const documentsById = new Map(documentState.map((item) => [item.id, item]));
+    return items.map((item) =>
+      serialize({
+        ...item,
+        pdfStored: documentsById.get(item.id)?.pdfStored ?? false,
+        xmlStored: documentsById.get(item.id)?.xmlStored ?? false,
+      }),
+    );
   },
 
   async get(id: string) {
     const item = await prisma.abastecimento.findUnique({ where: { id }, include });
     if (!item) throw new AppError(404, "Abastecimento não encontrado.");
     return serialize(item);
+  },
+
+  async getDocumento(id: string, tipo: "pdf" | "xml") {
+    if (tipo === "pdf") {
+      const item = await prisma.abastecimento.findUnique({
+        where: { id },
+        select: { pdfUrl: true },
+      });
+      if (!item) throw new AppError(404, "Abastecimento não encontrado.");
+      if (!item.pdfUrl) throw new AppError(404, "PDF não armazenado para este abastecimento.");
+      return { url: item.pdfUrl };
+    }
+
+    const item = await prisma.abastecimento.findUnique({
+      where: { id },
+      select: { xmlUrl: true },
+    });
+    if (!item) throw new AppError(404, "Abastecimento não encontrado.");
+    if (!item.xmlUrl) throw new AppError(404, "XML não armazenado para este abastecimento.");
+    return { url: item.xmlUrl };
   },
 
   async create(input: any) {
