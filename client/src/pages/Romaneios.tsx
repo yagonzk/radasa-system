@@ -37,6 +37,7 @@ import {
   Download,
   FileDown,
   Eye,
+  Filter,
   EyeOff,
   Files,
   FileText,
@@ -1482,8 +1483,8 @@ export default function Romaneios() {
 
   return (
     <Layout>
-      <div className="mx-auto w-full min-w-0 max-w-[1500px] space-y-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="w-full min-w-0 max-w-none">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="font-display text-2xl font-bold">Romaneios</h1>
             <p className="mt-1 text-sm text-muted-foreground">Importe romaneios de frete e acompanhe cada cliente, produto, NF e cobrança.</p>
@@ -1513,47 +1514,81 @@ export default function Romaneios() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 xl:gap-3">
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Filter className="h-3.5 w-3.5" />
+          <span>Indicadores calculados sobre {filtered.length} romaneio(s) conforme todos os filtros ativos.</span>
+        </div>
+
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="min-h-[128px] min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-3 2xl:p-4">
+            <p className="flex min-h-8 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground 2xl:text-xs">
+              <FileText className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>Romaneios</span>
+            </p>
+            <p className="mt-1 truncate text-xl font-bold tabular-nums 2xl:text-2xl" title={String(filtered.length)}>
+              {filtered.length}
+            </p>
+          </div>
+
           {[
-            { label: "Romaneios", value: filtered.length, Icon: FileText },
             {
+              key: "Total Clientes",
               label: "Total Clientes",
               value: formatBRL(summary.valorCliente),
               Icon: CircleDollarSign,
               valueClass: "text-blue-500",
             },
-            { label: "Total Lebrinha", value: formatBRL(summary.valorLebrinha), Icon: Truck, valueClass: "text-violet-500" },
-            { label: "Foi pago", value: formatBRL(summary.foiPago), Icon: Check, valueClass: "text-emerald-500" },
-            { label: "Falta pagar", value: formatBRL(summary.faltaPagar), Icon: CircleDollarSign, valueClass: "text-amber-500" },
-            { label: "Valor Total", value: formatBRL(summary.valorTotal), Icon: CircleDollarSign, valueClass: "text-cyan-500" },
-          ].map(({ label, value, Icon, valueClass }) => {
-            const isMoney = label !== "Romaneios";
-            const isVisible = Boolean(visibleSummaryValues[label]);
+            {
+              key: "Total Lebrinha",
+              label: "Total Lebrinha",
+              value: formatBRL(summary.valorLebrinha),
+              Icon: Truck,
+              valueClass: "text-violet-500",
+            },
+            {
+              key: "Foi pago",
+              label: "Foi pago",
+              value: formatBRL(summary.foiPago),
+              Icon: Check,
+              valueClass: "text-emerald-600 dark:text-emerald-400",
+            },
+            {
+              key: "Falta pagar",
+              label: "Falta pagar",
+              value: formatBRL(summary.faltaPagar),
+              Icon: CircleDollarSign,
+              valueClass: "text-amber-500",
+            },
+            {
+              key: "Valor Total",
+              label: "Valor total",
+              value: formatBRL(summary.valorTotal),
+              Icon: CircleDollarSign,
+              valueClass: "text-cyan-500",
+            },
+          ].map(({ key, label, value, Icon, valueClass }) => {
+            const isVisible = Boolean(visibleSummaryValues[key]);
 
             return (
-              <div key={label} className="min-w-0 overflow-hidden rounded-xl border bg-card p-2.5 xl:p-4">
-                <p className="flex min-w-0 items-center gap-1.5 text-[10px] font-semibold uppercase text-muted-foreground xl:gap-2 xl:text-xs">
-                  <Icon className="h-3.5 w-3.5 shrink-0 xl:h-4 xl:w-4" />
-                  <span className="truncate">{label}</span>
-                </p>
-                <div className="mt-2 flex min-w-0 items-center justify-between gap-1 xl:gap-2">
-                  <p
-                    className={`min-w-0 whitespace-nowrap text-[clamp(0.78rem,1.32vw,1.5rem)] font-bold leading-tight tabular-nums tracking-[-0.035em] ${valueClass ?? ""}`}
-                  >
-                    {isMoney && !isVisible ? "R$ ••••••" : String(value)}
+              <div key={key} className="relative min-h-[128px] min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-3 2xl:p-4">
+                <div className="min-h-8 pr-8">
+                  <p className="flex min-w-0 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground 2xl:text-xs">
+                    <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{label}</span>
                   </p>
-                  {isMoney && (
-                    <button
-                      type="button"
-                      onClick={() => toggleSummaryValue(label)}
-                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:h-8 xl:w-8"
-                      aria-label={isVisible ? `Ocultar ${label}` : `Mostrar ${label}`}
-                      title={isVisible ? "Ocultar valor" : "Mostrar valor"}
-                    >
-                      {isVisible ? <EyeOff className="h-3.5 w-3.5 xl:h-4 xl:w-4" /> : <Eye className="h-3.5 w-3.5 xl:h-4 xl:w-4" />}
-                    </button>
-                  )}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => toggleSummaryValue(key)}
+                  className="absolute right-3 top-3 inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring 2xl:right-4 2xl:top-4"
+                  aria-label={isVisible ? `Ocultar ${label}` : `Mostrar ${label}`}
+                  title={isVisible ? "Ocultar valor" : "Mostrar valor"}
+                >
+                  {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+                <p className={`mt-1 truncate text-xl font-bold tabular-nums 2xl:text-2xl ${valueClass ?? ""}`} title={isVisible ? value : "Valor oculto"}>
+                  {isVisible ? value : "R$ ••••••"}
+                </p>
               </div>
             );
           })}
