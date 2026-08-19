@@ -3036,7 +3036,11 @@ function matchesAbastecimentoFilters(
   if (!ignoredKeys.has("emissao") && filters.emissao && dataEmissao < filters.emissao) return false;
   if (!ignoredKeys.has("emissaoAte") && filters.emissaoAte && dataEmissao > filters.emissaoAte) return false;
   if (!ignoredKeys.has("litros") && filters.litros && !normalize(formatLitros(litros)).includes(normalize(filters.litros))) return false;
-  if (!ignoredKeys.has("valorUnitario") && filters.valorUnitario && !normalize(formatBRL(valorUnitarioMedio)).includes(normalize(filters.valorUnitario))) return false;
+  if (
+    !ignoredKeys.has("valorUnitario") &&
+    filters.valorUnitario &&
+    (litros <= 0 || !normalize(formatBRL(valorUnitarioMedio)).includes(normalize(filters.valorUnitario)))
+  ) return false;
   if (!ignoredKeys.has("valorDesconto") && filters.valorDesconto && !normalize(formatBRL(item.valorDesconto)).includes(normalize(filters.valorDesconto))) return false;
   if (!ignoredKeys.has("valorTotal") && filters.valorTotal && !normalize(formatBRL(item.valorTotal)).includes(normalize(filters.valorTotal))) return false;
   if (!ignoredKeys.has("hodometro") && filters.hodometro && !normalize(formatOdometro(item.hodometro)).includes(normalize(filters.hodometro))) return false;
@@ -3047,7 +3051,7 @@ function matchesAbastecimentoFilters(
 interface RelatorioAbastecimentoOpcoes {
   mediaKmLitro: boolean;
   custoLitro: boolean;
-  postos: boolean;
+  kmRodado: boolean;
   totalLitros: boolean;
   totalGasto: boolean;
 }
@@ -3055,7 +3059,7 @@ interface RelatorioAbastecimentoOpcoes {
 const relatorioPadrao: RelatorioAbastecimentoOpcoes = {
   mediaKmLitro: true,
   custoLitro: true,
-  postos: true,
+  kmRodado: true,
   totalLitros: true,
   totalGasto: true,
 };
@@ -3273,10 +3277,14 @@ export default function Abastecimentos() {
       ).sort((a, b) => a.localeCompare(b, "pt-BR"));
     }
     if (key === "litros") return Array.from(new Set<string>(sourceItems.map((item) => formatLitros(abastecimentoFuelBreakdown(item, produtos).dieselLitros))));
-    if (key === "valorUnitario") return Array.from(new Set<string>(sourceItems.map((item) => {
-      const combustiveis = abastecimentoFuelBreakdown(item, produtos);
-      return formatBRL(combustiveis.dieselLitros > 0 ? combustiveis.dieselValor / combustiveis.dieselLitros : 0);
-    })));
+    if (key === "valorUnitario") return Array.from(
+      new Set<string>(
+        sourceItems
+          .map((item) => abastecimentoFuelBreakdown(item, produtos))
+          .filter((combustiveis) => combustiveis.dieselLitros > 0)
+          .map((combustiveis) => formatBRL(combustiveis.dieselValor / combustiveis.dieselLitros)),
+      ),
+    );
     if (key === "valorDesconto") return Array.from(new Set<string>(sourceItems.map((item) => formatBRL(item.valorDesconto))));
     if (key === "valorTotal") return Array.from(new Set<string>(sourceItems.map((item) => formatBRL(item.valorTotal))));
     if (key === "hodometro") return Array.from(new Set<string>(sourceItems.map((item) => formatOdometro(item.hodometro))));
@@ -3288,7 +3296,7 @@ export default function Abastecimentos() {
     { key: "emissao", label: "Emissão", date: true },
     { key: "produto", label: "Produtos" },
     { key: "litros", label: "Diesel / ARLA", align: "right" },
-    { key: "valorUnitario", label: "Valor unitário", align: "right" },
+    { key: "valorUnitario", label: "Valor unitário Diesel", align: "right" },
     { key: "valorDesconto", label: "Valor desconto", align: "right" },
     { key: "valorTotal", label: "Valor total", align: "right" },
     { key: "placa", label: "Placa / Modelo" },
@@ -3323,32 +3331,66 @@ export default function Abastecimentos() {
       return;
     }
 
+    const kmRodadoPorAbastecimento = new Map<string, number>();
+    const abastecimentosDieselPorPlaca = new Map<string, Abastecimento[]>();
+
+    // O KM rodado por NF usa somente abastecimentos Diesel que estejam no mesmo
+    // recorte filtrado do relatório. ARLA não cria referência de odômetro.
+    filteredItems.forEach((item) => {
+      const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+      if (combustiveis.dieselLitros <= 0 || Number(item.hodometro) <= 0) return;
+
+      const veiculo = resolveAbastecimentoVehicle(item, veiculos);
+      const plateKey = normalizeVehicleKey(veiculo?.placa || item.placaXml) || item.veiculoId;
+      abastecimentosDieselPorPlaca.set(plateKey, [
+        ...(abastecimentosDieselPorPlaca.get(plateKey) ?? []),
+        item,
+      ]);
+    });
+
+    abastecimentosDieselPorPlaca.forEach((registros) => {
+      const cronologicos = [...registros].sort((a, b) => {
+        const dataA = abastecimentoDateKey(a.dataEmissao);
+        const dataB = abastecimentoDateKey(b.dataEmissao);
+        return (
+          dataA.localeCompare(dataB) ||
+          Number(a.hodometro) - Number(b.hodometro) ||
+          String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""))
+        );
+      });
+
+      for (let index = 1; index < cronologicos.length; index += 1) {
+        const atual = cronologicos[index];
+        const anterior = cronologicos[index - 1];
+        const diferenca = Math.abs(Number(atual.hodometro) - Number(anterior.hodometro));
+        if (diferenca > 0) kmRodadoPorAbastecimento.set(atual.id, diferenca);
+      }
+    });
+
     const metricas = [
       relatorioOpcoes.totalLitros && ["Litros Diesel", formatLitros(totals.litros)],
       relatorioOpcoes.totalLitros && ["Litros ARLA", formatLitros(totals.litrosArla)],
       relatorioOpcoes.totalGasto && ["Valor total", formatBRL(totals.valor)],
       relatorioOpcoes.custoLitro && ["Custo médio Diesel/L", formatBRL(totals.media)],
       relatorioOpcoes.mediaKmLitro && ["Média de KM/L", `${mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L`],
-      relatorioOpcoes.postos && [
-        "Postos no período",
-        String(
-          new Set(
-            filteredItems.map((item) => {
-              const posto = resolveAbastecimentoPosto(item, clientes);
-              return onlyDigits(item.emitenteCnpj) || posto?.id || posto?.nomeFantasia || item.clienteId;
-            }),
-          ).size,
-        ),
+      relatorioOpcoes.kmRodado && [
+        "KM rodado",
+        `${mediaKmLitroResumo.kmRodados.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km`,
       ],
     ].filter(Boolean) as Array<[string, string]>;
     const linhas = filteredItems.map((item) => {
       const cliente = resolveAbastecimentoPosto(item, clientes);
       const veiculo = resolveAbastecimentoVehicle(item, veiculos);
       const combustiveis = abastecimentoFuelBreakdown(item, produtos);
-      return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia ?? "Não identificado")}</td><td>${escapeReportText(formatVehiclePlateModel(veiculo, item.placaXml))}</td><td>${escapeReportText(formatSubcategoriaVeiculo(veiculo?.subcategoria))}</td><td>${escapeReportText(formatLitros(combustiveis.dieselLitros))}</td><td>${escapeReportText(formatLitros(combustiveis.arlaLitros))}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`;
+      const valorUnitarioDiesel = combustiveis.dieselLitros > 0
+        ? combustiveis.dieselValor / combustiveis.dieselLitros
+        : null;
+      const kmRodado = kmRodadoPorAbastecimento.get(item.id);
+      const placa = veiculo?.placa || item.placaXml || "—";
+      return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia ?? "Não identificado")}</td><td>${escapeReportText(placa)}</td><td>${escapeReportText(formatLitros(combustiveis.dieselLitros))}</td><td>${escapeReportText(formatLitros(combustiveis.arlaLitros))}</td><td>${escapeReportText(valorUnitarioDiesel !== null ? formatBRL(valorUnitarioDiesel) : "—")}</td><td>${escapeReportText(kmRodado !== undefined ? `${kmRodado.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km` : "—")}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`;
     }).join("");
 
-    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Abastecimentos</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:9px;border:1px solid #dbe3f0}td:nth-child(6),td:nth-child(7),td:nth-child(8){text-align:right}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}}</style></head><body><h1>Relatório de Abastecimentos</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${filteredItems.length} registro(s) conforme os filtros ativos.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Notas fiscais</h2><table><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa / Modelo</th><th>Subcategoria</th><th>Diesel</th><th>ARLA</th><th>Valor total</th></tr></thead><tbody>${linhas}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
+    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Abastecimentos</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}table{border-collapse:collapse;width:100%;font-size:11px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:8px;border:1px solid #dbe3f0}td:nth-child(5),td:nth-child(6),td:nth-child(7),td:nth-child(8),td:nth-child(9){text-align:right}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}}</style></head><body><h1>Relatório de Abastecimentos</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${filteredItems.length} registro(s) conforme os filtros ativos.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Notas fiscais</h2><table><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>Diesel</th><th>ARLA</th><th>Valor unitário Diesel</th><th>KM rodado</th><th>Valor total</th></tr></thead><tbody>${linhas}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
     reportWindow.document.close();
     setRelatorioOpen(false);
   };
@@ -3382,8 +3424,11 @@ export default function Abastecimentos() {
             <p className="mt-2 whitespace-nowrap text-2xl font-bold tabular-nums">{formatLitros(totals.litros)}</p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4" /> Litros ARLA</p>
-            <p className="mt-2 whitespace-nowrap text-2xl font-bold tabular-nums">{formatLitros(totals.litrosArla)}</p>
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Gauge className="h-4 w-4" /> KM Rodado</p>
+            <p className="mt-2 whitespace-nowrap text-2xl font-bold tabular-nums">
+              {mediaKmLitroResumo.kmRodados.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Conforme os filtros ativos.</p>
           </div>
           <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Banknote className="h-4 w-4 shrink-0" /> <span className="truncate">Valor total</span></p>
@@ -3420,7 +3465,7 @@ export default function Abastecimentos() {
             </div>
           </div>
           <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-4">
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4 shrink-0" /> <span className="truncate">Média R$/L Diesel</span></p>
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><Fuel className="h-4 w-4 shrink-0" /> <span className="truncate">Valor unitário Diesel</span></p>
             <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
               <p className="min-w-0 whitespace-nowrap text-2xl font-bold tabular-nums">
                 {visibleSummaryValues.mediaLitro ? formatBRL(totals.media) : "R$ ••••••"}
@@ -3429,7 +3474,7 @@ export default function Abastecimentos() {
                 type="button"
                 onClick={() => toggleSummaryValue("mediaLitro")}
                 className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={visibleSummaryValues.mediaLitro ? "Ocultar média de R$/L" : "Mostrar média de R$/L"}
+                aria-label={visibleSummaryValues.mediaLitro ? "Ocultar valor unitário do Diesel" : "Mostrar valor unitário do Diesel"}
                 title={visibleSummaryValues.mediaLitro ? "Ocultar valor" : "Mostrar valor"}
               >
                 {visibleSummaryValues.mediaLitro ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -3551,7 +3596,7 @@ export default function Abastecimentos() {
                           <span className="block whitespace-nowrap text-[11px] text-muted-foreground">ARLA {formatLitros(combustiveis.arlaLitros)}</span>
                         )}
                       </td>
-                      <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums"><span className="block whitespace-nowrap">{formatBRL(litros > 0 ? bruto / litros : 0)}</span></td>
+                      <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums"><span className="block whitespace-nowrap">{litros > 0 ? formatBRL(bruto / litros) : "—"}</span></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums text-muted-foreground"><span className="block whitespace-nowrap">{formatBRL(item.valorDesconto)}</span></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle font-bold tabular-nums text-primary"><span className="block whitespace-nowrap">{formatBRL(item.valorTotal)}</span></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle font-medium">
@@ -3651,7 +3696,7 @@ export default function Abastecimentos() {
               ["totalGasto", "Valor total gasto"],
               ["custoLitro", "Custo médio por litro"],
               ["mediaKmLitro", "Média de KM/L"],
-              ["postos", "Quantidade de postos"],
+              ["kmRodado", "KM rodado"],
             ] as Array<[keyof RelatorioAbastecimentoOpcoes, string]>).map(([key, label]) => (
               <label key={key} className="flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm hover:bg-muted/40">
                 <input type="checkbox" checked={relatorioOpcoes[key]} onChange={(event) => setRelatorioOpcoes((current) => ({ ...current, [key]: event.target.checked }))} />

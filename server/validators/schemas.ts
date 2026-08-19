@@ -320,6 +320,8 @@ const password = z.string().min(8, "A senha deve ter pelo menos 8 caracteres").m
 export const loginSchema = bodySchema(z.object({ identifier: z.string().trim().min(3).max(255), password }));
 export const registerSchema = bodySchema(z.object({ name: text(120), username, email: z.string().trim().email().transform(v => v.toLowerCase()), password }));
 export const changePasswordSchema = bodySchema(z.object({ currentPassword: password, newPassword: password }));
+export const forgotPasswordSchema = bodySchema(z.object({ identifier: z.string().trim().min(3).max(255) }));
+export const resetPasswordSchema = bodySchema(z.object({ token: z.string().trim().min(32).max(512), newPassword: password }));
 const cpfProfile = z.string().trim().max(14).transform((value) => value.replace(/\D/g, "")).refine((value) => !value || value.length === 11, "CPF deve possuir 11 dígitos.");
 export const updateProfileSchema = bodySchema(z.object({
   name: text(120),

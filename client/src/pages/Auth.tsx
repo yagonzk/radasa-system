@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
+import { useLocation } from "wouter";
 
 function getApiMessage(error: any, fallback: string) {
   return error?.response?.data?.message || error?.response?.data?.error || fallback;
@@ -11,6 +12,7 @@ function getApiMessage(error: any, fallback: string) {
 
 export default function Auth() {
   const { login, register } = useAuth();
+  const [, navigate] = useLocation();
   const { theme, toggleTheme } = useTheme();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [showPassword, setShowPassword] = useState(false);
@@ -116,7 +118,7 @@ export default function Auth() {
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </span>
-              <button type="button" onClick={() => toast.info("A recuperação de senha será disponibilizada em breve.")} className="mt-2 block w-full text-right text-xs font-semibold text-primary hover:underline">Esqueceu sua senha?</button>
+              <button type="button" onClick={() => navigate("/esqueci-senha")} className="mt-2 block w-full text-right text-xs font-semibold text-primary hover:underline">Esqueceu sua senha?</button>
             </label>
 
             <button disabled={submitting} className="h-12 w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 text-base font-bold text-white shadow-lg shadow-blue-500/20 transition hover:brightness-105 disabled:opacity-60">

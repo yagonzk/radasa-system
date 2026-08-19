@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -12,6 +12,8 @@ import Fechamentos from "./pages/Fechamentos";
 import Romaneios from "./pages/Romaneios";
 import Auth from "./pages/Auth";
 import ChangePassword from "./pages/ChangePassword";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Perfil from "./pages/Perfil";
 import Logs from "./pages/Logs";
 import Abastecimentos from "./pages/Abastecimentos";
@@ -50,8 +52,19 @@ function Router() {
   );
 }
 
+function PublicAuthRouter() {
+  return (
+    <Switch>
+      <Route path="/esqueci-senha" component={ForgotPassword} />
+      <Route path="/redefinir-senha" component={ResetPassword} />
+      <Route component={Auth} />
+    </Switch>
+  );
+}
+
 function SessionGate() {
   const { user, loading } = useAuth();
+  const [location] = useLocation();
 
   if (loading) {
     return (
@@ -61,7 +74,11 @@ function SessionGate() {
     );
   }
 
-  return user ? <Router /> : <Auth />;
+  if (location === "/esqueci-senha" || location === "/redefinir-senha") {
+    return <PublicAuthRouter />;
+  }
+
+  return user ? <Router /> : <PublicAuthRouter />;
 }
 
 function App() {

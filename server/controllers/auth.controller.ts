@@ -8,6 +8,13 @@ export const authController = {
   register: async (req: Request, res: Response) =>
     res.status(201).json(await authService.register(req.body)),
 
+
+  forgotPassword: async (req: Request, res: Response) =>
+    res.json(await authService.forgotPassword(req.body.identifier)),
+
+  resetPassword: async (req: Request, res: Response) =>
+    res.json(await authService.resetPassword(req.body.token, req.body.newPassword)),
+
   changePassword: async (req: Request, res: Response) =>
     res.json(await authService.changePassword(req.user!.id, req.body.currentPassword, req.body.newPassword)),
 

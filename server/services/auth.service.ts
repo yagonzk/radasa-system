@@ -1,8 +1,11 @@
 import bcrypt from "bcryptjs";
+import { createHash, randomBytes } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
 import { env } from "../config/env.js";
 import { AppError } from "../utils/app-error.js";
+import { emailService } from "./email.service.js";
+import { logger } from "../config/logger.js";
 
 function publicUser(user: {
   id: string;
@@ -35,6 +38,18 @@ function signToken(user: { id: string; email: string; role: "ADMIN" | "GERENTE" 
       expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"],
     }
   );
+}
+
+const PASSWORD_RESET_GENERIC_MESSAGE =
+  "Se existir uma conta com os dados informados, enviaremos um link de recuperação para o e-mail cadastrado.";
+
+function passwordResetHash(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function passwordResetUrl(token: string) {
+  const baseUrl = env.PASSWORD_RESET_BASE_URL.replace(/\/$/, "");
+  return `${baseUrl}/redefinir-senha?token=${encodeURIComponent(token)}`;
 }
 
 export const authService = {
@@ -97,14 +112,113 @@ export const authService = {
     };
   },
 
+  async forgotPassword(identifier: string) {
+    if (!emailService.isConfigured()) {
+      throw new AppError(503, "O serviço de recuperação por e-mail ainda não está disponível. Tente novamente em alguns minutos.");
+    }
+
+    const normalizedIdentifier = identifier.trim().toLowerCase();
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: normalizedIdentifier },
+          { username: normalizedIdentifier },
+        ],
+      },
+      select: { id: true, name: true, email: true },
+    });
+
+    if (!user) {
+      return { message: PASSWORD_RESET_GENERIC_MESSAGE };
+    }
+
+    const token = randomBytes(32).toString("base64url");
+    const tokenHash = passwordResetHash(token);
+    const expiresAt = new Date(Date.now() + env.PASSWORD_RESET_TTL_MINUTES * 60_000);
+
+    const resetToken = await prisma.$transaction(async (tx) => {
+      await tx.passwordResetToken.deleteMany({ where: { userId: user.id } });
+      return tx.passwordResetToken.create({
+        data: { userId: user.id, tokenHash, expiresAt },
+        select: { id: true },
+      });
+    });
+
+    try {
+      await emailService.sendPasswordReset({
+        to: user.email,
+        name: user.name,
+        resetUrl: passwordResetUrl(token),
+        expiresMinutes: env.PASSWORD_RESET_TTL_MINUTES,
+      });
+    } catch (error) {
+      await prisma.passwordResetToken.deleteMany({ where: { id: resetToken.id } }).catch(() => undefined);
+      logger.error({ error, userId: user.id }, "Não foi possível concluir o envio da recuperação de senha.");
+      // Mantemos a mesma resposta pública para não revelar se a conta existe.
+    }
+
+    return { message: PASSWORD_RESET_GENERIC_MESSAGE };
+  },
+
+  async resetPassword(token: string, newPassword: string) {
+    const now = new Date();
+    const tokenHash = passwordResetHash(token);
+    const resetToken = await prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+
+    if (!resetToken || resetToken.usedAt || resetToken.expiresAt <= now) {
+      throw new AppError(400, "Este link de recuperação é inválido ou expirou.");
+    }
+
+    if (await bcrypt.compare(newPassword, resetToken.user.passwordHash)) {
+      throw new AppError(400, "A nova senha deve ser diferente da senha atual.");
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+    await prisma.$transaction(async (tx) => {
+      const claim = await tx.passwordResetToken.updateMany({
+        where: { id: resetToken.id, usedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
+      });
+
+      if (claim.count !== 1) {
+        throw new AppError(400, "Este link de recuperação é inválido ou já foi utilizado.");
+      }
+
+      await tx.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash: newPasswordHash },
+      });
+      await tx.passwordResetToken.updateMany({
+        where: { userId: resetToken.userId, usedAt: null },
+        data: { usedAt: now },
+      });
+      await tx.auditLog.create({
+        data: {
+          userId: resetToken.userId,
+          action: "Redefiniu a senha por e-mail",
+          method: "POST",
+          path: "/api/auth/reset-password",
+        },
+      });
+    });
+
+    return { message: "Senha redefinida com sucesso. Você já pode entrar com a nova senha." };
+  },
+
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
       throw new AppError(400, "A senha atual está incorreta.");
     }
     if (currentPassword === newPassword) throw new AppError(400, "A nova senha deve ser diferente da atual.");
+    const changedAt = new Date();
     await prisma.$transaction([
       prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(newPassword, 12) } }),
+      prisma.passwordResetToken.updateMany({ where: { userId, usedAt: null }, data: { usedAt: changedAt } }),
       prisma.auditLog.create({ data: { userId, action: "Alterou a própria senha", method: "PUT", path: "/api/auth/change-password" } }),
     ]);
     return { message: "Senha alterada com sucesso." };

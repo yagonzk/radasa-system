@@ -14,6 +14,14 @@
     "run_worker_first": ["/api/*"]
   },
 
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "remote": true,
+      "allowed_sender_addresses": ["sistema@radasa.com.br"]
+    }
+  ],
+
   // HYPERDRIVE (opcional, recomendado): depois de criar a configuração,
   // adicione abaixo antes de "vars":
   // "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "SEU_HYPERDRIVE_ID" }],
@@ -21,6 +29,9 @@
   "vars": {
     "NODE_ENV": "production",
     "AUTH_REQUIRED": "true",
-    "CLIENT_ORIGIN": "https://radasa.com.br,https://www.radasa.com.br"
+    "CLIENT_ORIGIN": "https://radasa.com.br,https://www.radasa.com.br",
+    "EMAIL_FROM_ADDRESS": "sistema@radasa.com.br",
+    "PASSWORD_RESET_BASE_URL": "https://radasa.com.br",
+    "PASSWORD_RESET_TTL_MINUTES": "30"
   }
 }
