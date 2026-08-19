@@ -3392,42 +3392,6 @@ export default function Abastecimentos() {
       return;
     }
 
-    const kmRodadoPorAbastecimento = new Map<string, number>();
-    const abastecimentosDieselPorPlaca = new Map<string, Abastecimento[]>();
-
-    // O KM rodado por NF usa somente abastecimentos Diesel que estejam no mesmo
-    // recorte filtrado do relatório. ARLA não cria referência de odômetro.
-    filteredItems.forEach((item) => {
-      const combustiveis = abastecimentoFuelBreakdown(item, produtos);
-      if (combustiveis.dieselLitros <= 0 || Number(item.hodometro) <= 0) return;
-
-      const veiculo = resolveAbastecimentoVehicle(item, veiculos);
-      const plateKey = normalizeVehicleKey(veiculo?.placa || item.placaXml) || item.veiculoId;
-      abastecimentosDieselPorPlaca.set(plateKey, [
-        ...(abastecimentosDieselPorPlaca.get(plateKey) ?? []),
-        item,
-      ]);
-    });
-
-    abastecimentosDieselPorPlaca.forEach((registros) => {
-      const cronologicos = [...registros].sort((a, b) => {
-        const dataA = abastecimentoDateKey(a.dataEmissao);
-        const dataB = abastecimentoDateKey(b.dataEmissao);
-        return (
-          dataA.localeCompare(dataB) ||
-          Number(a.hodometro) - Number(b.hodometro) ||
-          String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""))
-        );
-      });
-
-      for (let index = 1; index < cronologicos.length; index += 1) {
-        const atual = cronologicos[index];
-        const anterior = cronologicos[index - 1];
-        const diferenca = Math.abs(Number(atual.hodometro) - Number(anterior.hodometro));
-        if (diferenca > 0) kmRodadoPorAbastecimento.set(atual.id, diferenca);
-      }
-    });
-
     const metricas = [
       relatorioOpcoes.totalLitros && ["Litros Diesel", formatLitros(totals.litros)],
       relatorioOpcoes.totalLitros && ["Litros ARLA", formatLitros(totals.litrosArla)],
@@ -3446,12 +3410,11 @@ export default function Abastecimentos() {
       const valorUnitarioDiesel = combustiveis.dieselLitros > 0
         ? combustiveis.dieselValor / combustiveis.dieselLitros
         : null;
-      const kmRodado = kmRodadoPorAbastecimento.get(item.id);
       const placa = veiculo?.placa || item.placaXml || "—";
-      return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia ?? "Não identificado")}</td><td>${escapeReportText(placa)}</td><td>${escapeReportText(formatLitros(combustiveis.dieselLitros))}</td><td>${escapeReportText(formatLitros(combustiveis.arlaLitros))}</td><td>${escapeReportText(valorUnitarioDiesel !== null ? formatBRL(valorUnitarioDiesel) : "—")}</td><td>${escapeReportText(kmRodado !== undefined ? `${kmRodado.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km` : "—")}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`;
+      return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia ?? "Não identificado")}</td><td>${escapeReportText(placa)}</td><td>${escapeReportText(formatLitros(combustiveis.dieselLitros))}</td><td>${escapeReportText(formatLitros(combustiveis.arlaLitros))}</td><td>${escapeReportText(valorUnitarioDiesel !== null ? formatBRL(valorUnitarioDiesel) : "—")}</td><td>${escapeReportText(formatOdometro(Number(item.hodometro)))}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`;
     }).join("");
 
-    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Abastecimentos</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}table{border-collapse:collapse;width:100%;font-size:11px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:8px;border:1px solid #dbe3f0}td:nth-child(5),td:nth-child(6),td:nth-child(7),td:nth-child(8),td:nth-child(9){text-align:right}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}}</style></head><body><h1>Relatório de Abastecimentos</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${filteredItems.length} registro(s) conforme os filtros ativos.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Notas fiscais</h2><table><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>Diesel</th><th>ARLA</th><th>Valor unitário Diesel</th><th>KM rodado</th><th>Valor total</th></tr></thead><tbody>${linhas}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
+    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Abastecimentos</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}table{border-collapse:collapse;width:100%;font-size:11px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:8px;border:1px solid #dbe3f0}td:nth-child(5),td:nth-child(6),td:nth-child(7),td:nth-child(8),td:nth-child(9){text-align:right}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}}</style></head><body><h1>Relatório de Abastecimentos</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${filteredItems.length} registro(s) conforme os filtros ativos.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Notas fiscais</h2><table><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>Diesel</th><th>ARLA</th><th>Valor unitário Diesel</th><th>Odômetro</th><th>Valor total</th></tr></thead><tbody>${linhas}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
     reportWindow.document.close();
     setRelatorioOpen(false);
   };
