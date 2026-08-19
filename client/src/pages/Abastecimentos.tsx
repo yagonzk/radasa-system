@@ -2983,7 +2983,7 @@ interface Filters {
   valorUnitario: string;
   valorDesconto: string;
   valorTotal: string;
-  placa: string;
+  placa: string[];
   subcategoriaVeiculo: string;
   hodometro: string;
 }
@@ -2997,10 +2997,16 @@ const emptyFilters: Filters = {
   valorUnitario: "",
   valorDesconto: "",
   valorTotal: "",
-  placa: "",
+  placa: [],
   subcategoriaVeiculo: "",
   hodometro: "",
 };
+
+type StringFilterKey = Exclude<keyof Filters, "placa">;
+
+function updateStringFilter(current: Filters, key: StringFilterKey, value: string): Filters {
+  return { ...current, [key]: value };
+}
 
 function matchesAbastecimentoFilters(
   item: Abastecimento,
@@ -3023,11 +3029,13 @@ function matchesAbastecimentoFilters(
 
   if (!ignoredKeys.has("cliente") && filters.cliente && !matchesPostoFilter(cliente, filters.cliente)) return false;
   if (!ignoredKeys.has("produto") && filters.produto && !normalize(nomesProdutos).includes(normalize(filters.produto))) return false;
-  if (
-    !ignoredKeys.has("placa") &&
-    filters.placa &&
-    !normalizeVehicleSearch(formatVehiclePlateModel(veiculo, item.placaXml)).includes(normalizeVehicleSearch(filters.placa))
-  ) return false;
+  if (!ignoredKeys.has("placa") && filters.placa.length > 0) {
+    const placaAtual = normalizeVehicleSearch(formatVehiclePlateModel(veiculo, item.placaXml));
+    const correspondeAPlacaSelecionada = filters.placa.some(
+      (placaSelecionada) => placaAtual === normalizeVehicleSearch(placaSelecionada),
+    );
+    if (!correspondeAPlacaSelecionada) return false;
+  }
   if (
     !ignoredKeys.has("subcategoriaVeiculo") &&
     filters.subcategoriaVeiculo &&
@@ -3054,6 +3062,7 @@ interface RelatorioAbastecimentoOpcoes {
   kmRodado: boolean;
   totalLitros: boolean;
   totalGasto: boolean;
+  comparativoPorPlaca: boolean;
 }
 
 const relatorioPadrao: RelatorioAbastecimentoOpcoes = {
@@ -3062,6 +3071,7 @@ const relatorioPadrao: RelatorioAbastecimentoOpcoes = {
   kmRodado: true,
   totalLitros: true,
   totalGasto: true,
+  comparativoPorPlaca: true,
 };
 
 function escapeReportText(value: unknown) {
@@ -3224,6 +3234,57 @@ export default function Abastecimentos() {
       litrosDiesel,
       placasCalculadas,
     };
+  }, [filteredItems, produtos, veiculos]);
+
+  const comparativoPorPlaca = useMemo(() => {
+    const grupos = new Map<string, { placa: string; itens: Abastecimento[] }>();
+
+    filteredItems.forEach((item) => {
+      const veiculo = resolveAbastecimentoVehicle(item, veiculos);
+      const placa = veiculo?.placa || item.placaXml || "Sem placa";
+      const chave = normalizeVehicleKey(placa) || item.veiculoId || placa;
+      const grupo = grupos.get(chave) ?? { placa, itens: [] };
+      grupo.itens.push(item);
+      grupos.set(chave, grupo);
+    });
+
+    return Array.from(grupos.values())
+      .map(({ placa, itens }) => {
+        const diesel = itens.reduce(
+          (acc, item) => {
+            const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+            acc.litros += combustiveis.dieselLitros;
+            acc.valor += combustiveis.dieselValor;
+            return acc;
+          },
+          { litros: 0, valor: 0 },
+        );
+        const valorTotal = itens.reduce((total, item) => total + Number(item.valorTotal || 0), 0);
+        const registrosDieselComOdometro = itens
+          .filter((item) => abastecimentoFuelBreakdown(item, produtos).dieselLitros > 0 && Number(item.hodometro) > 0)
+          .sort((a, b) => {
+            const dataA = abastecimentoDateKey(a.dataEmissao);
+            const dataB = abastecimentoDateKey(b.dataEmissao);
+            return dataA.localeCompare(dataB) || Number(a.hodometro) - Number(b.hodometro);
+          });
+        const kmRodado = registrosDieselComOdometro.length >= 2
+          ? Math.abs(
+              Number(registrosDieselComOdometro[registrosDieselComOdometro.length - 1].hodometro) -
+              Number(registrosDieselComOdometro[0].hodometro),
+            )
+          : 0;
+
+        return {
+          placa,
+          notas: itens.length,
+          dieselLitros: diesel.litros,
+          valorTotal,
+          custoMedioDiesel: diesel.litros > 0 ? diesel.valor / diesel.litros : 0,
+          kmRodado,
+          mediaKmLitro: kmRodado > 0 && diesel.litros > 0 ? kmRodado / diesel.litros : 0,
+        };
+      })
+      .sort((a, b) => a.placa.localeCompare(b.placa, "pt-BR", { numeric: true }));
   }, [filteredItems, produtos, veiculos]);
 
   const mediaKmLitro = mediaKmLitroResumo.valor;
@@ -3403,6 +3464,10 @@ export default function Abastecimentos() {
         `${mediaKmLitroResumo.kmRodados.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km`,
       ],
     ].filter(Boolean) as Array<[string, string]>;
+    const comparativoHtml = relatorioOpcoes.comparativoPorPlaca && comparativoPorPlaca.length > 0
+      ? `<section class="comparativo"><h2>Comparativo por placa</h2><table class="comparativo-table"><thead><tr><th>Placa</th><th>Notas</th><th>Diesel</th><th>Custo médio Diesel/L</th><th>KM rodado</th><th>Média KM/L</th><th>Valor total</th></tr></thead><tbody>${comparativoPorPlaca.map((item) => `<tr><td>${escapeReportText(item.placa)}</td><td>${escapeReportText(item.notas)}</td><td>${escapeReportText(formatLitros(item.dieselLitros))}</td><td>${escapeReportText(item.dieselLitros > 0 ? formatBRL(item.custoMedioDiesel) : "—")}</td><td>${escapeReportText(item.kmRodado > 0 ? `${item.kmRodado.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km` : "—")}</td><td>${escapeReportText(item.mediaKmLitro > 0 ? `${item.mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L` : "—")}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`).join("")}</tbody></table></section>`
+      : "";
+
     const linhas = filteredItems.map((item) => {
       const cliente = resolveAbastecimentoPosto(item, clientes);
       const veiculo = resolveAbastecimentoVehicle(item, veiculos);
@@ -3414,7 +3479,7 @@ export default function Abastecimentos() {
       return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia ?? "Não identificado")}</td><td>${escapeReportText(placa)}</td><td>${escapeReportText(formatLitros(combustiveis.dieselLitros))}</td><td>${escapeReportText(formatLitros(combustiveis.arlaLitros))}</td><td>${escapeReportText(valorUnitarioDiesel !== null ? formatBRL(valorUnitarioDiesel) : "—")}</td><td>${escapeReportText(formatOdometro(Number(item.hodometro)))}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`;
     }).join("");
 
-    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Abastecimentos</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}table{border-collapse:collapse;width:100%;font-size:11px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:8px;border:1px solid #dbe3f0}td:nth-child(5),td:nth-child(6),td:nth-child(7),td:nth-child(8),td:nth-child(9){text-align:right}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}}</style></head><body><h1>Relatório de Abastecimentos</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${filteredItems.length} registro(s) conforme os filtros ativos.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Notas fiscais</h2><table><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>Diesel</th><th>ARLA</th><th>Valor unitário Diesel</th><th>Odômetro</th><th>Valor total</th></tr></thead><tbody>${linhas}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
+    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Abastecimentos</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}.comparativo{margin:0 0 26px}.comparativo h2{margin-bottom:10px}.comparativo-table td:nth-child(n+2){text-align:right}table{border-collapse:collapse;width:100%;font-size:11px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:8px;border:1px solid #dbe3f0}td:nth-child(5),td:nth-child(6),td:nth-child(7),td:nth-child(8),td:nth-child(9){text-align:right}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}}</style></head><body><h1>Relatório de Abastecimentos</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${filteredItems.length} registro(s) conforme os filtros ativos.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div>${comparativoHtml}<h2>Notas fiscais</h2><table><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>Diesel</th><th>ARLA</th><th>Valor unitário Diesel</th><th>Odômetro</th><th>Valor total</th></tr></thead><tbody>${linhas}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
     reportWindow.document.close();
     setRelatorioOpen(false);
   };
@@ -3516,9 +3581,21 @@ export default function Abastecimentos() {
           </div>
         </div>
 
-        <div className="mb-3 flex justify-end">
+        <div className="mb-3 flex flex-wrap justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => setRelatorioOpen(true)}>
             <FileText className="mr-2 h-4 w-4" /> Gerar relatório PDF
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={filters.placa.length < 2}
+            title={filters.placa.length < 2 ? "Selecione duas ou mais placas no filtro para comparar." : "Gerar comparativo das placas selecionadas"}
+            onClick={() => {
+              setRelatorioOpcoes((current) => ({ ...current, comparativoPorPlaca: true }));
+              setRelatorioOpen(true);
+            }}
+          >
+            <FileText className="mr-2 h-4 w-4" /> Relatório comparativo
           </Button>
         </div>
 
@@ -3536,7 +3613,11 @@ export default function Abastecimentos() {
                 <tr>
                   {columns.map((column) => {
                     const key = column.key;
-                    const active = column.date ? Boolean(filters.emissao || filters.emissaoAte) : Boolean(filters[key]);
+                    const active = column.date
+                      ? Boolean(filters.emissao || filters.emissaoAte)
+                      : key === "placa"
+                        ? filters.placa.length > 0
+                        : Boolean(filters[key]);
                     const options = filterOptions(key).filter((option) => normalize(option).includes(normalize(filterSearch)));
                     return (
                       <th key={key} className={`overflow-hidden px-3 py-3 align-middle font-semibold leading-tight text-muted-foreground ${key === "cliente" ? "text-left" : "text-center"}`}>
@@ -3568,28 +3649,58 @@ export default function Abastecimentos() {
                                   <div className="border-b border-border p-3">
                                     <Input value={filterSearch} onChange={(event) => setFilterSearch(event.target.value)} placeholder={`Pesquisar ${column.label.toLocaleLowerCase("pt-BR")}...`} autoFocus />
                                   </div>
+                                  {key === "placa" && filters.placa.length > 0 && (
+                                    <div className="border-b border-border px-3 py-2 text-xs font-medium text-primary">
+                                      {filters.placa.length} placa(s) selecionada(s)
+                                    </div>
+                                  )}
                                   <div className="max-h-60 overflow-y-auto p-2">
                                     {options.length === 0 ? (
                                       <p className="py-4 text-center text-xs text-muted-foreground">Nenhuma opção encontrada.</p>
-                                    ) : options.map((option) => (
-                                      <button
-                                        type="button"
-                                        key={option}
-                                        onClick={() => {
-                                          setFilters((current) => ({ ...current, [key]: option }));
-                                          setActiveFilter(null);
-                                        }}
-                                        className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${filters[key] === option ? "bg-primary/10 text-primary" : ""}`}
-                                      >
-                                        <span className="truncate">{option}</span>
-                                        {filters[key] === option && <Check className="h-4 w-4" />}
-                                      </button>
-                                    ))}
+                                    ) : options.map((option) => {
+                                      const selected = key === "placa"
+                                        ? filters.placa.includes(option)
+                                        : filters[key] === option;
+                                      return (
+                                        <button
+                                          type="button"
+                                          key={option}
+                                          onClick={() => {
+                                            if (key === "placa") {
+                                              setFilters((current) => ({
+                                                ...current,
+                                                placa: current.placa.includes(option)
+                                                  ? current.placa.filter((placa) => placa !== option)
+                                                  : [...current.placa, option],
+                                              }));
+                                              return;
+                                            }
+                                            setFilters((current) => updateStringFilter(current, key, option));
+                                            setActiveFilter(null);
+                                          }}
+                                          className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${selected ? "bg-primary/10 text-primary" : ""}`}
+                                        >
+                                          <span className="truncate">{option}</span>
+                                          {selected && <Check className="h-4 w-4" />}
+                                        </button>
+                                      );
+                                    })}
                                   </div>
                                 </>
                               )}
                               <div className="flex gap-2 border-t border-border p-3">
-                                <Button size="sm" variant="outline" className="flex-1" onClick={() => setFilters((current) => column.date ? { ...current, emissao: "", emissaoAte: "" } : { ...current, [key]: "" })}>Limpar</Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="flex-1"
+                                  onClick={() => setFilters((current) =>
+                                    column.date
+                                      ? { ...current, emissao: "", emissaoAte: "" }
+                                      : key === "placa"
+                                        ? { ...current, placa: [] }
+                                        : updateStringFilter(current, key, ""),
+                                  )}
+                                >Limpar</Button>
                                 <Button size="sm" className="flex-1" onClick={() => setActiveFilter(null)}>OK</Button>
                               </div>
                             </PopoverContent>
@@ -3714,6 +3825,11 @@ export default function Abastecimentos() {
             <DialogTitle>Gerar relatório de abastecimentos</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">Selecione as informações que devem aparecer no relatório. Os filtros aplicados na tabela também serão respeitados.</p>
+          {filters.placa.length > 1 && (
+            <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
+              Comparação preparada para {filters.placa.length} placas selecionadas no filtro.
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             {([
               ["totalLitros", "Litros por tipo (Diesel / ARLA)"],
@@ -3721,6 +3837,7 @@ export default function Abastecimentos() {
               ["custoLitro", "Custo médio por litro"],
               ["mediaKmLitro", "Média de KM/L"],
               ["kmRodado", "KM rodado"],
+              ["comparativoPorPlaca", "Comparativo por placa"],
             ] as Array<[keyof RelatorioAbastecimentoOpcoes, string]>).map(([key, label]) => (
               <label key={key} className="flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm hover:bg-muted/40">
                 <input type="checkbox" checked={relatorioOpcoes[key]} onChange={(event) => setRelatorioOpcoes((current) => ({ ...current, [key]: event.target.checked }))} />
