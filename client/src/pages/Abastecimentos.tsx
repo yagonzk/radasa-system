@@ -3362,7 +3362,6 @@ export default function Abastecimentos() {
     { key: "valorDesconto", label: "Valor desconto", align: "right" },
     { key: "valorTotal", label: "Valor total", align: "right" },
     { key: "placa", label: "Placa / Modelo" },
-    { key: "subcategoriaVeiculo", label: "Subcategoria" },
     { key: "hodometro", label: "Odômetro", align: "right" },
   ];
 
@@ -3713,7 +3712,7 @@ export default function Abastecimentos() {
               </thead>
               <tbody>
                 {filteredItems.length === 0 ? (
-                  <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">Nenhum abastecimento encontrado.</td></tr>
+                  <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">Nenhum abastecimento encontrado.</td></tr>
                 ) : paginatedItems.map((item) => {
                   const cliente = resolveAbastecimentoPosto(item, clientes);
                   const veiculo = resolveAbastecimentoVehicle(item, veiculos);
@@ -3742,7 +3741,6 @@ export default function Abastecimentos() {
                           </span>
                         )}
                       </td>
-                      <td className="overflow-hidden px-3 py-3 text-center align-middle text-muted-foreground"><span className="block whitespace-nowrap">{formatSubcategoriaVeiculo(veiculo?.subcategoria)}</span></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums text-muted-foreground"><span className="block whitespace-nowrap">{formatOdometro(item.hodometro)}</span></td>
                       <td className="overflow-hidden px-3 py-3 align-middle">
                         <div className="flex w-full items-center justify-center gap-1">
