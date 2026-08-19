@@ -3599,14 +3599,20 @@ export default function Abastecimentos() {
         </div>
 
         <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="w-full min-w-0 overflow-hidden">
-            <table className="w-full max-w-full table-fixed text-xs">
+          <div className="w-full min-w-0 overflow-x-auto">
+            <table className="w-full min-w-[1180px] table-fixed text-xs">
               <colgroup>
-                {/* Cliente recebe mais espaço; as demais colunas dividem o restante igualmente. */}
-                <col style={{ width: "18%" }} />
-                {Array.from({ length: 10 }).map((_, index) => (
-                  <col key={`abastecimento-col-${index}`} style={{ width: "8.2%" }} />
-                ))}
+                {/* 10 colunas: 9 dados + Ações. As larguras somam 100%. */}
+                <col style={{ width: "18%" }} /> {/* Posto */}
+                <col style={{ width: "8%" }} />  {/* Emissão */}
+                <col style={{ width: "8%" }} />  {/* Produtos */}
+                <col style={{ width: "10%" }} /> {/* Diesel / ARLA */}
+                <col style={{ width: "9%" }} />  {/* Valor unitário Diesel */}
+                <col style={{ width: "8%" }} />  {/* Valor desconto */}
+                <col style={{ width: "9%" }} />  {/* Valor total */}
+                <col style={{ width: "10%" }} /> {/* Placa / Modelo */}
+                <col style={{ width: "10%" }} /> {/* Odômetro */}
+                <col style={{ width: "10%" }} /> {/* Ações */}
               </colgroup>
               <thead className="border-b border-border bg-muted/30">
                 <tr>
@@ -3707,7 +3713,7 @@ export default function Abastecimentos() {
                       </th>
                     );
                   })}
-                  <th className="px-3 py-3 text-center align-middle font-semibold text-muted-foreground">Ações</th>
+                  <th className="whitespace-nowrap px-3 py-3 text-center align-middle font-semibold text-muted-foreground">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -3742,8 +3748,8 @@ export default function Abastecimentos() {
                         )}
                       </td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums text-muted-foreground"><span className="block whitespace-nowrap">{formatOdometro(item.hodometro)}</span></td>
-                      <td className="overflow-hidden px-3 py-3 align-middle">
-                        <div className="flex w-full items-center justify-center gap-1">
+                      <td className="px-2 py-3 align-middle">
+                        <div className="flex w-full items-center justify-center gap-1 whitespace-nowrap">
                           <button type="button" onClick={() => setViewing(item)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-blue-500 hover:bg-blue-500/10 2xl:h-8 2xl:w-8" title="Visualizar"><Eye className="h-4 w-4" /></button>
                           {(item.pdfUrl || item.xmlUrl || item.pdfStored || item.xmlStored) && <button type="button" onClick={() => setDownloadTarget(item)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-500/10 2xl:h-8 2xl:w-8" title="Baixar arquivos da nota"><Download className="h-4 w-4" /></button>}
                           <button type="button" disabled={loadingDocumentItemId === item.id} onClick={() => void handleEdit(item)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-amber-500 hover:bg-amber-500/10 disabled:cursor-wait disabled:opacity-60 2xl:h-8 2xl:w-8" title="Editar">{loadingDocumentItemId === item.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}</button>
