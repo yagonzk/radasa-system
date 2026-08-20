@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import Layout from "@/components/Layout";
 import {
   useAbastecimentos,
@@ -39,6 +40,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  FileSpreadsheet,
   Filter,
   Fuel,
   Gauge,
@@ -3572,13 +3574,194 @@ export default function Abastecimentos() {
       ? comparativoArlaPorPlaca.map((item) => `<tr><td>${escapeReportText(item.placa)}</td><td>${escapeReportText(item.notas)}</td><td>${escapeReportText(formatLitros(item.arlaLitros))}</td><td>${escapeReportText(item.arlaLitros > 0 ? formatBRL(item.custoMedioArla) : "—")}</td><td>${escapeReportText(formatBRL(item.arlaValor))}</td></tr>`).join("")
       : `<tr><td colspan="5" class="empty">Nenhum lançamento de ARLA encontrado conforme os filtros ativos.</td></tr>`;
 
+    const linhasArla = itensArlaRelatorio.map((item) => {
+      const cliente = resolveAbastecimentoPosto(item, clientes);
+      const veiculo = resolveAbastecimentoVehicle(item, veiculos);
+      const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+      const valorUnitarioArla = combustiveis.arlaLitros > 0
+        ? combustiveis.arlaValor / combustiveis.arlaLitros
+        : null;
+      const placa = veiculo?.placa || item.placaXml || "—";
+      return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia || cliente?.razaoSocial || "Não identificado")}</td><td>${escapeReportText(placa)}</td><td>${escapeReportText(formatLitros(combustiveis.arlaLitros))}</td><td>${escapeReportText(valorUnitarioArla !== null ? formatBRL(valorUnitarioArla) : "—")}</td><td>${escapeReportText(formatOdometro(Number(item.hodometro)))}</td><td>${escapeReportText(formatBRL(combustiveis.arlaValor))}</td></tr>`;
+    }).join("");
+
     const paginaArla = itensArlaRelatorio.length > 0
-      ? `<section class="report-page arla-page"><h1>Comparativo ARLA</h1><p class="sub">Separado do combustível Diesel - ${itensArlaRelatorio.length} nota(s) com ARLA conforme os filtros ativos.</p><div class="cards">${arlaMetricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Comparativo ARLA por placa</h2><table class="arla-table"><thead><tr><th>Placa</th><th>Notas</th><th>ARLA</th><th>Custo médio ARLA/L</th><th>Valor ARLA</th></tr></thead><tbody>${linhasComparativoArla}</tbody></table></section>`
+      ? `<section class="report-page arla-page"><h1>Comparativo ARLA</h1><p class="sub">Separado do combustível Diesel - ${itensArlaRelatorio.length} nota(s) com ARLA conforme os filtros ativos.</p><div class="cards">${arlaMetricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Comparativo ARLA por placa</h2><table class="arla-table"><thead><tr><th>Placa</th><th>Notas</th><th>ARLA</th><th>Custo médio ARLA/L</th><th>Valor ARLA</th></tr></thead><tbody>${linhasComparativoArla}</tbody></table><h2>Notas fiscais — ARLA</h2><table class="arla-notas"><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>ARLA</th><th>Valor unitário ARLA</th><th>Odômetro</th><th>Valor ARLA</th></tr></thead><tbody>${linhasArla}</tbody></table></section>`
       : "";
 
-    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Combustível</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}h2{margin-top:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}.comparativo{margin:0 0 26px}.comparativo h2{margin-bottom:10px}.comparativo-table td:nth-child(n+2),.arla-table td:nth-child(n+2){text-align:right}table{border-collapse:collapse;width:100%;font-size:11px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:8px;border:1px solid #dbe3f0}.diesel-notas td:nth-child(n+5){text-align:right}.empty{text-align:center!important;color:#68738a;padding:20px}.report-page+.report-page{break-before:page;page-break-before:always}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}.report-page+.report-page{break-before:page;page-break-before:always}}</style></head><body><section class="report-page diesel-page"><h1>Relatório de Combustível — Diesel</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${itensDieselRelatorio.length} nota(s) com Diesel conforme os filtros ativos. ARLA não está incluída nesta parte.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div>${comparativoHtml}<h2>Notas fiscais — Diesel</h2><table class="diesel-notas"><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>Diesel</th><th>Valor unitário Diesel</th><th>Odômetro</th><th>Valor Diesel</th></tr></thead><tbody>${linhasDiesel}</tbody></table></section>${paginaArla}<script>window.onload=()=>window.print();<\/script></body></html>`);
+    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Combustível</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}h2{margin-top:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}.comparativo{margin:0 0 26px}.comparativo h2{margin-bottom:10px}.comparativo-table td:nth-child(n+2),.arla-table td:nth-child(n+2){text-align:right}table{border-collapse:collapse;width:100%;font-size:11px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:8px;border:1px solid #dbe3f0}.diesel-notas td:nth-child(n+5),.arla-notas td:nth-child(n+5){text-align:right}.empty{text-align:center!important;color:#68738a;padding:20px}.report-page+.report-page{break-before:page;page-break-before:always}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}.report-page+.report-page{break-before:page;page-break-before:always}}</style></head><body><section class="report-page diesel-page"><h1>Relatório de Combustível — Diesel</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${itensDieselRelatorio.length} nota(s) com Diesel conforme os filtros ativos. ARLA não está incluída nesta parte.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div>${comparativoHtml}<h2>Notas fiscais — Diesel</h2><table class="diesel-notas"><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>Diesel</th><th>Valor unitário Diesel</th><th>Odômetro</th><th>Valor Diesel</th></tr></thead><tbody>${linhasDiesel}</tbody></table></section>${paginaArla}<script>window.onload=()=>window.print();<\/script></body></html>`);
     reportWindow.document.close();
     setRelatorioOpen(false);
+  };
+
+  const gerarRelatorioXlsx = () => {
+    const itensDieselRelatorio = filteredItems.filter(
+      (item) => abastecimentoFuelBreakdown(item, produtos).dieselLitros > 0,
+    );
+    const itensArlaRelatorio = filteredItems.filter(
+      (item) => abastecimentoFuelBreakdown(item, produtos).arlaLitros > 0,
+    );
+
+    const workbook = XLSX.utils.book_new();
+
+    const ajustarPlanilha = (
+      worksheet: XLSX.WorkSheet,
+      larguras: number[],
+      autoFilterRef?: string,
+    ) => {
+      worksheet["!cols"] = larguras.map((wch) => ({ wch }));
+      if (autoFilterRef) worksheet["!autofilter"] = { ref: autoFilterRef };
+    };
+
+    const formatarColunaNumerica = (
+      worksheet: XLSX.WorkSheet,
+      coluna: number,
+      quantidadeLinhas: number,
+      formato: string,
+    ) => {
+      for (let row = 1; row <= quantidadeLinhas; row += 1) {
+        const endereco = XLSX.utils.encode_cell({ r: row, c: coluna });
+        const cell = worksheet[endereco];
+        if (cell && typeof cell.v === "number") cell.z = formato;
+      }
+    };
+
+    const resumoDiesel: Array<Array<string | number>> = [["Indicador", "Valor"]];
+    if (relatorioOpcoes.totalLitros) resumoDiesel.push(["Litros Diesel", totals.litros]);
+    if (relatorioOpcoes.totalGasto) resumoDiesel.push(["Valor total Diesel", totals.valorDiesel]);
+    if (relatorioOpcoes.custoLitro) resumoDiesel.push(["Custo médio Diesel/L", totals.media]);
+    if (relatorioOpcoes.mediaKmLitro) resumoDiesel.push(["Média KM/L", mediaKmLitro]);
+    if (relatorioOpcoes.kmRodado) resumoDiesel.push(["KM rodado", mediaKmLitroResumo.kmRodados]);
+    resumoDiesel.push(
+      ["Litros Diesel considerados na média", mediaKmLitroResumo.litrosDiesel],
+      ["Litros do último abastecimento excluídos", mediaKmLitroResumo.litrosDesconsiderados],
+      ["Notas com Diesel", itensDieselRelatorio.length],
+    );
+
+    const wsResumoDiesel = XLSX.utils.aoa_to_sheet(resumoDiesel);
+    ajustarPlanilha(wsResumoDiesel, [40, 22], "A1:B1");
+    XLSX.utils.book_append_sheet(workbook, wsResumoDiesel, "Resumo Diesel");
+
+    const notasDiesel = [
+      ["NF", "Emissão", "Posto", "Placa", "Diesel (L)", "Valor unitário Diesel", "Odômetro (km)", "Valor Diesel"],
+      ...itensDieselRelatorio.map((item) => {
+        const cliente = resolveAbastecimentoPosto(item, clientes);
+        const veiculo = resolveAbastecimentoVehicle(item, veiculos);
+        const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+        return [
+          item.numeroNfe || "-",
+          formatDate(item.dataEmissao),
+          cliente?.nomeFantasia || cliente?.razaoSocial || "Não identificado",
+          veiculo?.placa || item.placaXml || "—",
+          combustiveis.dieselLitros,
+          combustiveis.dieselLitros > 0
+            ? combustiveis.dieselValor / combustiveis.dieselLitros
+            : 0,
+          Number(item.hodometro) > 0 ? Number(item.hodometro) : null,
+          combustiveis.dieselValor,
+        ];
+      }),
+    ];
+    const wsNotasDiesel = XLSX.utils.aoa_to_sheet(notasDiesel);
+    ajustarPlanilha(wsNotasDiesel, [14, 14, 32, 14, 14, 22, 18, 18], "A1:H1");
+    formatarColunaNumerica(wsNotasDiesel, 4, itensDieselRelatorio.length, "#,##0.000");
+    formatarColunaNumerica(wsNotasDiesel, 5, itensDieselRelatorio.length, 'R$ #,##0.000');
+    formatarColunaNumerica(wsNotasDiesel, 6, itensDieselRelatorio.length, "#,##0.0");
+    formatarColunaNumerica(wsNotasDiesel, 7, itensDieselRelatorio.length, 'R$ #,##0.00');
+    XLSX.utils.book_append_sheet(workbook, wsNotasDiesel, "Notas Diesel");
+
+    if (relatorioOpcoes.comparativoPorPlaca && comparativoPorPlaca.length > 0) {
+      const comparativoDiesel = [
+        ["Placa", "Notas", "Diesel (L)", "Custo médio Diesel/L", "KM rodado", "Média KM/L", "Valor Diesel"],
+        ...comparativoPorPlaca.map((item) => [
+          item.placa,
+          item.notas,
+          item.dieselLitros,
+          item.custoMedioDiesel,
+          item.kmRodado,
+          item.mediaKmLitro,
+          item.valorTotal,
+        ]),
+      ];
+      const wsComparativoDiesel = XLSX.utils.aoa_to_sheet(comparativoDiesel);
+      ajustarPlanilha(wsComparativoDiesel, [16, 10, 16, 22, 16, 16, 18], "A1:G1");
+      formatarColunaNumerica(wsComparativoDiesel, 2, comparativoPorPlaca.length, "#,##0.000");
+      formatarColunaNumerica(wsComparativoDiesel, 3, comparativoPorPlaca.length, 'R$ #,##0.000');
+      formatarColunaNumerica(wsComparativoDiesel, 4, comparativoPorPlaca.length, "#,##0.0");
+      formatarColunaNumerica(wsComparativoDiesel, 5, comparativoPorPlaca.length, "0.00");
+      formatarColunaNumerica(wsComparativoDiesel, 6, comparativoPorPlaca.length, 'R$ #,##0.00');
+      XLSX.utils.book_append_sheet(workbook, wsComparativoDiesel, "Comparativo Diesel");
+    }
+
+    if (itensArlaRelatorio.length > 0) {
+      const custoMedioArla = totals.litrosArla > 0
+        ? totals.valorArla / totals.litrosArla
+        : 0;
+      const resumoArla = [
+        ["Indicador", "Valor"],
+        ["Litros ARLA", totals.litrosArla],
+        ["Valor total ARLA", totals.valorArla],
+        ["Custo médio ARLA/L", custoMedioArla],
+        ["Notas com ARLA", itensArlaRelatorio.length],
+      ];
+      const wsResumoArla = XLSX.utils.aoa_to_sheet(resumoArla);
+      ajustarPlanilha(wsResumoArla, [32, 22], "A1:B1");
+      XLSX.utils.book_append_sheet(workbook, wsResumoArla, "Resumo ARLA");
+
+      const notasArla = [
+        ["NF", "Emissão", "Posto", "Placa", "ARLA (L)", "Valor unitário ARLA", "Odômetro (km)", "Valor ARLA"],
+        ...itensArlaRelatorio.map((item) => {
+          const cliente = resolveAbastecimentoPosto(item, clientes);
+          const veiculo = resolveAbastecimentoVehicle(item, veiculos);
+          const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+          return [
+            item.numeroNfe || "-",
+            formatDate(item.dataEmissao),
+            cliente?.nomeFantasia || cliente?.razaoSocial || "Não identificado",
+            veiculo?.placa || item.placaXml || "—",
+            combustiveis.arlaLitros,
+            combustiveis.arlaLitros > 0
+              ? combustiveis.arlaValor / combustiveis.arlaLitros
+              : 0,
+            Number(item.hodometro) > 0 ? Number(item.hodometro) : null,
+            combustiveis.arlaValor,
+          ];
+        }),
+      ];
+      const wsNotasArla = XLSX.utils.aoa_to_sheet(notasArla);
+      ajustarPlanilha(wsNotasArla, [14, 14, 32, 14, 14, 22, 18, 18], "A1:H1");
+      formatarColunaNumerica(wsNotasArla, 4, itensArlaRelatorio.length, "#,##0.000");
+      formatarColunaNumerica(wsNotasArla, 5, itensArlaRelatorio.length, 'R$ #,##0.000');
+      formatarColunaNumerica(wsNotasArla, 6, itensArlaRelatorio.length, "#,##0.0");
+      formatarColunaNumerica(wsNotasArla, 7, itensArlaRelatorio.length, 'R$ #,##0.00');
+      XLSX.utils.book_append_sheet(workbook, wsNotasArla, "Notas ARLA");
+
+      const comparativoArla = [
+        ["Placa", "Notas", "ARLA (L)", "Custo médio ARLA/L", "Valor ARLA"],
+        ...comparativoArlaPorPlaca.map((item) => [
+          item.placa,
+          item.notas,
+          item.arlaLitros,
+          item.custoMedioArla,
+          item.arlaValor,
+        ]),
+      ];
+      const wsComparativoArla = XLSX.utils.aoa_to_sheet(comparativoArla);
+      ajustarPlanilha(wsComparativoArla, [16, 10, 16, 22, 18], "A1:E1");
+      formatarColunaNumerica(wsComparativoArla, 2, comparativoArlaPorPlaca.length, "#,##0.000");
+      formatarColunaNumerica(wsComparativoArla, 3, comparativoArlaPorPlaca.length, 'R$ #,##0.000');
+      formatarColunaNumerica(wsComparativoArla, 4, comparativoArlaPorPlaca.length, 'R$ #,##0.00');
+      XLSX.utils.book_append_sheet(workbook, wsComparativoArla, "Comparativo ARLA");
+    }
+
+    const dataArquivo = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(
+      workbook,
+      `relatorio-abastecimentos-${dataArquivo}.xlsx`,
+      { compression: true },
+    );
+    setRelatorioOpen(false);
+    toast.success("Relatório XLSX exportado com sucesso.");
   };
 
   return (
@@ -3926,7 +4109,7 @@ export default function Abastecimentos() {
           <DialogHeader>
             <DialogTitle>Gerar relatório de abastecimentos</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">O relatório principal será somente Diesel. Se houver ARLA no filtro, um comparativo exclusivo de ARLA será criado no final do PDF. Os filtros aplicados na tabela serão respeitados.</p>
+          <p className="text-sm text-muted-foreground">O relatório principal será somente Diesel. Se houver ARLA no filtro, uma seção exclusiva de ARLA com comparativo e notas fiscais será criada no final. PDF e XLSX respeitam os filtros aplicados na tabela.</p>
           {filters.placa.length > 1 && (
             <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
               Comparação preparada para {filters.placa.length} placas selecionadas no filtro.
@@ -3947,9 +4130,14 @@ export default function Abastecimentos() {
               </label>
             ))}
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setRelatorioOpen(false)}>Cancelar</Button>
-            <Button type="button" onClick={gerarRelatorioPdf}><Download className="mr-2 h-4 w-4" /> Gerar PDF</Button>
+            <Button type="button" variant="outline" onClick={gerarRelatorioXlsx}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" /> Gerar XLSX
+            </Button>
+            <Button type="button" onClick={gerarRelatorioPdf}>
+              <Download className="mr-2 h-4 w-4" /> Gerar PDF
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
