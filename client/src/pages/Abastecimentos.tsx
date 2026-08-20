@@ -160,6 +160,24 @@ function abastecimentoDateKey(value: unknown) {
   return raw;
 }
 
+function compareAbastecimentosChronologically(a: Abastecimento, b: Abastecimento) {
+  const dataA = abastecimentoDateKey(a.dataEmissao);
+  const dataB = abastecimentoDateKey(b.dataEmissao);
+  const odometroA = Number(a.hodometro);
+  const odometroB = Number(b.hodometro);
+
+  return (
+    dataA.localeCompare(dataB) ||
+    (
+      odometroA > 0 && odometroB > 0
+        ? odometroA - odometroB
+        : 0
+    ) ||
+    String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")) ||
+    String(a.id ?? "").localeCompare(String(b.id ?? ""))
+  );
+}
+
 function normalizeVehicleKey(value: unknown) {
   return String(value ?? "")
     .toUpperCase()
@@ -3195,17 +3213,10 @@ export default function Abastecimentos() {
     });
 
     porVeiculo.forEach((registrosDiesel) => {
-      const cronologicosComOdometro = registrosDiesel
-        .filter((item) => Number(item.hodometro) > 0)
-        .sort((a, b) => {
-          const dataA = abastecimentoDateKey(a.dataEmissao);
-          const dataB = abastecimentoDateKey(b.dataEmissao);
-          return (
-            dataA.localeCompare(dataB) ||
-            Number(a.hodometro) - Number(b.hodometro) ||
-            String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""))
-          );
-        });
+      const registrosOrdenados = [...registrosDiesel].sort(compareAbastecimentosChronologically);
+      const cronologicosComOdometro = registrosOrdenados.filter(
+        (item) => Number(item.hodometro) > 0,
+      );
 
       // Sem dois odômetros válidos dentro do recorte FILTRADO não existe distância
       // suficiente para calcular a média daquela placa. Não reutilizamos KM de fora
@@ -3215,15 +3226,28 @@ export default function Abastecimentos() {
       const primeiro = cronologicosComOdometro[0];
       const ultimo = cronologicosComOdometro[cronologicosComOdometro.length - 1];
       const diferencaKm = Math.abs(Number(ultimo.hodometro) - Number(primeiro.hodometro));
-      const litrosDaPlacaNoFiltro = registrosDiesel.reduce(
+
+      // Regra da média: os litros do ÚLTIMO abastecimento Diesel de cada placa,
+      // dentro do recorte filtrado, não entram no denominador. Esse combustível
+      // ainda não gerou quilometragem posterior dentro do período selecionado.
+      const ultimoAbastecimento = registrosOrdenados[registrosOrdenados.length - 1];
+      const litrosUltimoAbastecimento = abastecimentoFuelBreakdown(
+        ultimoAbastecimento,
+        produtos,
+      ).dieselLitros;
+      const litrosDaPlacaNoFiltro = registrosOrdenados.reduce(
         (total, abastecimento) =>
           total + abastecimentoFuelBreakdown(abastecimento, produtos).dieselLitros,
         0,
       );
+      const litrosConsideradosNaMedia = Math.max(
+        0,
+        litrosDaPlacaNoFiltro - litrosUltimoAbastecimento,
+      );
 
-      if (diferencaKm > 0 && litrosDaPlacaNoFiltro > 0) {
+      if (diferencaKm > 0 && litrosConsideradosNaMedia > 0) {
         kmRodados += diferencaKm;
-        litrosDiesel += litrosDaPlacaNoFiltro;
+        litrosDiesel += litrosConsideradosNaMedia;
         placasCalculadas += 1;
       }
     });
@@ -3260,28 +3284,41 @@ export default function Abastecimentos() {
           { litros: 0, valor: 0 },
         );
         const valorTotal = itens.reduce((total, item) => total + Number(item.valorTotal || 0), 0);
-        const registrosDieselComOdometro = itens
-          .filter((item) => abastecimentoFuelBreakdown(item, produtos).dieselLitros > 0 && Number(item.hodometro) > 0)
-          .sort((a, b) => {
-            const dataA = abastecimentoDateKey(a.dataEmissao);
-            const dataB = abastecimentoDateKey(b.dataEmissao);
-            return dataA.localeCompare(dataB) || Number(a.hodometro) - Number(b.hodometro);
-          });
+        const registrosDiesel = itens
+          .filter((item) => abastecimentoFuelBreakdown(item, produtos).dieselLitros > 0)
+          .sort(compareAbastecimentosChronologically);
+        const registrosDieselComOdometro = registrosDiesel.filter(
+          (item) => Number(item.hodometro) > 0,
+        );
         const kmRodado = registrosDieselComOdometro.length >= 2
           ? Math.abs(
               Number(registrosDieselComOdometro[registrosDieselComOdometro.length - 1].hodometro) -
               Number(registrosDieselComOdometro[0].hodometro),
             )
           : 0;
+        const litrosUltimoAbastecimento = registrosDiesel.length > 0
+          ? abastecimentoFuelBreakdown(
+              registrosDiesel[registrosDiesel.length - 1],
+              produtos,
+            ).dieselLitros
+          : 0;
+        const litrosConsideradosNaMedia = Math.max(
+          0,
+          diesel.litros - litrosUltimoAbastecimento,
+        );
 
         return {
           placa,
           notas: itens.length,
           dieselLitros: diesel.litros,
+          litrosConsideradosNaMedia,
           valorTotal,
           custoMedioDiesel: diesel.litros > 0 ? diesel.valor / diesel.litros : 0,
           kmRodado,
-          mediaKmLitro: kmRodado > 0 && diesel.litros > 0 ? kmRodado / diesel.litros : 0,
+          mediaKmLitro:
+            kmRodado > 0 && litrosConsideradosNaMedia > 0
+              ? kmRodado / litrosConsideradosNaMedia
+              : 0,
         };
       })
       .sort((a, b) => a.placa.localeCompare(b.placa, "pt-BR", { numeric: true }));
@@ -3574,7 +3611,7 @@ export default function Abastecimentos() {
             <p className="mt-1 truncate text-xl font-bold tabular-nums 2xl:text-2xl" title={`${mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L`}>{mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L</p>
             <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-muted-foreground 2xl:text-[11px]">
               {mediaKmLitroResumo.placasCalculadas > 0
-                ? `${mediaKmLitroResumo.kmRodados.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km ÷ ${mediaKmLitroResumo.litrosDiesel.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} L Diesel · ${mediaKmLitroResumo.placasCalculadas} placa(s)`
+                ? `${mediaKmLitroResumo.kmRodados.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km ÷ ${mediaKmLitroResumo.litrosDiesel.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} L Diesel p/ média · ${mediaKmLitroResumo.placasCalculadas} placa(s)`
                 : "Sem dois odômetros Diesel válidos no recorte filtrado."}
             </p>
           </div>
