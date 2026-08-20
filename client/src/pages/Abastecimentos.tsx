@@ -3277,10 +3277,11 @@ export default function Abastecimentos() {
           },
           { litros: 0, valor: 0 },
         );
-        const valorTotal = itens.reduce((total, item) => total + Number(item.valorTotal || 0), 0);
-        const registrosDiesel = itens
-          .filter((item) => abastecimentoFuelBreakdown(item, produtos).dieselLitros > 0)
-          .sort(compareAbastecimentosNewestFirst);
+        const itensDiesel = itens.filter(
+          (item) => abastecimentoFuelBreakdown(item, produtos).dieselLitros > 0,
+        );
+        const valorTotal = diesel.valor;
+        const registrosDiesel = [...itensDiesel].sort(compareAbastecimentosNewestFirst);
         const registrosDieselComOdometro = registrosDiesel.filter(
           (item) => Number(item.hodometro) > 0,
         );
@@ -3303,7 +3304,7 @@ export default function Abastecimentos() {
 
         return {
           placa,
-          notas: itens.length,
+          notas: itensDiesel.length,
           dieselLitros: diesel.litros,
           litrosConsideradosNaMedia,
           valorTotal,
@@ -3315,6 +3316,46 @@ export default function Abastecimentos() {
               : 0,
         };
       })
+      .filter((item) => item.dieselLitros > 0)
+      .sort((a, b) => a.placa.localeCompare(b.placa, "pt-BR", { numeric: true }));
+  }, [filteredItems, produtos, veiculos]);
+
+  const comparativoArlaPorPlaca = useMemo(() => {
+    const grupos = new Map<string, { placa: string; itens: Abastecimento[] }>();
+
+    filteredItems.forEach((item) => {
+      const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+      if (combustiveis.arlaLitros <= 0) return;
+
+      const veiculo = resolveAbastecimentoVehicle(item, veiculos);
+      const placa = veiculo?.placa || item.placaXml || "Sem placa";
+      const chave = normalizeVehicleKey(placa) || item.veiculoId || placa;
+      const grupo = grupos.get(chave) ?? { placa, itens: [] };
+      grupo.itens.push(item);
+      grupos.set(chave, grupo);
+    });
+
+    return Array.from(grupos.values())
+      .map(({ placa, itens }) => {
+        const arla = itens.reduce(
+          (acc, item) => {
+            const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+            acc.litros += combustiveis.arlaLitros;
+            acc.valor += combustiveis.arlaValor;
+            return acc;
+          },
+          { litros: 0, valor: 0 },
+        );
+
+        return {
+          placa,
+          notas: itens.length,
+          arlaLitros: arla.litros,
+          arlaValor: arla.valor,
+          custoMedioArla: arla.litros > 0 ? arla.valor / arla.litros : 0,
+        };
+      })
+      .filter((item) => item.arlaLitros > 0)
       .sort((a, b) => a.placa.localeCompare(b.placa, "pt-BR", { numeric: true }));
   }, [filteredItems, produtos, veiculos]);
 
@@ -3483,10 +3524,17 @@ export default function Abastecimentos() {
       return;
     }
 
+    const itensDieselRelatorio = filteredItems.filter(
+      (item) => abastecimentoFuelBreakdown(item, produtos).dieselLitros > 0,
+    );
+    const itensArlaRelatorio = filteredItems.filter(
+      (item) => abastecimentoFuelBreakdown(item, produtos).arlaLitros > 0,
+    );
+
+    // A primeira parte do relatório é EXCLUSIVAMENTE Diesel.
     const metricas = [
       relatorioOpcoes.totalLitros && ["Litros Diesel", formatLitros(totals.litros)],
-      relatorioOpcoes.totalLitros && ["Litros ARLA", formatLitros(totals.litrosArla)],
-      relatorioOpcoes.totalGasto && ["Valor total", formatBRL(totals.valor)],
+      relatorioOpcoes.totalGasto && ["Valor total Diesel", formatBRL(totals.valorDiesel)],
       relatorioOpcoes.custoLitro && ["Custo médio Diesel/L", formatBRL(totals.media)],
       relatorioOpcoes.mediaKmLitro && ["Média de KM/L", `${mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L`],
       relatorioOpcoes.kmRodado && [
@@ -3494,11 +3542,12 @@ export default function Abastecimentos() {
         `${mediaKmLitroResumo.kmRodados.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km`,
       ],
     ].filter(Boolean) as Array<[string, string]>;
+
     const comparativoHtml = relatorioOpcoes.comparativoPorPlaca && comparativoPorPlaca.length > 0
-      ? `<section class="comparativo"><h2>Comparativo por placa</h2><table class="comparativo-table"><thead><tr><th>Placa</th><th>Notas</th><th>Diesel</th><th>Custo médio Diesel/L</th><th>KM rodado</th><th>Média KM/L</th><th>Valor total</th></tr></thead><tbody>${comparativoPorPlaca.map((item) => `<tr><td>${escapeReportText(item.placa)}</td><td>${escapeReportText(item.notas)}</td><td>${escapeReportText(formatLitros(item.dieselLitros))}</td><td>${escapeReportText(item.dieselLitros > 0 ? formatBRL(item.custoMedioDiesel) : "—")}</td><td>${escapeReportText(item.kmRodado > 0 ? `${item.kmRodado.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km` : "—")}</td><td>${escapeReportText(item.mediaKmLitro > 0 ? `${item.mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L` : "—")}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`).join("")}</tbody></table></section>`
+      ? `<section class="comparativo"><h2>Comparativo Diesel por placa</h2><table class="comparativo-table"><thead><tr><th>Placa</th><th>Notas</th><th>Diesel</th><th>Custo médio Diesel/L</th><th>KM rodado</th><th>Média KM/L</th><th>Valor Diesel</th></tr></thead><tbody>${comparativoPorPlaca.map((item) => `<tr><td>${escapeReportText(item.placa)}</td><td>${escapeReportText(item.notas)}</td><td>${escapeReportText(formatLitros(item.dieselLitros))}</td><td>${escapeReportText(item.dieselLitros > 0 ? formatBRL(item.custoMedioDiesel) : "—")}</td><td>${escapeReportText(item.kmRodado > 0 ? `${item.kmRodado.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km` : "—")}</td><td>${escapeReportText(item.mediaKmLitro > 0 ? `${item.mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L` : "—")}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`).join("")}</tbody></table></section>`
       : "";
 
-    const linhas = filteredItems.map((item) => {
+    const linhasDiesel = itensDieselRelatorio.map((item) => {
       const cliente = resolveAbastecimentoPosto(item, clientes);
       const veiculo = resolveAbastecimentoVehicle(item, veiculos);
       const combustiveis = abastecimentoFuelBreakdown(item, produtos);
@@ -3506,10 +3555,28 @@ export default function Abastecimentos() {
         ? combustiveis.dieselValor / combustiveis.dieselLitros
         : null;
       const placa = veiculo?.placa || item.placaXml || "—";
-      return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia ?? "Não identificado")}</td><td>${escapeReportText(placa)}</td><td>${escapeReportText(formatLitros(combustiveis.dieselLitros))}</td><td>${escapeReportText(formatLitros(combustiveis.arlaLitros))}</td><td>${escapeReportText(valorUnitarioDiesel !== null ? formatBRL(valorUnitarioDiesel) : "—")}</td><td>${escapeReportText(formatOdometro(Number(item.hodometro)))}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`;
+      return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia ?? "Não identificado")}</td><td>${escapeReportText(placa)}</td><td>${escapeReportText(formatLitros(combustiveis.dieselLitros))}</td><td>${escapeReportText(valorUnitarioDiesel !== null ? formatBRL(valorUnitarioDiesel) : "—")}</td><td>${escapeReportText(formatOdometro(Number(item.hodometro)))}</td><td>${escapeReportText(formatBRL(combustiveis.dieselValor))}</td></tr>`;
     }).join("");
 
-    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Abastecimentos</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}.comparativo{margin:0 0 26px}.comparativo h2{margin-bottom:10px}.comparativo-table td:nth-child(n+2){text-align:right}table{border-collapse:collapse;width:100%;font-size:11px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:8px;border:1px solid #dbe3f0}td:nth-child(5),td:nth-child(6),td:nth-child(7),td:nth-child(8),td:nth-child(9){text-align:right}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}}</style></head><body><h1>Relatório de Abastecimentos</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${filteredItems.length} registro(s) conforme os filtros ativos.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div>${comparativoHtml}<h2>Notas fiscais</h2><table><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>Diesel</th><th>ARLA</th><th>Valor unitário Diesel</th><th>Odômetro</th><th>Valor total</th></tr></thead><tbody>${linhas}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
+    // A segunda parte, no final do PDF, é EXCLUSIVAMENTE ARLA e não interfere
+    // nos totais, custos ou médias do relatório Diesel.
+    const custoMedioArla = totals.litrosArla > 0 ? totals.valorArla / totals.litrosArla : 0;
+    const arlaMetricas: Array<[string, string]> = [
+      ["Litros ARLA", formatLitros(totals.litrosArla)],
+      ["Valor total ARLA", formatBRL(totals.valorArla)],
+      ["Custo médio ARLA/L", totals.litrosArla > 0 ? formatBRL(custoMedioArla) : "—"],
+      ["Notas com ARLA", itensArlaRelatorio.length.toLocaleString("pt-BR")],
+    ];
+
+    const linhasComparativoArla = comparativoArlaPorPlaca.length > 0
+      ? comparativoArlaPorPlaca.map((item) => `<tr><td>${escapeReportText(item.placa)}</td><td>${escapeReportText(item.notas)}</td><td>${escapeReportText(formatLitros(item.arlaLitros))}</td><td>${escapeReportText(item.arlaLitros > 0 ? formatBRL(item.custoMedioArla) : "—")}</td><td>${escapeReportText(formatBRL(item.arlaValor))}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="empty">Nenhum lançamento de ARLA encontrado conforme os filtros ativos.</td></tr>`;
+
+    const paginaArla = itensArlaRelatorio.length > 0
+      ? `<section class="report-page arla-page"><h1>Comparativo ARLA</h1><p class="sub">Separado do combustível Diesel - ${itensArlaRelatorio.length} nota(s) com ARLA conforme os filtros ativos.</p><div class="cards">${arlaMetricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Comparativo ARLA por placa</h2><table class="arla-table"><thead><tr><th>Placa</th><th>Notas</th><th>ARLA</th><th>Custo médio ARLA/L</th><th>Valor ARLA</th></tr></thead><tbody>${linhasComparativoArla}</tbody></table></section>`
+      : "";
+
+    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Combustível</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}h2{margin-top:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}.comparativo{margin:0 0 26px}.comparativo h2{margin-bottom:10px}.comparativo-table td:nth-child(n+2),.arla-table td:nth-child(n+2){text-align:right}table{border-collapse:collapse;width:100%;font-size:11px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:8px;border:1px solid #dbe3f0}.diesel-notas td:nth-child(n+5){text-align:right}.empty{text-align:center!important;color:#68738a;padding:20px}.report-page+.report-page{break-before:page;page-break-before:always}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}.report-page+.report-page{break-before:page;page-break-before:always}}</style></head><body><section class="report-page diesel-page"><h1>Relatório de Combustível — Diesel</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${itensDieselRelatorio.length} nota(s) com Diesel conforme os filtros ativos. ARLA não está incluída nesta parte.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div>${comparativoHtml}<h2>Notas fiscais — Diesel</h2><table class="diesel-notas"><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>Diesel</th><th>Valor unitário Diesel</th><th>Odômetro</th><th>Valor Diesel</th></tr></thead><tbody>${linhasDiesel}</tbody></table></section>${paginaArla}<script>window.onload=()=>window.print();<\/script></body></html>`);
     reportWindow.document.close();
     setRelatorioOpen(false);
   };
@@ -3859,7 +3926,7 @@ export default function Abastecimentos() {
           <DialogHeader>
             <DialogTitle>Gerar relatório de abastecimentos</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">Selecione as informações que devem aparecer no relatório. Os filtros aplicados na tabela também serão respeitados.</p>
+          <p className="text-sm text-muted-foreground">O relatório principal será somente Diesel. Se houver ARLA no filtro, um comparativo exclusivo de ARLA será criado no final do PDF. Os filtros aplicados na tabela serão respeitados.</p>
           {filters.placa.length > 1 && (
             <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
               Comparação preparada para {filters.placa.length} placas selecionadas no filtro.
@@ -3867,12 +3934,12 @@ export default function Abastecimentos() {
           )}
           <div className="grid gap-3 sm:grid-cols-2">
             {([
-              ["totalLitros", "Litros por tipo (Diesel / ARLA)"],
-              ["totalGasto", "Valor total gasto"],
-              ["custoLitro", "Custo médio por litro"],
+              ["totalLitros", "Litros Diesel"],
+              ["totalGasto", "Valor total Diesel"],
+              ["custoLitro", "Custo médio Diesel/L"],
               ["mediaKmLitro", "Média de KM/L"],
               ["kmRodado", "KM rodado"],
-              ["comparativoPorPlaca", "Comparativo por placa"],
+              ["comparativoPorPlaca", "Comparativo Diesel por placa"],
             ] as Array<[keyof RelatorioAbastecimentoOpcoes, string]>).map(([key, label]) => (
               <label key={key} className="flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm hover:bg-muted/40">
                 <input type="checkbox" checked={relatorioOpcoes[key]} onChange={(event) => setRelatorioOpcoes((current) => ({ ...current, [key]: event.target.checked }))} />
