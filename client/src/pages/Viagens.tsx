@@ -363,7 +363,7 @@ export default function Viagens() {
                 {filteredViagens.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
                       Nenhuma viagem encontrada. Clique em "Registrar viagem"

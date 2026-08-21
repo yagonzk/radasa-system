@@ -34,6 +34,12 @@ const navItems: NavItem[] = [
     matchPaths: ["/pedagios"],
   },
   {
+    label: "Viagens",
+    href: "/viagens",
+    icon: <Truck className="h-[18px] w-[18px]" />,
+    matchPaths: ["/viagens"],
+  },
+  {
     label: "Romaneios",
     href: "/romaneios",
     icon: <ClipboardList className="h-[18px] w-[18px]" />,

@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Dashboard from "./pages/Dashboard";
 import Cadastros from "./pages/Cadastros";
 import Pedagios from "./pages/Pedagios";
+import Viagens from "./pages/Viagens";
 import Fechamentos from "./pages/Fechamentos";
 import Romaneios from "./pages/Romaneios";
 import Auth from "./pages/Auth";
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/cadastros" component={Cadastros} />
       <Route path="/cadastros/:tab" component={Cadastros} />
       <Route path="/pedagios" component={Pedagios} />
+      <Route path="/viagens" component={Viagens} />
       <Route path="/romaneios" component={Romaneios} />
       <Route path="/fiscal" component={Fiscal} />
       <Route path="/manifestos" component={Romaneios} />
