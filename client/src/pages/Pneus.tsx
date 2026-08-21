@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { usePneus, type Pneu, type StatusPneu, type TipoPneu, type CondicaoPneu } from "@/lib/store";
 import { api } from "@/lib/api";
 import { CircleDollarSign, Download, Eye, FileText, History, ImagePlus, Package, Pencil, Plus, RefreshCcw, Search, ShieldAlert, Trash2, Truck, Upload, Wrench, Recycle, Gauge, CircleOff, CircleDotDashed } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PneuInstalacoes, PneuRodizios } from "@/components/pneus/PneuOperacoes";
 import { PneuManutencao } from "@/components/pneus/PneuManutencao";
@@ -251,6 +251,144 @@ function PneuNotasFiscais({
   );
 }
 
+
+
+function PneuNotaFiscalCadastro({
+  pneu,
+  onRefresh,
+}: {
+  pneu: Pneu;
+  onRefresh: () => Promise<unknown>;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [stored, setStored] = useState(Boolean(pneu.notaFiscalStored));
+  const [nome, setNome] = useState(pneu.notaFiscalNome ?? "");
+
+  useEffect(() => {
+    setStored(Boolean(pneu.notaFiscalStored));
+    setNome(pneu.notaFiscalNome ?? "");
+  }, [pneu.id, pneu.notaFiscalStored, pneu.notaFiscalNome]);
+
+  const chooseFile = () => {
+    if (!inputRef.current) return;
+    inputRef.current.value = "";
+    inputRef.current.click();
+  };
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    const allowed = file.type === "application/pdf" || file.type.startsWith("image/");
+    if (!allowed) {
+      toast.error("Anexe a nota fiscal em PDF ou imagem.");
+      return;
+    }
+    if (file.size > 2_500_000) {
+      toast.error("A nota fiscal deve ter no máximo 2,5 MB.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const notaFiscalUrl = await fileToDataUrl(file);
+      await api.put(`/pneus/${pneu.id}/nota-fiscal`, {
+        notaFiscalUrl,
+        notaFiscalNome: file.name,
+      });
+      setStored(true);
+      setNome(file.name);
+      await onRefresh();
+      toast.success("Nota fiscal anexada ao pneu.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível anexar a nota fiscal.");
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const loadNota = async () => {
+    const response = await api.get<PneuNotaFiscalResponse>(`/pneus/${pneu.id}/nota-fiscal`);
+    return response.data;
+  };
+
+  const preview = async () => {
+    const popup = window.open("", "_blank");
+    setBusy(true);
+    try {
+      const nota = await loadNota();
+      if (popup) popup.location.href = nota.url;
+      else toast.error("Permita pop-ups no navegador para visualizar a nota fiscal.");
+    } catch (error: any) {
+      popup?.close();
+      toast.error(error?.response?.data?.message || "Não foi possível abrir a nota fiscal.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const download = async () => {
+    setBusy(true);
+    try {
+      const nota = await loadNota();
+      const link = document.createElement("a");
+      link.href = nota.url;
+      link.download = nota.nome || `nota-fiscal-pneu-${pneu.numeroFogo || pneu.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível baixar a nota fiscal.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex min-w-[190px] items-center gap-1">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(event) => void upload(event.target.files?.[0])}
+      />
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={busy}
+        title={stored ? nome || "Nota fiscal anexada" : "Anexar nota fiscal"}
+        onClick={chooseFile}
+      >
+        <Upload className="mr-1 h-4 w-4" />
+        {stored ? "Substituir" : "Anexar NF"}
+      </Button>
+      {stored && <>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          disabled={busy}
+          title="Visualizar nota fiscal"
+          onClick={() => void preview()}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          disabled={busy}
+          title="Baixar nota fiscal"
+          onClick={() => void download()}
+        >
+          <Download className="h-4 w-4" />
+        </Button>
+      </>}
+    </div>
+  );
+}
 
 function PneuNotaFiscalIndividual({
   pneu,
@@ -540,10 +678,10 @@ export default function Pneus() {
       </div>
 
       <Tabs defaultValue="cadastro">
-        <TabsList className="flex h-auto flex-wrap"><TabsTrigger value="cadastro">Cadastro</TabsTrigger><TabsTrigger value="notas" className="gap-2 font-semibold"><FileText className="h-4 w-4" />Notas fiscais</TabsTrigger><TabsTrigger value="estoque">Estoque</TabsTrigger><TabsTrigger value="instalacoes">Instalações</TabsTrigger><TabsTrigger value="rodizios">Rodízios</TabsTrigger><TabsTrigger value="manutencao">Manutenção</TabsTrigger><TabsTrigger value="historico">Histórico</TabsTrigger><TabsTrigger value="gestao">Gestão e relatórios</TabsTrigger></TabsList>
+        <TabsList className="flex h-auto flex-wrap"><TabsTrigger value="cadastro">Cadastro</TabsTrigger><TabsTrigger value="estoque">Estoque</TabsTrigger><TabsTrigger value="instalacoes">Instalações</TabsTrigger><TabsTrigger value="rodizios">Rodízios</TabsTrigger><TabsTrigger value="manutencao">Manutenção</TabsTrigger><TabsTrigger value="historico">Histórico</TabsTrigger><TabsTrigger value="gestao">Gestão e relatórios</TabsTrigger></TabsList>
         <TabsContent value="cadastro" className="mt-4 space-y-4">
           <Card><CardContent className="p-4"><div className="flex flex-col gap-3 md:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Pesquisar número de fogo, marca, modelo, medida, ARO ou fornecedor" value={search} onChange={e => setSearch(e.target.value)}/></div><Select value={status} onValueChange={v => setStatus(v as any)}><SelectTrigger className="md:w-56"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="TODOS">Todos os status</SelectItem>{Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></div></CardContent></Card>
-          <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Nº de fogo</TableHead><TableHead>Marca / Modelo</TableHead><TableHead>Medida</TableHead><TableHead>ARO</TableHead><TableHead>Tipo</TableHead><TableHead>Status</TableHead><TableHead>Sulco atual</TableHead><TableHead>Compra</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{cadastroItems.map(p => <TableRow key={p.id}><TableCell className="font-semibold"><button className="text-primary hover:underline" onClick={() => setDetails(p)}>{p.numeroFogo || "—"}</button></TableCell><TableCell>{[p.marca, p.modelo].filter(Boolean).join(" - ") || "—"}</TableCell><TableCell>{p.medida || "—"}</TableCell><TableCell>{p.aro || "—"}</TableCell><TableCell>{tipoLabels[p.tipo]}</TableCell><TableCell><Badge variant={p.status === "DESCARTADO" ? "destructive" : p.status === "INSTALADO" ? "default" : "secondary"}>{statusLabels[p.status]}</Badge></TableCell><TableCell>{p.sulcoAtual == null ? "—" : `${p.sulcoAtual.toFixed(1)} mm`}</TableCell><TableCell>{date(p.dataCompra)}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" onClick={() => setDetails(p)}><History className="h-4 w-4"/></Button><Button variant="ghost" size="icon" title="Editar informações do pneu" aria-label="Editar informações do pneu" onClick={() => openEdit(p)}><Pencil className="h-4 w-4"/></Button><Button variant="ghost" size="icon" className="text-destructive" onClick={() => archive(p)}><Trash2 className="h-4 w-4"/></Button></div></TableCell></TableRow>)}{cadastroItems.length === 0 && <TableRow><TableCell colSpan={9} className="h-28 text-center text-muted-foreground">Nenhum pneu encontrado.</TableCell></TableRow>}</TableBody></Table></div></CardContent></Card>
+          <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Nº de fogo</TableHead><TableHead>Marca / Modelo</TableHead><TableHead>Medida</TableHead><TableHead>ARO</TableHead><TableHead>Tipo</TableHead><TableHead>Status</TableHead><TableHead>Sulco atual</TableHead><TableHead>Compra</TableHead><TableHead>Nota fiscal</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{cadastroItems.map(p => <TableRow key={p.id}><TableCell className="font-semibold"><button className="text-primary hover:underline" onClick={() => setDetails(p)}>{p.numeroFogo || "—"}</button></TableCell><TableCell>{[p.marca, p.modelo].filter(Boolean).join(" - ") || "—"}</TableCell><TableCell>{p.medida || "—"}</TableCell><TableCell>{p.aro || "—"}</TableCell><TableCell>{tipoLabels[p.tipo]}</TableCell><TableCell><Badge variant={p.status === "DESCARTADO" ? "destructive" : p.status === "INSTALADO" ? "default" : "secondary"}>{statusLabels[p.status]}</Badge></TableCell><TableCell>{p.sulcoAtual == null ? "—" : `${p.sulcoAtual.toFixed(1)} mm`}</TableCell><TableCell>{date(p.dataCompra)}</TableCell><TableCell><PneuNotaFiscalCadastro pneu={p} onRefresh={refresh} /></TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" title="Visualizar histórico do pneu" onClick={() => setDetails(p)}><History className="h-4 w-4"/></Button><Button variant="ghost" size="icon" title="Editar informações do pneu" aria-label="Editar informações do pneu" onClick={() => openEdit(p)}><Pencil className="h-4 w-4"/></Button><Button variant="ghost" size="icon" className="text-destructive" onClick={() => archive(p)}><Trash2 className="h-4 w-4"/></Button></div></TableCell></TableRow>)}{cadastroItems.length === 0 && <TableRow><TableCell colSpan={10} className="h-28 text-center text-muted-foreground">Nenhum pneu encontrado.</TableCell></TableRow>}</TableBody></Table></div></CardContent></Card>
         </TabsContent>
         <TabsContent value="estoque" className="mt-4 space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -591,8 +729,7 @@ export default function Pneus() {
             </CardContent>
           </Card>
         </TabsContent>
-        <TabsContent value="notas" className="mt-4"><PneuNotasFiscais items={items} onRefresh={refresh} /></TabsContent>
-        <TabsContent value="instalacoes" className="mt-4"><PneuInstalacoes/></TabsContent>
+                <TabsContent value="instalacoes" className="mt-4"><PneuInstalacoes/></TabsContent>
         <TabsContent value="rodizios" className="mt-4"><PneuRodizios/></TabsContent>
         <TabsContent value="manutencao" className="mt-4"><PneuManutencao/></TabsContent><TabsContent value="gestao" className="mt-4"><PneuGestao/></TabsContent>
         <TabsContent value="historico" className="mt-4"><Card><CardContent className="p-4"><div className="space-y-4">{historico.map(e => <div key={e.id} className="flex gap-3 border-b pb-4 last:border-0"><div className="mt-1 h-2.5 w-2.5 rounded-full bg-primary"/><div><p className="text-sm font-medium">Pneu {e.pneu.numeroFogo || "sem número"} — {e.observacoes || e.tipo}</p><p className="text-xs text-muted-foreground">{new Date(e.data).toLocaleString("pt-BR")}{e.responsavel ? ` • ${e.responsavel}` : ""}</p></div></div>)}</div></CardContent></Card></TabsContent>
@@ -639,11 +776,8 @@ export default function Pneus() {
           </DialogHeader>
 
           <Tabs defaultValue="dados" className="w-full">
-            <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
+            <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-2">
               <TabsTrigger value="dados">Dados do pneu</TabsTrigger>
-              <TabsTrigger value="nota-fiscal" className="gap-2 font-semibold">
-                <FileText className="h-4 w-4" />Nota fiscal
-              </TabsTrigger>
               <TabsTrigger value="historico">Histórico</TabsTrigger>
             </TabsList>
 
@@ -657,11 +791,8 @@ export default function Pneus() {
               </div>
             </TabsContent>
 
-            <TabsContent value="nota-fiscal" className="mt-4">
+            <TabsContent value="historico" className="mt-4 space-y-4">
               <PneuNotaFiscalIndividual pneu={details} onRefresh={refresh} />
-            </TabsContent>
-
-            <TabsContent value="historico" className="mt-4">
               <Card>
                 <CardHeader><CardTitle className="text-base">Linha do tempo</CardTitle></CardHeader>
                 <CardContent>

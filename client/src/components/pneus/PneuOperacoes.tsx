@@ -81,21 +81,17 @@ function TireButton({
     <button
       type="button"
       onClick={onClick}
-      className={`group flex min-w-0 flex-col items-center gap-1 rounded-md p-1 transition hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? "bg-primary/10 ring-2 ring-primary" : ""}`}
+      className={`group flex h-[92px] w-[104px] shrink-0 flex-col items-center rounded-md p-1 transition hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? "bg-primary/10 ring-2 ring-primary" : ""}`}
       title={`${position.eixo} - ${position.posicao}`}
     >
-      <div className={`relative flex h-14 w-10 items-center justify-center border-2 shadow-sm ${tireTone(item)}`}>
+      <div className={`relative flex h-14 w-10 shrink-0 items-center justify-center border-2 shadow-sm ${tireTone(item)}`}>
         <div className="absolute inset-y-1 left-1/2 w-px -translate-x-1/2 bg-current/25" />
         <span className="relative z-10 max-w-8 truncate text-[8px] font-bold">{item?.pneu.numeroFogo ?? "+"}</span>
       </div>
-      <span className="max-w-24 truncate text-[9px] font-medium">{position.posicao}</span>
-      {item ? (
-        <span className="max-w-24 truncate text-[8px] text-muted-foreground">
-          {item.pneu.marca || "Pneu"} · {item.pneu.sulcoAtual ?? "—"} mm
-        </span>
-      ) : (
-        <span className="text-[8px] text-muted-foreground">Livre</span>
-      )}
+      <span className="mt-1 block h-3 w-full truncate text-center text-[9px] font-medium leading-3">{position.posicao}</span>
+      <span className="mt-0.5 block h-3 w-full truncate text-center text-[8px] leading-3 text-muted-foreground">
+        {item ? `${item.pneu.marca || "Pneu"} · ${item.pneu.sulcoAtual ?? "—"} mm` : "Livre"}
+      </span>
     </button>
   );
 }
@@ -144,20 +140,20 @@ function ChassisMap({
                 .sort((a, b) => b.lane - a.lane);
 
               return (
-                <div key={row.eixo} className="relative grid grid-cols-[1fr_72px_1fr] items-center gap-1 sm:gap-2">
-                  <div className="absolute left-[7%] right-[7%] top-1/2 h-2 -translate-y-1/2 rounded-sm bg-foreground/90" />
-                  <div className="relative z-10 flex justify-end gap-1">
+                <div key={row.eixo} className="relative grid min-h-[92px] grid-cols-[1fr_72px_1fr] items-start gap-1 sm:gap-2">
+                  <div className="absolute left-[7%] right-[7%] top-7 h-2 -translate-y-1/2 rounded-sm bg-foreground/90" />
+                  <div className="relative z-10 flex h-[92px] items-start justify-end gap-1">
                     {left.map((position) => {
                       const key = positionKey(position);
                       const item = activeByPosition.get(key);
                       return <TireButton key={key} position={position} item={item} selected={selectedKeys.includes(key)} onClick={() => onPositionClick(position, item)} />;
                     })}
                   </div>
-                  <div className="relative z-10 justify-self-center rounded border bg-card px-2 py-1 text-center shadow-sm">
+                  <div className="relative z-10 mt-3 justify-self-center rounded border bg-card px-2 py-1 text-center shadow-sm">
                     <p className="text-[9px] font-bold">{row.label}</p>
                     <p className="text-[7px] text-muted-foreground">{row.detail}</p>
                   </div>
-                  <div className="relative z-10 flex justify-start gap-1">
+                  <div className="relative z-10 flex h-[92px] items-start justify-start gap-1">
                     {right.map((position) => {
                       const key = positionKey(position);
                       const item = activeByPosition.get(key);
