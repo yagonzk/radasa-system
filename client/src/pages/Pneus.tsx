@@ -84,6 +84,63 @@ function fileToDataUrl(file: File) {
   });
 }
 
+
+function PneuNotaFiscalViewer({
+  nota,
+  open,
+  onOpenChange,
+}: {
+  nota: PneuNotaFiscalResponse | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const nome = nota?.nome || "Nota fiscal";
+  const url = nota?.url || "";
+  const isImage =
+    url.startsWith("data:image/") ||
+    /\.(png|jpe?g|webp|gif|bmp)$/i.test(nome);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex h-[92vh] w-[96vw] max-w-[1400px] flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b px-5 py-4">
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            Visualizar nota fiscal
+          </DialogTitle>
+          <DialogDescription className="truncate" title={nome}>
+            {nome}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 bg-muted/20 p-3 sm:p-4">
+          {nota ? (
+            isImage ? (
+              <div className="flex h-full w-full items-center justify-center overflow-auto rounded-lg border bg-background">
+                <img
+                  src={url}
+                  alt={`Nota fiscal ${nome}`}
+                  className="max-h-full max-w-full object-contain"
+                />
+              </div>
+            ) : (
+              <iframe
+                src={url}
+                title={`Nota fiscal ${nome}`}
+                className="h-full w-full rounded-lg border bg-background"
+              />
+            )
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              Carregando nota fiscal...
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PneuNotasFiscais({
   items,
   onRefresh,
@@ -95,6 +152,8 @@ function PneuNotasFiscais({
   const [target, setTarget] = useState<Pneu | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [previewNota, setPreviewNota] = useState<PneuNotaFiscalResponse | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -148,14 +207,12 @@ function PneuNotasFiscais({
   };
 
   const preview = async (pneu: Pneu) => {
-    const popup = window.open("", "_blank");
     setBusyId(pneu.id);
     try {
       const nota = await loadNota(pneu);
-      if (popup) popup.location.href = nota.url;
-      else toast.error("Permita pop-ups no navegador para visualizar a nota fiscal.");
+      setPreviewNota(nota);
+      setPreviewOpen(true);
     } catch (error: any) {
-      popup?.close();
       toast.error(error?.response?.data?.message || "Não foi possível abrir a nota fiscal.");
     } finally {
       setBusyId(null);
@@ -194,7 +251,16 @@ function PneuNotasFiscais({
   };
 
   return (
-    <div className="space-y-4">
+    <>
+      <PneuNotaFiscalViewer
+        nota={previewNota}
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open) setPreviewNota(null);
+        }}
+      />
+      <div className="space-y-4">
       <input
         ref={inputRef}
         type="file"
@@ -247,7 +313,8 @@ function PneuNotasFiscais({
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -264,6 +331,8 @@ function PneuNotaFiscalCadastro({
   const [busy, setBusy] = useState(false);
   const [stored, setStored] = useState(Boolean(pneu.notaFiscalStored));
   const [nome, setNome] = useState(pneu.notaFiscalNome ?? "");
+  const [previewNota, setPreviewNota] = useState<PneuNotaFiscalResponse | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     setStored(Boolean(pneu.notaFiscalStored));
@@ -313,14 +382,12 @@ function PneuNotaFiscalCadastro({
   };
 
   const preview = async () => {
-    const popup = window.open("", "_blank");
     setBusy(true);
     try {
       const nota = await loadNota();
-      if (popup) popup.location.href = nota.url;
-      else toast.error("Permita pop-ups no navegador para visualizar a nota fiscal.");
+      setPreviewNota(nota);
+      setPreviewOpen(true);
     } catch (error: any) {
-      popup?.close();
       toast.error(error?.response?.data?.message || "Não foi possível abrir a nota fiscal.");
     } finally {
       setBusy(false);
@@ -345,7 +412,16 @@ function PneuNotaFiscalCadastro({
   };
 
   return (
-    <div className="flex min-w-[190px] items-center gap-1">
+    <>
+      <PneuNotaFiscalViewer
+        nota={previewNota}
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open) setPreviewNota(null);
+        }}
+      />
+      <div className="flex min-w-[190px] items-center gap-1">
       <input
         ref={inputRef}
         type="file"
@@ -386,7 +462,8 @@ function PneuNotaFiscalCadastro({
           <Download className="h-4 w-4" />
         </Button>
       </>}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -401,6 +478,8 @@ function PneuNotaFiscalIndividual({
   const [busy, setBusy] = useState(false);
   const [stored, setStored] = useState(Boolean(pneu.notaFiscalStored));
   const [nome, setNome] = useState(pneu.notaFiscalNome ?? "");
+  const [previewNota, setPreviewNota] = useState<PneuNotaFiscalResponse | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     setStored(Boolean(pneu.notaFiscalStored));
@@ -451,14 +530,12 @@ function PneuNotaFiscalIndividual({
   };
 
   const preview = async () => {
-    const popup = window.open("", "_blank");
     setBusy(true);
     try {
       const nota = await loadNota();
-      if (popup) popup.location.href = nota.url;
-      else toast.error("Permita pop-ups no navegador para visualizar a nota fiscal.");
+      setPreviewNota(nota);
+      setPreviewOpen(true);
     } catch (error: any) {
-      popup?.close();
       toast.error(error?.response?.data?.message || "Não foi possível abrir a nota fiscal.");
     } finally {
       setBusy(false);
@@ -499,7 +576,16 @@ function PneuNotaFiscalIndividual({
   };
 
   return (
-    <div className="space-y-4">
+    <>
+      <PneuNotaFiscalViewer
+        nota={previewNota}
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open) setPreviewNota(null);
+        }}
+      />
+      <div className="space-y-4">
       <input
         ref={inputRef}
         type="file"
@@ -559,7 +645,8 @@ function PneuNotaFiscalIndividual({
           <p className="text-xs text-muted-foreground">Formatos aceitos: PDF, PNG, JPG/JPEG e WEBP. Tamanho máximo: 2,5 MB.</p>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </>
   );
 }
 
