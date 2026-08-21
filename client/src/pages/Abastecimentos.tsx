@@ -3594,6 +3594,152 @@ export default function Abastecimentos() {
     setRelatorioOpen(false);
   };
 
+  const gerarComparativoXlsx = () => {
+    if (filters.placa.length < 2) {
+      toast.error("Selecione duas ou mais placas para exportar o comparativo.");
+      return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+
+    const ajustarPlanilha = (
+      worksheet: XLSX.WorkSheet,
+      larguras: number[],
+      autoFilterRef?: string,
+    ) => {
+      worksheet["!cols"] = larguras.map((wch) => ({ wch }));
+      if (autoFilterRef) worksheet["!autofilter"] = { ref: autoFilterRef };
+    };
+
+    const formatarColunaNumerica = (
+      worksheet: XLSX.WorkSheet,
+      coluna: number,
+      quantidadeLinhas: number,
+      formato: string,
+    ) => {
+      for (let row = 1; row <= quantidadeLinhas; row += 1) {
+        const endereco = XLSX.utils.encode_cell({ r: row, c: coluna });
+        const cell = worksheet[endereco];
+        if (cell && typeof cell.v === "number") cell.z = formato;
+      }
+    };
+
+    const comparativoDiesel = [
+      ["Placa", "Notas", "Diesel (L)", "Custo médio Diesel/L", "KM rodado", "Média KM/L", "Valor Diesel"],
+      ...comparativoPorPlaca.map((item) => [
+        item.placa,
+        item.notas,
+        item.dieselLitros,
+        item.custoMedioDiesel,
+        item.kmRodado,
+        item.mediaKmLitro,
+        item.valorTotal,
+      ]),
+    ];
+    const wsComparativoDiesel = XLSX.utils.aoa_to_sheet(comparativoDiesel);
+    ajustarPlanilha(wsComparativoDiesel, [16, 10, 16, 22, 16, 16, 18], "A1:G1");
+    formatarColunaNumerica(wsComparativoDiesel, 2, comparativoPorPlaca.length, "#,##0.000");
+    formatarColunaNumerica(wsComparativoDiesel, 3, comparativoPorPlaca.length, 'R$ #,##0.000');
+    formatarColunaNumerica(wsComparativoDiesel, 4, comparativoPorPlaca.length, "#,##0.0");
+    formatarColunaNumerica(wsComparativoDiesel, 5, comparativoPorPlaca.length, "0.00");
+    formatarColunaNumerica(wsComparativoDiesel, 6, comparativoPorPlaca.length, 'R$ #,##0.00');
+    XLSX.utils.book_append_sheet(workbook, wsComparativoDiesel, "Comparativo Diesel");
+
+    const placasSelecionadas = new Set(filters.placa.map(normalizePlate));
+    const itensSelecionados = filteredItems.filter((item) => {
+      const veiculo = resolveAbastecimentoVehicle(item, veiculos);
+      const placa = normalizePlate(veiculo?.placa || item.placaXml || "");
+      return placasSelecionadas.has(placa);
+    });
+
+    const notasDiesel = [
+      ["NF", "Emissão", "Posto", "Placa", "Diesel (L)", "Valor unitário Diesel", "Odômetro (km)", "Valor Diesel"],
+      ...itensSelecionados
+        .filter((item) => abastecimentoFuelBreakdown(item, produtos).dieselLitros > 0)
+        .map((item) => {
+          const cliente = resolveAbastecimentoPosto(item, clientes);
+          const veiculo = resolveAbastecimentoVehicle(item, veiculos);
+          const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+          return [
+            item.numeroNfe || "-",
+            formatDate(item.dataEmissao),
+            cliente?.nomeFantasia || cliente?.razaoSocial || "Não identificado",
+            veiculo?.placa || item.placaXml || "—",
+            combustiveis.dieselLitros,
+            combustiveis.dieselLitros > 0
+              ? combustiveis.dieselValor / combustiveis.dieselLitros
+              : 0,
+            Number(item.hodometro) > 0 ? Number(item.hodometro) : null,
+            combustiveis.dieselValor,
+          ];
+        }),
+    ];
+    const wsNotasDiesel = XLSX.utils.aoa_to_sheet(notasDiesel);
+    ajustarPlanilha(wsNotasDiesel, [14, 14, 32, 14, 14, 22, 18, 18], "A1:H1");
+    formatarColunaNumerica(wsNotasDiesel, 4, Math.max(0, notasDiesel.length - 1), "#,##0.000");
+    formatarColunaNumerica(wsNotasDiesel, 5, Math.max(0, notasDiesel.length - 1), 'R$ #,##0.000');
+    formatarColunaNumerica(wsNotasDiesel, 6, Math.max(0, notasDiesel.length - 1), "#,##0.0");
+    formatarColunaNumerica(wsNotasDiesel, 7, Math.max(0, notasDiesel.length - 1), 'R$ #,##0.00');
+    XLSX.utils.book_append_sheet(workbook, wsNotasDiesel, "Notas Diesel");
+
+    if (comparativoArlaPorPlaca.length > 0) {
+      const comparativoArla = [
+        ["Placa", "Notas", "ARLA (L)", "Custo médio ARLA/L", "Valor ARLA"],
+        ...comparativoArlaPorPlaca.map((item) => [
+          item.placa,
+          item.notas,
+          item.arlaLitros,
+          item.custoMedioArla,
+          item.arlaValor,
+        ]),
+      ];
+      const wsComparativoArla = XLSX.utils.aoa_to_sheet(comparativoArla);
+      ajustarPlanilha(wsComparativoArla, [16, 10, 16, 22, 18], "A1:E1");
+      formatarColunaNumerica(wsComparativoArla, 2, comparativoArlaPorPlaca.length, "#,##0.000");
+      formatarColunaNumerica(wsComparativoArla, 3, comparativoArlaPorPlaca.length, 'R$ #,##0.000');
+      formatarColunaNumerica(wsComparativoArla, 4, comparativoArlaPorPlaca.length, 'R$ #,##0.00');
+      XLSX.utils.book_append_sheet(workbook, wsComparativoArla, "Comparativo ARLA");
+
+      const notasArla = [
+        ["NF", "Emissão", "Posto", "Placa", "ARLA (L)", "Valor unitário ARLA", "Odômetro (km)", "Valor ARLA"],
+        ...itensSelecionados
+          .filter((item) => abastecimentoFuelBreakdown(item, produtos).arlaLitros > 0)
+          .map((item) => {
+            const cliente = resolveAbastecimentoPosto(item, clientes);
+            const veiculo = resolveAbastecimentoVehicle(item, veiculos);
+            const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+            return [
+              item.numeroNfe || "-",
+              formatDate(item.dataEmissao),
+              cliente?.nomeFantasia || cliente?.razaoSocial || "Não identificado",
+              veiculo?.placa || item.placaXml || "—",
+              combustiveis.arlaLitros,
+              combustiveis.arlaLitros > 0
+                ? combustiveis.arlaValor / combustiveis.arlaLitros
+                : 0,
+              Number(item.hodometro) > 0 ? Number(item.hodometro) : null,
+              combustiveis.arlaValor,
+            ];
+          }),
+      ];
+      const wsNotasArla = XLSX.utils.aoa_to_sheet(notasArla);
+      ajustarPlanilha(wsNotasArla, [14, 14, 32, 14, 14, 22, 18, 18], "A1:H1");
+      formatarColunaNumerica(wsNotasArla, 4, Math.max(0, notasArla.length - 1), "#,##0.000");
+      formatarColunaNumerica(wsNotasArla, 5, Math.max(0, notasArla.length - 1), 'R$ #,##0.000');
+      formatarColunaNumerica(wsNotasArla, 6, Math.max(0, notasArla.length - 1), "#,##0.0");
+      formatarColunaNumerica(wsNotasArla, 7, Math.max(0, notasArla.length - 1), 'R$ #,##0.00');
+      XLSX.utils.book_append_sheet(workbook, wsNotasArla, "Notas ARLA");
+    }
+
+    const dataArquivo = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(
+      workbook,
+      `comparativo-abastecimentos-${dataArquivo}.xlsx`,
+      { compression: true },
+    );
+    toast.success("Comparativo XLSX exportado com sucesso.");
+  };
+
   const gerarRelatorioXlsx = () => {
     const itensDieselRelatorio = filteredItems.filter(
       (item) => abastecimentoFuelBreakdown(item, produtos).dieselLitros > 0,
@@ -3876,6 +4022,15 @@ export default function Abastecimentos() {
             }}
           >
             <FileText className="mr-2 h-4 w-4" /> Relatório comparativo
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={filters.placa.length < 2}
+            title={filters.placa.length < 2 ? "Selecione duas ou mais placas no filtro para exportar." : "Exportar o comparativo das placas selecionadas para XLSX"}
+            onClick={gerarComparativoXlsx}
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" /> Comparativo XLSX
           </Button>
         </div>
 

@@ -547,6 +547,7 @@ model Pneu {
   marca                String
   modelo               String
   medida               String
+  aro                  String?
   dot                  String
   numeroSerie          String?
   tipo                 TipoPneu
