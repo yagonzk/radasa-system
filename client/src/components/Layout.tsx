@@ -40,6 +40,12 @@ const navItems: NavItem[] = [
     matchPaths: ["/romaneios", "/manifestos"],
   },
   {
+    label: "Fiscal",
+    href: "/fiscal",
+    icon: <BadgeDollarSign className="h-[18px] w-[18px]" />,
+    matchPaths: ["/fiscal"],
+  },
+  {
     label: "Comissões",
     href: "/fechamentos",
     icon: <HandCoins className="h-[18px] w-[18px]" />,

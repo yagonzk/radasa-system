@@ -24,6 +24,7 @@ import { cteRoutes } from "./cte.routes.js";
 import { pedagiosRoutes } from "./pedagios.routes.js";
 import { auditMutations } from "../middlewares/audit-log.js";
 import { bootstrapRoutes } from "./bootstrap.routes.js";
+import { fiscalRoutes } from "./fiscal.routes.js";
 
 export const apiRoutes = Router();
 apiRoutes.get("/health", (_req, res) => res.json({ status: "ok" }));
@@ -47,6 +48,7 @@ apiRoutes.use("/pedagios", pedagiosRoutes);
 apiRoutes.use("/fechamentos", fechamentosRoutes);
 apiRoutes.use("/manifestos", manifestosRoutes);
 apiRoutes.use("/romaneios", manifestosRoutes);
+apiRoutes.use("/fiscal", fiscalRoutes);
 apiRoutes.use("/abastecimentos", abastecimentosRoutes);
 apiRoutes.use("/abastecimentos/xml", abastecimentosXmlRoutes);
 apiRoutes.use("/ciots", ciotsRoutes);

@@ -20,6 +20,7 @@ import Abastecimentos from "./pages/Abastecimentos";
 import Pneus from "./pages/Pneus";
 import Estoque from "./pages/Estoque";
 import AprovacaoContas from "./pages/AprovacaoContas";
+import Fiscal from "./pages/Fiscal";
 import CiotGerar from "./pages/CiotGerar";
 import CiotGerados from "./pages/CiotGerados";
 import CiotConfiguracao from "./pages/CiotConfiguracao";
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/cadastros/:tab" component={Cadastros} />
       <Route path="/pedagios" component={Pedagios} />
       <Route path="/romaneios" component={Romaneios} />
+      <Route path="/fiscal" component={Fiscal} />
       <Route path="/manifestos" component={Romaneios} />
       <Route path="/fechamentos" component={Fechamentos} />
       <Route path="/abastecimentos" component={Abastecimentos} />
