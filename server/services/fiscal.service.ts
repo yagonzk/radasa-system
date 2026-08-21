@@ -19,7 +19,8 @@ type MonthRow = {
   pneusCompra: number;
   pneusManutencao: number;
   pedagios: number;
-  diariasChapas: number;
+  diarias: number;
+  chapas: number;
   despesas: number;
   resultado: number;
 };
@@ -53,7 +54,8 @@ function emptyMonth(mes: string): MonthRow {
     pneusCompra: 0,
     pneusManutencao: 0,
     pedagios: 0,
-    diariasChapas: 0,
+    diarias: 0,
+    chapas: 0,
     despesas: 0,
     resultado: 0,
   };
@@ -207,20 +209,26 @@ export const fiscalService = {
       return sum + valor;
     }, 0);
 
-    const diariasChapas = viagens.reduce((sum, item) => {
-      const valor = number(item.valorDiaria) + number(item.valorChapa);
-      addMonth(meses, item.dataManifesto, "diariasChapas", valor);
+    const diarias = viagens.reduce((sum, item) => {
+      const valor = number(item.valorDiaria);
+      addMonth(meses, item.dataManifesto, "diarias", valor);
+      return sum + valor;
+    }, 0);
+
+    const chapas = viagens.reduce((sum, item) => {
+      const valor = number(item.valorChapa);
+      addMonth(meses, item.dataManifesto, "chapas", valor);
       return sum + valor;
     }, 0);
 
     const pneusManutencao = pneusRecapagens + pneusConsertos;
-    const despesas = abastecimento + comissoes + almoxarifadoValor + pneusCompra + pneusManutencao + pedagios + diariasChapas;
+    const despesas = abastecimento + comissoes + almoxarifadoValor + pneusCompra + pneusManutencao + pedagios + diarias + chapas;
     const resultado = faturamento - despesas;
     const margem = faturamento > 0 ? (resultado / faturamento) * 100 : 0;
 
     const mensal = Array.from(meses.values())
       .map((row) => {
-        const despesasMes = row.abastecimento + row.comissoes + row.almoxarifado + row.pneusCompra + row.pneusManutencao + row.pedagios + row.diariasChapas;
+        const despesasMes = row.abastecimento + row.comissoes + row.almoxarifado + row.pneusCompra + row.pneusManutencao + row.pedagios + row.diarias + row.chapas;
         return {
           ...row,
           label: fiscalMonthLabel(row.mes),
@@ -256,7 +264,8 @@ export const fiscalService = {
         pneusCompra,
         pneusManutencao,
         pedagios,
-        diariasChapas,
+        diarias,
+        chapas,
         total: despesas,
       },
       contagens: {
@@ -267,6 +276,8 @@ export const fiscalService = {
         pneusCompras: pneusCompras.length,
         pneusManutencoes: recapagens.length + consertos.length,
         viagens: viagens.length,
+        diarias: viagens.filter((item) => number(item.valorDiaria) > 0).length,
+        chapas: viagens.filter((item) => number(item.valorChapa) > 0).length,
       },
       mensal,
     };

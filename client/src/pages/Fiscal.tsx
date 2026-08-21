@@ -40,7 +40,8 @@ type FiscalMonthlyRow = {
   pneusCompra: number;
   pneusManutencao: number;
   pedagios: number;
-  diariasChapas: number;
+  diarias: number;
+  chapas: number;
   despesas: number;
   resultado: number;
 };
@@ -68,7 +69,8 @@ type FiscalData = {
     pneusCompra: number;
     pneusManutencao: number;
     pedagios: number;
-    diariasChapas: number;
+    diarias: number;
+  chapas: number;
     total: number;
   };
   contagens: {
@@ -79,6 +81,8 @@ type FiscalData = {
     pneusCompras: number;
     pneusManutencoes: number;
     viagens: number;
+    diarias: number;
+    chapas: number;
   };
   mensal: FiscalMonthlyRow[];
 };
@@ -237,7 +241,8 @@ export default function Fiscal() {
       ["Pneus - compras", data.despesas.pneusCompra],
       ["Pneus - manutenção", data.despesas.pneusManutencao],
       ["Pedágios - viagens", data.despesas.pedagios],
-      ["Diárias e chapas - viagens", data.despesas.diariasChapas],
+      ["Diárias - viagens", data.despesas.diarias],
+      ["Chapas - viagens", data.despesas.chapas],
       ["Total", data.despesas.total],
     ];
     const wsDespesas = XLSX.utils.aoa_to_sheet(despesas);
@@ -245,7 +250,7 @@ export default function Fiscal() {
     XLSX.utils.book_append_sheet(workbook, wsDespesas, "Despesas");
 
     const mensal = [
-      ["Mês", "Faturamento", "Abastecimento", "Comissões", "Almoxarifado", "Pneus compra", "Pneus manutenção", "Pedágios", "Diárias/Chapas", "Despesas", "Resultado"],
+      ["Mês", "Faturamento", "Abastecimento", "Comissões", "Almoxarifado", "Pneus compra", "Pneus manutenção", "Pedágios", "Diárias", "Chapas", "Despesas", "Resultado"],
       ...data.mensal.map((row) => [
         row.label,
         row.faturamento,
@@ -255,13 +260,14 @@ export default function Fiscal() {
         row.pneusCompra,
         row.pneusManutencao,
         row.pedagios,
-        row.diariasChapas,
+        row.diarias,
+        row.chapas,
         row.despesas,
         row.resultado,
       ]),
     ];
     const wsMensal = XLSX.utils.aoa_to_sheet(mensal);
-    wsMensal["!cols"] = [{ wch: 14 }, ...Array.from({ length: 10 }, () => ({ wch: 18 }))];
+    wsMensal["!cols"] = [{ wch: 14 }, ...Array.from({ length: 11 }, () => ({ wch: 18 }))];
     XLSX.utils.book_append_sheet(workbook, wsMensal, "Comparativo mensal");
 
     XLSX.writeFile(workbook, `fiscal-${from || "inicio"}-${to || "atual"}.xlsx`, { compression: true });
@@ -275,7 +281,8 @@ export default function Fiscal() {
     ["Pneus (compras)", data.despesas.pneusCompra, <CircleDotDashed className="h-4 w-4" />],
     ["Pneus (manutenção)", data.despesas.pneusManutencao, <CircleDotDashed className="h-4 w-4" />],
     ["Pedágios (viagens)", data.despesas.pedagios, <Truck className="h-4 w-4" />],
-    ["Diárias e chapas (viagens)", data.despesas.diariasChapas, <WalletCards className="h-4 w-4" />],
+    [`Diárias (viagens) · ${data.contagens.diarias} lançamento(s)`, data.despesas.diarias, <WalletCards className="h-4 w-4" />],
+    [`Chapas (viagens) · ${data.contagens.chapas} lançamento(s)`, data.despesas.chapas, <WalletCards className="h-4 w-4" />],
   ] as const : [];
 
   return (
@@ -395,7 +402,7 @@ export default function Fiscal() {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1180px] text-sm">
+                  <table className="w-full min-w-[1280px] text-sm">
                     <thead className="border-y bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                       <tr>
                         <th className="px-4 py-3 text-left">Mês</th>
@@ -405,7 +412,8 @@ export default function Fiscal() {
                         <th className="px-3 py-3 text-right">Almoxarifado</th>
                         <th className="px-3 py-3 text-right">Pneus</th>
                         <th className="px-3 py-3 text-right">Pedágios</th>
-                        <th className="px-3 py-3 text-right">Diárias/Chapas</th>
+                        <th className="px-3 py-3 text-right">Diárias</th>
+                        <th className="px-3 py-3 text-right">Chapas</th>
                         <th className="px-3 py-3 text-right">Despesas</th>
                         <th className="px-4 py-3 text-right">Resultado</th>
                       </tr>
@@ -420,13 +428,14 @@ export default function Fiscal() {
                           <td className="px-3 py-3 text-right tabular-nums">{formatBRL(row.almoxarifado)}</td>
                           <td className="px-3 py-3 text-right tabular-nums">{formatBRL(row.pneusCompra + row.pneusManutencao)}</td>
                           <td className="px-3 py-3 text-right tabular-nums">{formatBRL(row.pedagios)}</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{formatBRL(row.diariasChapas)}</td>
+                          <td className="px-3 py-3 text-right tabular-nums">{formatBRL(row.diarias)}</td>
+                          <td className="px-3 py-3 text-right tabular-nums">{formatBRL(row.chapas)}</td>
                           <td className="px-3 py-3 text-right font-semibold tabular-nums">{formatBRL(row.despesas)}</td>
                           <td className={`px-4 py-3 text-right font-bold tabular-nums ${row.resultado < 0 ? "text-destructive" : "text-primary"}`}>{formatBRL(row.resultado)}</td>
                         </tr>
                       ))}
                       {data.mensal.length === 0 && (
-                        <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">Nenhum movimento encontrado no período.</td></tr>
+                        <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">Nenhum movimento encontrado no período.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -436,7 +445,7 @@ export default function Fiscal() {
 
             <Card className="border-dashed">
               <CardContent className="p-4 text-xs leading-relaxed text-muted-foreground">
-                <strong className="text-foreground">Critérios do Fiscal:</strong> faturamento vem dos produtos dos Romaneios classificados como Receber c/ Cliente, Acertar c/ Lebrinha ou Bonificação Lebrinha. Vasilhames ficam fora do faturamento. Abastecimento usa o valor total das NFs. Almoxarifado considera entradas, pneus consideram compras/recapagens/consertos e pedágios/diárias/chapas usam a base de Viagens. O valor de abastecimento da base de Viagens não é somado novamente para evitar duplicidade.
+                <strong className="text-foreground">Critérios do Fiscal:</strong> faturamento vem dos produtos dos Romaneios classificados como Receber c/ Cliente, Acertar c/ Lebrinha ou Bonificação Lebrinha. Vasilhames ficam fora do faturamento. Abastecimento usa o valor total das NFs. Almoxarifado considera entradas, pneus consideram compras/recapagens/consertos e pedágios usam a base de Viagens. <strong className="text-foreground">Diárias e Chapas são apuradas separadamente, cada uma pelo seu próprio campo em cada viagem.</strong> O valor de abastecimento da base de Viagens não é somado novamente para evitar duplicidade.
               </CardContent>
             </Card>
           </>
