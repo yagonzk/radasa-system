@@ -22,7 +22,40 @@ const tipoLabels: Record<TipoPneu, string> = { DIRECIONAL: "Direcional", TRACAO:
 const condicaoLabels: Record<CondicaoPneu, string> = { NOVO: "Novo", USADO: "Usado", RECAPADO: "Recapado", AGUARDANDO_RECAPAGEM: "Aguardando recapagem" };
 const emptyForm = { numeroFogo: "", marca: "", modelo: "", medida: "", aro: "", dot: "", numeroSerie: "", tipo: "LIVRE" as TipoPneu, valorCompra: "", fornecedor: "", dataCompra: "", maxRecapagens: "", recapagensRealizadas: "", status: "ESTOQUE" as StatusPneu, condicao: "NOVO" as CondicaoPneu, sulcoInicial: "", sulcoAtual: "", kmAtual: "", proximoRodizioKm: "", observacoes: "", fotos: [] as string[] };
 
-function money(value: number) { return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function money(value: number) {
+  return Number(value || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function parseBRLCurrency(value: string | number) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+
+  const raw = String(value ?? "")
+    .replace(/R\$/gi, "")
+    .replace(/\s/g, "")
+    .trim();
+
+  if (!raw) return 0;
+
+  // Formato brasileiro: 1.234,56 -> 1234.56
+  if (raw.includes(",")) {
+    const normalized = raw.replace(/\./g, "").replace(",", ".");
+    const parsed = Number(normalized.replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  // Também aceita 1234.56 para facilitar colar valores de outras fontes.
+  const parsed = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatBRLCurrencyInput(value: string | number) {
+  if (value === "" || value == null) return "";
+  return money(parseBRLCurrency(value));
+}
+
 function date(value: string) { return value ? new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR") : "—"; }
 
 function compareNumeroFogoDesc(a: Pneu, b: Pneu) {
@@ -108,7 +141,7 @@ export default function Pneus() {
   const openCreate = () => { setEditing(null); setForm({ ...emptyForm, fotos: [] }); setOpen(true); };
   const openEdit = (p: Pneu) => {
     setEditing(p);
-    setForm({ numeroFogo: p.numeroFogo, marca: p.marca, modelo: p.modelo, medida: p.medida, aro: p.aro ?? "", dot: p.dot, numeroSerie: p.numeroSerie ?? "", tipo: p.tipo, valorCompra: p.valorCompra ? String(p.valorCompra) : "", fornecedor: p.fornecedor, dataCompra: p.dataCompra, maxRecapagens: p.maxRecapagens ? String(p.maxRecapagens) : "", recapagensRealizadas: p.recapagensRealizadas ? String(p.recapagensRealizadas) : "", status: p.status, condicao: p.condicao, sulcoInicial: p.sulcoInicial == null ? "" : String(p.sulcoInicial), sulcoAtual: p.sulcoAtual == null ? "" : String(p.sulcoAtual), kmAtual: p.kmAtual ? String(p.kmAtual) : "", proximoRodizioKm: p.proximoRodizioKm == null ? "" : String(p.proximoRodizioKm), observacoes: p.observacoes ?? "", fotos: (p.fotos ?? []).map(f => f.url) });
+    setForm({ numeroFogo: p.numeroFogo, marca: p.marca, modelo: p.modelo, medida: p.medida, aro: p.aro ?? "", dot: p.dot, numeroSerie: p.numeroSerie ?? "", tipo: p.tipo, valorCompra: p.valorCompra ? money(p.valorCompra) : "", fornecedor: p.fornecedor, dataCompra: p.dataCompra, maxRecapagens: p.maxRecapagens ? String(p.maxRecapagens) : "", recapagensRealizadas: p.recapagensRealizadas ? String(p.recapagensRealizadas) : "", status: p.status, condicao: p.condicao, sulcoInicial: p.sulcoInicial == null ? "" : String(p.sulcoInicial), sulcoAtual: p.sulcoAtual == null ? "" : String(p.sulcoAtual), kmAtual: p.kmAtual ? String(p.kmAtual) : "", proximoRodizioKm: p.proximoRodizioKm == null ? "" : String(p.proximoRodizioKm), observacoes: p.observacoes ?? "", fotos: (p.fotos ?? []).map(f => f.url) });
     setOpen(true);
   };
 
@@ -123,7 +156,7 @@ export default function Pneus() {
 
   const save = async () => {
     setSaving(true);
-    const payload = { ...form, valorCompra: Number(form.valorCompra || 0), maxRecapagens: Number(form.maxRecapagens || 0), recapagensRealizadas: Number(form.recapagensRealizadas || 0), sulcoInicial: form.sulcoInicial === "" ? null : Number(form.sulcoInicial), sulcoAtual: form.sulcoAtual === "" ? null : Number(form.sulcoAtual), kmAtual: Number(form.kmAtual || 0), proximoRodizioKm: form.proximoRodizioKm === "" ? null : Number(form.proximoRodizioKm) };
+    const payload = { ...form, valorCompra: parseBRLCurrency(form.valorCompra), maxRecapagens: Number(form.maxRecapagens || 0), recapagensRealizadas: Number(form.recapagensRealizadas || 0), sulcoInicial: form.sulcoInicial === "" ? null : Number(form.sulcoInicial), sulcoAtual: form.sulcoAtual === "" ? null : Number(form.sulcoAtual), kmAtual: Number(form.kmAtual || 0), proximoRodizioKm: form.proximoRodizioKm === "" ? null : Number(form.proximoRodizioKm) };
     try { if (editing) await update(editing.id, payload as any); else await create(payload as any); toast.success(editing ? "Pneu atualizado." : "Pneu cadastrado."); setOpen(false); } catch (error: any) { toast.error(error?.response?.data?.message ?? "Não foi possível salvar o pneu."); } finally { setSaving(false); }
   };
 
@@ -215,7 +248,21 @@ export default function Pneus() {
     <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto"><DialogHeader><DialogTitle>{editing ? "Editar pneu" : "Cadastrar pneu"}</DialogTitle><DialogDescription>Todos os campos são opcionais. Preencha apenas as informações disponíveis.</DialogDescription></DialogHeader><div className="grid gap-4 py-2 md:grid-cols-2">
       {[["Número de fogo","numeroFogo"],["Marca","marca"],["Modelo","modelo"],["Medida","medida"],["ARO","aro"],["DOT","dot"],["Número de série","numeroSerie"],["Fornecedor","fornecedor"]].map(([label, key]) => <div key={key} className="space-y-1.5"><Label>{label}</Label><Input value={(form as any)[key]} onChange={e => setForm({ ...form, [key]: e.target.value })}/></div>)}
       <div className="space-y-1.5"><Label>Tipo</Label><Select value={form.tipo} onValueChange={v => setForm({ ...form, tipo: v as TipoPneu })}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{Object.entries(tipoLabels).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></div>
-      <div className="space-y-1.5"><Label>Valor de compra</Label><Input type="number" min="0" step="0.01" value={form.valorCompra} onChange={e => setForm({ ...form, valorCompra: e.target.value })}/></div>
+      <div className="space-y-1.5">
+        <Label>Valor de compra</Label>
+        <Input
+          type="text"
+          inputMode="decimal"
+          placeholder="R$ 0,00"
+          value={form.valorCompra}
+          onChange={e => setForm({ ...form, valorCompra: e.target.value })}
+          onBlur={() => setForm(current => ({
+            ...current,
+            valorCompra: formatBRLCurrencyInput(current.valorCompra),
+          }))}
+        />
+        <p className="text-xs text-muted-foreground">Valor em reais. Ex.: R$ 1.234,56</p>
+      </div>
       <div className="space-y-1.5"><Label>Data de compra</Label><Input type="date" value={form.dataCompra} onChange={e => setForm({ ...form, dataCompra: e.target.value })}/></div>
       <div className="space-y-1.5"><Label>Máximo de recapagens</Label><Input type="number" min="0" value={form.maxRecapagens} onChange={e => setForm({ ...form, maxRecapagens: e.target.value })}/></div>
       <div className="space-y-1.5"><Label>Recapagens realizadas</Label><Input type="number" min="0" value={form.recapagensRealizadas} onChange={e => setForm({ ...form, recapagensRealizadas: e.target.value })}/></div>
