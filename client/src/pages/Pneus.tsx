@@ -251,6 +251,180 @@ function PneuNotasFiscais({
   );
 }
 
+
+function PneuNotaFiscalIndividual({
+  pneu,
+  onRefresh,
+}: {
+  pneu: Pneu;
+  onRefresh: () => Promise<unknown>;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [stored, setStored] = useState(Boolean(pneu.notaFiscalStored));
+  const [nome, setNome] = useState(pneu.notaFiscalNome ?? "");
+
+  useEffect(() => {
+    setStored(Boolean(pneu.notaFiscalStored));
+    setNome(pneu.notaFiscalNome ?? "");
+  }, [pneu.id, pneu.notaFiscalStored, pneu.notaFiscalNome]);
+
+  const chooseFile = () => {
+    if (inputRef.current) {
+      inputRef.current.value = "";
+      inputRef.current.click();
+    }
+  };
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    const allowed = file.type === "application/pdf" || file.type.startsWith("image/");
+    if (!allowed) {
+      toast.error("Anexe a nota fiscal em PDF ou imagem.");
+      return;
+    }
+    if (file.size > 2_500_000) {
+      toast.error("A nota fiscal deve ter no máximo 2,5 MB.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const notaFiscalUrl = await fileToDataUrl(file);
+      await api.put(`/pneus/${pneu.id}/nota-fiscal`, {
+        notaFiscalUrl,
+        notaFiscalNome: file.name,
+      });
+      setStored(true);
+      setNome(file.name);
+      await onRefresh();
+      toast.success("Nota fiscal anexada ao pneu.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível anexar a nota fiscal.");
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const loadNota = async () => {
+    const response = await api.get<PneuNotaFiscalResponse>(`/pneus/${pneu.id}/nota-fiscal`);
+    return response.data;
+  };
+
+  const preview = async () => {
+    const popup = window.open("", "_blank");
+    setBusy(true);
+    try {
+      const nota = await loadNota();
+      if (popup) popup.location.href = nota.url;
+      else toast.error("Permita pop-ups no navegador para visualizar a nota fiscal.");
+    } catch (error: any) {
+      popup?.close();
+      toast.error(error?.response?.data?.message || "Não foi possível abrir a nota fiscal.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const download = async () => {
+    setBusy(true);
+    try {
+      const nota = await loadNota();
+      const link = document.createElement("a");
+      link.href = nota.url;
+      link.download = nota.nome || `nota-fiscal-pneu-${pneu.numeroFogo || pneu.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível baixar a nota fiscal.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeNota = async () => {
+    if (!confirm(`Remover a nota fiscal vinculada ao pneu ${pneu.numeroFogo || "sem número"}?`)) return;
+    setBusy(true);
+    try {
+      await api.delete(`/pneus/${pneu.id}/nota-fiscal`);
+      setStored(false);
+      setNome("");
+      await onRefresh();
+      toast.success("Nota fiscal removida.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível remover a nota fiscal.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(event) => void upload(event.target.files?.[0])}
+      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FileText className="h-5 w-5 text-primary" />
+            Nota fiscal do pneu
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border p-4">
+            <p className="text-xs text-muted-foreground">Pneu</p>
+            <p className="mt-1 font-semibold">{pneu.numeroFogo || "Sem número de fogo"}</p>
+            <p className="text-sm text-muted-foreground">
+              {[pneu.marca, pneu.modelo, pneu.medida, pneu.aro ? `ARO ${pneu.aro}` : ""].filter(Boolean).join(" • ") || "Sem informações adicionais"}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Arquivo da nota fiscal</p>
+              {stored ? (
+                <div className="mt-1 flex min-w-0 items-center gap-2">
+                  <Badge variant="secondary">Anexada</Badge>
+                  <span className="truncate text-sm text-muted-foreground" title={nome || "Nota fiscal"}>{nome || "Nota fiscal"}</span>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-muted-foreground">Nenhuma nota fiscal anexada a este pneu.</p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" disabled={busy} onClick={chooseFile}>
+                <Upload className="mr-2 h-4 w-4" />
+                {stored ? "Substituir nota" : "Anexar nota fiscal"}
+              </Button>
+              {stored && <>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => void preview()}>
+                  <Eye className="mr-2 h-4 w-4" />Visualizar
+                </Button>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => void download()}>
+                  <Download className="mr-2 h-4 w-4" />Baixar
+                </Button>
+                <Button type="button" variant="destructive" disabled={busy} onClick={() => void removeNota()}>
+                  <Trash2 className="mr-2 h-4 w-4" />Remover
+                </Button>
+              </>}
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">Formatos aceitos: PDF, PNG, JPG/JPEG e WEBP. Tamanho máximo: 2,5 MB.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function Pneus() {
   const { items, create, update, remove, refresh } = usePneus();
   const [open, setOpen] = useState(false);
@@ -366,7 +540,7 @@ export default function Pneus() {
       </div>
 
       <Tabs defaultValue="cadastro">
-        <TabsList className="flex h-auto flex-wrap"><TabsTrigger value="cadastro">Cadastro</TabsTrigger><TabsTrigger value="estoque">Estoque</TabsTrigger><TabsTrigger value="notas">Notas fiscais</TabsTrigger><TabsTrigger value="instalacoes">Instalações</TabsTrigger><TabsTrigger value="rodizios">Rodízios</TabsTrigger><TabsTrigger value="manutencao">Manutenção</TabsTrigger><TabsTrigger value="historico">Histórico</TabsTrigger><TabsTrigger value="gestao">Gestão e relatórios</TabsTrigger></TabsList>
+        <TabsList className="flex h-auto flex-wrap"><TabsTrigger value="cadastro">Cadastro</TabsTrigger><TabsTrigger value="notas" className="gap-2 font-semibold"><FileText className="h-4 w-4" />Notas fiscais</TabsTrigger><TabsTrigger value="estoque">Estoque</TabsTrigger><TabsTrigger value="instalacoes">Instalações</TabsTrigger><TabsTrigger value="rodizios">Rodízios</TabsTrigger><TabsTrigger value="manutencao">Manutenção</TabsTrigger><TabsTrigger value="historico">Histórico</TabsTrigger><TabsTrigger value="gestao">Gestão e relatórios</TabsTrigger></TabsList>
         <TabsContent value="cadastro" className="mt-4 space-y-4">
           <Card><CardContent className="p-4"><div className="flex flex-col gap-3 md:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Pesquisar número de fogo, marca, modelo, medida, ARO ou fornecedor" value={search} onChange={e => setSearch(e.target.value)}/></div><Select value={status} onValueChange={v => setStatus(v as any)}><SelectTrigger className="md:w-56"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="TODOS">Todos os status</SelectItem>{Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></div></CardContent></Card>
           <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Nº de fogo</TableHead><TableHead>Marca / Modelo</TableHead><TableHead>Medida</TableHead><TableHead>ARO</TableHead><TableHead>Tipo</TableHead><TableHead>Status</TableHead><TableHead>Sulco atual</TableHead><TableHead>Compra</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{cadastroItems.map(p => <TableRow key={p.id}><TableCell className="font-semibold"><button className="text-primary hover:underline" onClick={() => setDetails(p)}>{p.numeroFogo || "—"}</button></TableCell><TableCell>{[p.marca, p.modelo].filter(Boolean).join(" - ") || "—"}</TableCell><TableCell>{p.medida || "—"}</TableCell><TableCell>{p.aro || "—"}</TableCell><TableCell>{tipoLabels[p.tipo]}</TableCell><TableCell><Badge variant={p.status === "DESCARTADO" ? "destructive" : p.status === "INSTALADO" ? "default" : "secondary"}>{statusLabels[p.status]}</Badge></TableCell><TableCell>{p.sulcoAtual == null ? "—" : `${p.sulcoAtual.toFixed(1)} mm`}</TableCell><TableCell>{date(p.dataCompra)}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" onClick={() => setDetails(p)}><History className="h-4 w-4"/></Button><Button variant="ghost" size="icon" title="Editar informações do pneu" aria-label="Editar informações do pneu" onClick={() => openEdit(p)}><Pencil className="h-4 w-4"/></Button><Button variant="ghost" size="icon" className="text-destructive" onClick={() => archive(p)}><Trash2 className="h-4 w-4"/></Button></div></TableCell></TableRow>)}{cadastroItems.length === 0 && <TableRow><TableCell colSpan={9} className="h-28 text-center text-muted-foreground">Nenhum pneu encontrado.</TableCell></TableRow>}</TableBody></Table></div></CardContent></Card>
@@ -456,6 +630,51 @@ export default function Pneus() {
       <div className="space-y-1.5 md:col-span-2"><Label>Observações</Label><Textarea value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })}/></div>
     </div><DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button><Button onClick={save} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button></DialogFooter></DialogContent></Dialog>
 
-    <Dialog open={!!details} onOpenChange={o => !o && setDetails(null)}><DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">{details && <><DialogHeader><DialogTitle>Pneu {details.numeroFogo}</DialogTitle><DialogDescription>{[details.marca, details.modelo, details.medida, details.aro ? `ARO ${details.aro}` : ""].filter(Boolean).join(" • ") || "Informações cadastrais do pneu"}</DialogDescription></DialogHeader><div className="grid gap-3 sm:grid-cols-3">{[["Status", statusLabels[details.status]],["Condição",condicaoLabels[details.condicao]],["Tipo",tipoLabels[details.tipo]],["ARO",details.aro || "—"],["DOT",details.dot || "—"],["Valor",money(details.valorCompra)],["Fornecedor",details.fornecedor || "—"],["Sulco atual",details.sulcoAtual == null ? "—" : `${details.sulcoAtual} mm`],["Km acumulado",details.kmAtual.toLocaleString("pt-BR")],["Recapagens",`${details.recapagensRealizadas}/${details.maxRecapagens}`]].map(([a,b]) => <div key={a} className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">{a}</p><p className="text-sm font-semibold">{b}</p></div>)}</div>{(details.fotos ?? []).length > 0 && <div><h3 className="mb-2 text-sm font-semibold">Fotos</h3><div className="grid grid-cols-3 gap-2 sm:grid-cols-5">{(details.fotos ?? []).map(f => <img key={f.id} src={f.url} alt="Pneu" className="aspect-square rounded-md border object-cover"/>)}</div></div>}<div><h3 className="mb-3 text-sm font-semibold">Linha do tempo</h3><div className="space-y-4">{(details.eventos ?? []).map(e => <div key={e.id} className="flex gap-3"><div className="mt-1 h-2.5 w-2.5 rounded-full bg-primary"/><div><p className="text-sm font-medium">{e.observacoes || e.tipo}</p><p className="text-xs text-muted-foreground">{new Date(e.data).toLocaleString("pt-BR")}</p></div></div>)}</div></div><DialogFooter><Button variant="outline" onClick={() => { const pneu = details; setDetails(null); openEdit(pneu); }}><Pencil className="mr-2 h-4 w-4"/>Editar informações</Button></DialogFooter></>}</DialogContent></Dialog>
+    <Dialog open={!!details} onOpenChange={o => !o && setDetails(null)}>
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+        {details && <>
+          <DialogHeader>
+            <DialogTitle>Pneu {details.numeroFogo || "sem número"}</DialogTitle>
+            <DialogDescription>{[details.marca, details.modelo, details.medida, details.aro ? `ARO ${details.aro}` : ""].filter(Boolean).join(" • ") || "Informações cadastrais do pneu"}</DialogDescription>
+          </DialogHeader>
+
+          <Tabs defaultValue="dados" className="w-full">
+            <TabsList className="grid h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3">
+              <TabsTrigger value="dados">Dados do pneu</TabsTrigger>
+              <TabsTrigger value="nota-fiscal" className="gap-2 font-semibold">
+                <FileText className="h-4 w-4" />Nota fiscal
+              </TabsTrigger>
+              <TabsTrigger value="historico">Histórico</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="dados" className="mt-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[["Status", statusLabels[details.status]],["Condição",condicaoLabels[details.condicao]],["Tipo",tipoLabels[details.tipo]],["ARO",details.aro || "—"],["DOT",details.dot || "—"],["Valor",money(details.valorCompra)],["Fornecedor",details.fornecedor || "—"],["Sulco atual",details.sulcoAtual == null ? "—" : `${details.sulcoAtual} mm`],["Km acumulado",details.kmAtual.toLocaleString("pt-BR")],["Recapagens",`${details.recapagensRealizadas}/${details.maxRecapagens}`]].map(([a,b]) => <div key={a} className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">{a}</p><p className="text-sm font-semibold">{b}</p></div>)}
+              </div>
+              {(details.fotos ?? []).length > 0 && <div><h3 className="mb-2 text-sm font-semibold">Fotos</h3><div className="grid grid-cols-3 gap-2 sm:grid-cols-5">{(details.fotos ?? []).map(f => <img key={f.id} src={f.url} alt="Pneu" className="aspect-square rounded-md border object-cover"/>)}</div></div>}
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => { const pneu = details; setDetails(null); openEdit(pneu); }}><Pencil className="mr-2 h-4 w-4"/>Editar informações</Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="nota-fiscal" className="mt-4">
+              <PneuNotaFiscalIndividual pneu={details} onRefresh={refresh} />
+            </TabsContent>
+
+            <TabsContent value="historico" className="mt-4">
+              <Card>
+                <CardHeader><CardTitle className="text-base">Linha do tempo</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {(details.eventos ?? []).map(e => <div key={e.id} className="flex gap-3"><div className="mt-1 h-2.5 w-2.5 rounded-full bg-primary"/><div><p className="text-sm font-medium">{e.observacoes || e.tipo}</p><p className="text-xs text-muted-foreground">{new Date(e.data).toLocaleString("pt-BR")}</p></div></div>)}
+                    {(details.eventos ?? []).length === 0 && <p className="text-sm text-muted-foreground">Nenhum evento registrado para este pneu.</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </>}
+      </DialogContent>
+    </Dialog>
   </Layout>;
 }
