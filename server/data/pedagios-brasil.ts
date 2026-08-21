@@ -22,7 +22,7 @@ export interface LocalTollPlaza {
   tariffUpdatedAt: string;
   sourceKind?: "MANUAL" | "ANTT" | "OSM" | "STATE";
   /** Regra opcional para praças estaduais cuja referência oficial é dada por KM do trecho. */
-  routeHint?: { cityA: string; cityB: string; kmFromCityA: number };
+  routeHint?: { cityA: string; cityB: string; kmFromCityA: number; maxRouteKm?: number };
 }
 
 /**
@@ -31,9 +31,10 @@ export interface LocalTollPlaza {
  * Não existe chamada a API comercial para descobrir ou precificar os pedágios.
  * A rota (OSRM no navegador) é cruzada geometricamente com esta base no backend.
  *
- * Fontes oficiais verificadas em 08/08/2026:
+ * Fontes oficiais verificadas/atualizadas em 21/08/2026:
  * - APASI: https://www.apasi.com.br/tarifas/
  * - Nova Rota do Oeste: https://novarotadooeste.com.br/tarifas/
+ * - Via Norte Sul / MT-220: https://vianortesulrodovias.com.br/
  * - Localização/km das nove praças da Nova Rota: Carta de Serviços da concessionária.
  *
  * IMPORTANTE: as coordenadas são pontos operacionais de referência próximos às praças.
@@ -59,10 +60,66 @@ export const MANUAL_TOLL_PLAZAS: LocalTollPlaza[] = [
       nineOrMore: 126,
     },
     sourceUrl: "https://www.apasi.com.br/tarifas/",
-    tariffUpdatedAt: "2026-08-09",
+    tariffUpdatedAt: "2026-08-21",
     sourceKind: "STATE",
     routeHint: { cityA: "Sorriso", cityB: "Ipiranga do Norte", kmFromCityA: 11 },
   },
+
+  // Via Norte Sul — MT-220 (Sinop ↔ Tabaporã), tarifas vigentes divulgadas pela
+  // concessionária e localização/km conferidos também na rede de TAGs. A tarifa
+  // comercial é R$ 11,40 por eixo, por praça.
+  {
+    id: "mt-vns-mt220-p01-sinop",
+    name: "P1 Sinop - MT-220",
+    road: "MT-220",
+    km: "22+780",
+    city: "Sinop",
+    stateCode: "MT",
+    concession: "Via Norte Sul Rodovias",
+    latitude: -11.758,
+    longitude: -55.843,
+    matchRadiusKm: 3,
+    pricing: { kind: "PER_AXLE", perAxle: 11.4 },
+    sourceUrl: "https://vianortesulrodovias.com.br/",
+    tariffUpdatedAt: "2026-08-21",
+    sourceKind: "STATE",
+    routeHint: { cityA: "Sinop", cityB: "Tabaporã", kmFromCityA: 22.78, maxRouteKm: 170 },
+  },
+  {
+    id: "mt-vns-mt220-p02-tabapora",
+    name: "P2 Tabaporã - MT-220",
+    road: "MT-220",
+    km: "73+500",
+    city: "Tabaporã",
+    stateCode: "MT",
+    concession: "Via Norte Sul Rodovias",
+    latitude: -11.557,
+    longitude: -56.276,
+    matchRadiusKm: 3,
+    pricing: { kind: "PER_AXLE", perAxle: 11.4 },
+    sourceUrl: "https://vianortesulrodovias.com.br/",
+    tariffUpdatedAt: "2026-08-21",
+    sourceKind: "STATE",
+    routeHint: { cityA: "Sinop", cityB: "Tabaporã", kmFromCityA: 73.5, maxRouteKm: 170 },
+  },
+  {
+    id: "mt-vns-mt220-p03-porto-dos-gauchos",
+    name: "P3 Porto dos Gaúchos - MT-220",
+    road: "MT-220",
+    km: "136+450",
+    city: "Porto dos Gaúchos",
+    stateCode: "MT",
+    concession: "Via Norte Sul Rodovias",
+    latitude: -11.309,
+    longitude: -56.812,
+    matchRadiusKm: 3,
+    pricing: { kind: "PER_AXLE", perAxle: 11.4 },
+    sourceUrl: "https://vianortesulrodovias.com.br/",
+    tariffUpdatedAt: "2026-08-21",
+    sourceKind: "STATE",
+    routeHint: { cityA: "Sinop", cityB: "Tabaporã", kmFromCityA: 136.45, maxRouteKm: 170 },
+  },
+
 
   // Nova Rota do Oeste — 9 praças da BR-163/364 em MT.
   // A tarifa comercial é cobrada por eixo em cada praça.
@@ -79,7 +136,7 @@ export const MANUAL_TOLL_PLAZAS: LocalTollPlaza[] = [
     matchRadiusKm: 12,
     pricing: { kind: "PER_AXLE", perAxle: 6.6 },
     sourceUrl: "https://novarotadooeste.com.br/tarifas/",
-    tariffUpdatedAt: "2026-08-08",
+    tariffUpdatedAt: "2026-08-21",
   },
   {
     id: "mt-nro-p02-rondonopolis",
@@ -94,7 +151,7 @@ export const MANUAL_TOLL_PLAZAS: LocalTollPlaza[] = [
     matchRadiusKm: 17,
     pricing: { kind: "PER_AXLE", perAxle: 7.5 },
     sourceUrl: "https://novarotadooeste.com.br/tarifas/",
-    tariffUpdatedAt: "2026-08-08",
+    tariffUpdatedAt: "2026-08-21",
   },
   {
     id: "mt-nro-p03-campo-verde",
@@ -109,7 +166,7 @@ export const MANUAL_TOLL_PLAZAS: LocalTollPlaza[] = [
     matchRadiusKm: 20,
     pricing: { kind: "PER_AXLE", perAxle: 6 },
     sourceUrl: "https://novarotadooeste.com.br/tarifas/",
-    tariffUpdatedAt: "2026-08-08",
+    tariffUpdatedAt: "2026-08-21",
   },
   {
     id: "mt-nro-p04-santo-antonio-leverger",
@@ -124,7 +181,7 @@ export const MANUAL_TOLL_PLAZAS: LocalTollPlaza[] = [
     matchRadiusKm: 18,
     pricing: { kind: "PER_AXLE", perAxle: 6 },
     sourceUrl: "https://novarotadooeste.com.br/tarifas/",
-    tariffUpdatedAt: "2026-08-08",
+    tariffUpdatedAt: "2026-08-21",
   },
   {
     id: "mt-nro-p05-jangada",
@@ -139,7 +196,7 @@ export const MANUAL_TOLL_PLAZAS: LocalTollPlaza[] = [
     matchRadiusKm: 18,
     pricing: { kind: "PER_AXLE", perAxle: 8.1 },
     sourceUrl: "https://novarotadooeste.com.br/tarifas/",
-    tariffUpdatedAt: "2026-08-08",
+    tariffUpdatedAt: "2026-08-21",
   },
   {
     id: "mt-nro-p06-nobres-diamantino",
@@ -154,7 +211,7 @@ export const MANUAL_TOLL_PLAZAS: LocalTollPlaza[] = [
     matchRadiusKm: 22,
     pricing: { kind: "PER_AXLE", perAxle: 6.7 },
     sourceUrl: "https://novarotadooeste.com.br/tarifas/",
-    tariffUpdatedAt: "2026-08-08",
+    tariffUpdatedAt: "2026-08-21",
   },
   {
     id: "mt-nro-p07-nova-mutum",
@@ -169,7 +226,7 @@ export const MANUAL_TOLL_PLAZAS: LocalTollPlaza[] = [
     matchRadiusKm: 14,
     pricing: { kind: "PER_AXLE", perAxle: 5.4 },
     sourceUrl: "https://novarotadooeste.com.br/tarifas/",
-    tariffUpdatedAt: "2026-08-08",
+    tariffUpdatedAt: "2026-08-21",
   },
   {
     id: "mt-nro-p08-lucas-rio-verde",
@@ -184,7 +241,7 @@ export const MANUAL_TOLL_PLAZAS: LocalTollPlaza[] = [
     matchRadiusKm: 13,
     pricing: { kind: "PER_AXLE", perAxle: 7.1 },
     sourceUrl: "https://novarotadooeste.com.br/tarifas/",
-    tariffUpdatedAt: "2026-08-08",
+    tariffUpdatedAt: "2026-08-21",
   },
   {
     id: "mt-nro-p09-sorriso",
@@ -199,7 +256,7 @@ export const MANUAL_TOLL_PLAZAS: LocalTollPlaza[] = [
     matchRadiusKm: 10,
     pricing: { kind: "PER_AXLE", perAxle: 10.4 },
     sourceUrl: "https://novarotadooeste.com.br/tarifas/",
-    tariffUpdatedAt: "2026-08-08",
+    tariffUpdatedAt: "2026-08-21",
   },
 ];
 

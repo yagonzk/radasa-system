@@ -20,6 +20,14 @@ interface TollItem {
   passages?: number; unitPrice?: number; road?: string; km?: string;
 }
 interface City { id: number; nome: string; uf: string }
+interface RouteChoice {
+  id: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  coords: [number, number][];
+  tolls: TollItem[];
+  totalCost: number;
+}
 interface TollCadastro {
   id: string; nome: string; rodovia: string; km: string; cidade: string; uf: string;
   concessionaria: string; latitude: number; longitude: number; raioKm: number;
@@ -98,9 +106,10 @@ function CityPicker({ label, value, onSelect, placeholder, className = "" }: { l
 function loadLeaflet(): Promise<any> { return new Promise((resolve, reject) => { const w = window as any; if (w.L) return resolve(w.L); if (!document.querySelector("link[data-leaflet]")) { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"; l.setAttribute("data-leaflet", "1"); document.head.appendChild(l); } const existing = document.querySelector("script[data-leaflet]") as HTMLScriptElement | null; if (existing) { existing.addEventListener("load", () => resolve((window as any).L)); existing.addEventListener("error", reject); return; } const s = document.createElement("script"); s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"; s.setAttribute("data-leaflet", "1"); s.onload = () => resolve((window as any).L); s.onerror = reject; document.head.appendChild(s); }); }
 
 export default function Pedagios() {
-  const [origin, setOrigin] = useState<City | null>(null), [destination, setDestination] = useState<City | null>(null);
+  const [origin, setOrigin] = useState<City | null>(null), [destination, setDestination] = useState<City | null>(null), [via, setVia] = useState<City | null>(null);
   const [vehicleType, setVehicleType] = useState("TRUCK_WITH_THREE_DOUBLE_AXLES"), [billingType, setBillingType] = useState<"NORMAL" | "TAG">("NORMAL"), [roundTrip, setRoundTrip] = useState(false);
   const [loading, setLoading] = useState(false), [distanceMeters, setDistanceMeters] = useState(0), [durationSeconds, setDurationSeconds] = useState(0), [tolls, setTolls] = useState<TollItem[]>([]), [totalCost, setTotalCost] = useState(0);
+  const [routeOptions, setRouteOptions] = useState<RouteChoice[]>([]), [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [providerConfigured, setProviderConfigured] = useState<boolean | null>(null), [mapReady, setMapReady] = useState(false), [mapError, setMapError] = useState("");
   const [manageOpen, setManageOpen] = useState(false), [cadastros, setCadastros] = useState<TollCadastro[]>([]), [editing, setEditing] = useState<TollCadastro | null>(null), [editingAutomaticId, setEditingAutomaticId] = useState<string | null>(null), [form, setForm] = useState<TollForm>(emptyTollForm), [saving, setSaving] = useState(false);
   const mapEl = useRef<HTMLDivElement>(null), mapRef = useRef<any>(null), routeLayer = useRef<any>(null), markers = useRef<any[]>([]), cadastroMarkers = useRef<any[]>([]), selectionMarker = useRef<any>(null), calculationRun = useRef(0);
@@ -181,51 +190,95 @@ export default function Pedagios() {
 
   async function geocode(c: City) { const q = encodeURIComponent(`${c.nome}, ${c.uf}, Brasil`); const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${q}`, { headers: { "Accept-Language": "pt-BR" } }); const d = await r.json(); if (!d?.[0]) throw new Error(`Não foi possível localizar ${c.nome} - ${c.uf} no mapa.`); return { lat: Number(d[0].lat), lon: Number(d[0].lon) }; }
 
+  const drawRouteChoice = (choice: RouteChoice, index: number) => {
+    if (!mapRef.current) return;
+    const L = (window as any).L;
+    if (!L) return;
+
+    clearRouteMap();
+    setSelectedRouteIndex(index);
+    setDistanceMeters(choice.distanceMeters);
+    setDurationSeconds(choice.durationSeconds);
+    setTolls(choice.tolls);
+    setTotalCost(choice.totalCost);
+
+    routeLayer.current = L.polyline(choice.coords, { weight: 5, opacity: .85 }).addTo(mapRef.current);
+    mapRef.current.fitBounds(routeLayer.current.getBounds(), { padding: [30, 30] });
+
+    const selectedVehicleLabel = getVehicleLabel(vehicleType), selectedAxes = getVehicleAxes(vehicleType);
+    const tollIcon = L.divIcon({ className: "radasa-toll-marker", html: `<div style="width:34px;height:34px;border-radius:9px;background:#f59e0b;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:20px">P</div>`, iconSize: [34, 34], iconAnchor: [17, 30] });
+    markers.current = choice.tolls.filter((t: TollItem) => t.coordinates).map((t: TollItem) => {
+      const popup = document.createElement("div");
+      popup.style.minWidth = "205px";
+      const title = document.createElement("div");
+      title.style.display = "flex";
+      title.style.alignItems = "center";
+      title.style.justifyContent = "space-between";
+      title.style.gap = "12px";
+      const strong = document.createElement("strong");
+      strong.textContent = t.name;
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.title = "Editar pedágio";
+      edit.setAttribute("aria-label", `Editar ${t.name}`);
+      edit.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+      edit.style.cssText = "display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid #d1d5db;border-radius:7px;background:#fff;color:#111827;cursor:pointer;flex:0 0 auto";
+      edit.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); openRouteTollEditor(t); });
+      title.append(strong, edit);
+      popup.appendChild(title);
+      const details = document.createElement("div");
+      details.style.marginTop = "5px";
+      details.innerHTML = `${t.address || ""}<br>${selectedVehicleLabel}${selectedAxes ? ` (${selectedAxes} eixos)` : ""}<br><b>${t.price == null ? "Tarifa pendente" : formatBRL(t.price)}</b>`;
+      popup.appendChild(details);
+      return L.marker([t.coordinates!.latitude, t.coordinates!.longitude], { icon: tollIcon }).addTo(mapRef.current).bindPopup(popup);
+    });
+  };
+
   const calculateRoute = async (roundTripOverride?: boolean) => {
     const runId = ++calculationRun.current, shouldRoundTrip = roundTripOverride ?? roundTrip;
     if (!origin || !destination) { toast.error("Selecione a cidade de origem e a cidade de destino nas listas."); return; }
     if (!mapReady || !mapRef.current) { toast.error(mapError || "O mapa ainda está carregando."); return; }
-    setLoading(true); setTolls([]); setTotalCost(0); clearRouteMap();
+    setLoading(true); setTolls([]); setTotalCost(0); setRouteOptions([]); clearRouteMap();
     try {
-      const [a, b] = await Promise.all([geocode(origin), geocode(destination)]);
-      const rr = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=polyline&steps=false`), rd = await rr.json(), route = rd?.routes?.[0];
-      if (!route) throw new Error("Nenhuma rota rodoviária encontrada entre as cidades selecionadas.");
-      const coords = decodePolyline(route.geometry); setDistanceMeters(Number(route.distance || 0)); setDurationSeconds(Number(route.duration || 0));
-      const L = (window as any).L; routeLayer.current = L.polyline(coords, { weight: 5, opacity: .85 }).addTo(mapRef.current); mapRef.current.fitBounds(routeLayer.current.getBounds(), { padding: [30, 30] });
+      const points = await Promise.all([origin, ...(via ? [via] : []), destination].map(geocode));
+      const coordinates = points.map((point) => `${point.lon},${point.lat}`).join(";");
+      const rr = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?alternatives=3&overview=full&geometries=polyline&steps=false`);
+      const rd = await rr.json();
+      const routes = Array.isArray(rd?.routes) ? rd.routes.slice(0, 3) : [];
+      if (!routes.length) throw new Error("Nenhuma rota rodoviária encontrada entre as cidades selecionadas.");
+
       const requestTolls = (routeCoords: [number, number][], from: City, to: City) => {
         const compactCoords = compactRouteForTolls(routeCoords);
         return api.post("/pedagios/calcular", { points: compactCoords.map(([latitude, longitude]) => ({ latitude, longitude })), origin: { name: from.nome, uf: from.uf }, destination: { name: to.nome, uf: to.uf }, vehicleType, billingType, calculationDate: Date.now() }, { timeout: 45_000 });
       };
-      const response = await requestTolls(coords, origin, destination); let items = Array.isArray(response.data?.tolls) ? response.data.tolls : [], combinedTotal = Number(response.data?.totalCost || 0);
-      if (shouldRoundTrip) { const back = await requestTolls([...coords].reverse(), destination, origin); items = [...items.map((t: TollItem) => ({ ...t, type: "IDA" })), ...(back.data?.tolls || []).map((t: TollItem) => ({ ...t, id: `${t.id}-volta`, type: "VOLTA" }))]; combinedTotal += Number(back.data?.totalCost || 0); }
-      items = mergeTollPassages(items); if (runId !== calculationRun.current) return; setTolls(items); setTotalCost(combinedTotal); setProviderConfigured(true);
-      const selectedVehicleLabel = getVehicleLabel(vehicleType), selectedAxes = getVehicleAxes(vehicleType);
-      const tollIcon = L.divIcon({ className: "radasa-toll-marker", html: `<div style="width:34px;height:34px;border-radius:9px;background:#f59e0b;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:20px">P</div>`, iconSize: [34, 34], iconAnchor: [17, 30] });
-      markers.current = items.filter((t: TollItem) => t.coordinates).map((t: TollItem) => {
-        const popup = document.createElement("div");
-        popup.style.minWidth = "205px";
-        const title = document.createElement("div");
-        title.style.display = "flex";
-        title.style.alignItems = "center";
-        title.style.justifyContent = "space-between";
-        title.style.gap = "12px";
-        const strong = document.createElement("strong");
-        strong.textContent = t.name;
-        const edit = document.createElement("button");
-        edit.type = "button";
-        edit.title = "Editar pedágio";
-        edit.setAttribute("aria-label", `Editar ${t.name}`);
-        edit.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
-        edit.style.cssText = "display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid #d1d5db;border-radius:7px;background:#fff;color:#111827;cursor:pointer;flex:0 0 auto";
-        edit.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); openRouteTollEditor(t); });
-        title.append(strong, edit);
-        popup.appendChild(title);
-        const details = document.createElement("div");
-        details.style.marginTop = "5px";
-        details.innerHTML = `${t.address || ""}<br>${selectedVehicleLabel}${selectedAxes ? ` (${selectedAxes} eixos)` : ""}<br><b>${t.price == null ? "Tarifa pendente" : formatBRL(t.price)}</b>`;
-        popup.appendChild(details);
-        return L.marker([t.coordinates!.latitude, t.coordinates!.longitude], { icon: tollIcon }).addTo(mapRef.current).bindPopup(popup);
-      });
+
+      const choices = await Promise.all(routes.map(async (route: any, index: number): Promise<RouteChoice> => {
+        const coords = decodePolyline(route.geometry);
+        const response = await requestTolls(coords, origin, destination);
+        let items = Array.isArray(response.data?.tolls) ? response.data.tolls : [];
+        let combinedTotal = Number(response.data?.totalCost || 0);
+        if (shouldRoundTrip) {
+          const back = await requestTolls([...coords].reverse(), destination, origin);
+          items = [
+            ...items.map((t: TollItem) => ({ ...t, type: "IDA" })),
+            ...(back.data?.tolls || []).map((t: TollItem) => ({ ...t, id: `${t.id}-volta`, type: "VOLTA" })),
+          ];
+          combinedTotal += Number(back.data?.totalCost || 0);
+        }
+        return {
+          id: `route-${index}`,
+          distanceMeters: Number(route.distance || 0),
+          durationSeconds: Number(route.duration || 0),
+          coords,
+          tolls: mergeTollPassages(items),
+          totalCost: combinedTotal,
+        };
+      }));
+
+      if (runId !== calculationRun.current) return;
+      setRouteOptions(choices);
+      drawRouteChoice(choices[0], 0);
+      setProviderConfigured(true);
     } catch (e: any) { toast.error(e?.response?.data?.message || e?.message || "Não foi possível calcular a rota."); }
     finally { if (runId === calculationRun.current) setLoading(false); }
   };
@@ -251,16 +304,18 @@ export default function Pedagios() {
   ], [distanceMeters, durationSeconds, tolls.length, totalCost, roundTrip]);
 
   return <Layout><div className="mx-auto w-full min-w-0 max-w-[1500px] space-y-6">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="font-display text-2xl font-bold">Pedágios</h1><p className="mt-1 text-sm text-muted-foreground">OSRM para a rota + base própria Radasa para localizar e calcular as praças.</p></div><Button variant={manageOpen ? "default" : "outline"} onClick={() => manageOpen ? setManageOpen(false) : openNewToll()}><Pencil className="mr-2 h-4 w-4"/>{manageOpen ? "Fechar edição" : "Editar Pedágios"}</Button></div>
-    <Card><CardHeader className="pb-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle className="text-base">Calcular rota</CardTitle><p className="mt-1 text-xs text-muted-foreground">Digite e selecione a cidade com o estado.</p></div><Badge variant={providerConfigured ? "default" : "secondary"}>{providerConfigured === null ? "Verificando pedágios..." : providerConfigured ? "Base própria ativa" : "Base indisponível"}</Badge></div></CardHeader><CardContent><div className="flex flex-wrap items-end gap-4">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="font-display text-2xl font-bold">Pedágios</h1><p className="mt-1 text-sm text-muted-foreground">Escolha a rota realmente utilizada na viagem e calcule os pedágios pela base própria Radasa.</p></div><Button variant={manageOpen ? "default" : "outline"} onClick={() => manageOpen ? setManageOpen(false) : openNewToll()}><Pencil className="mr-2 h-4 w-4"/>{manageOpen ? "Fechar edição" : "Editar Pedágios"}</Button></div>
+    <Card><CardHeader className="pb-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle className="text-base">Calcular rota</CardTitle><p className="mt-1 text-xs text-muted-foreground">Digite origem e destino. Use “Passar por” para forçar a estrada/cidade realmente utilizada ou escolha uma das rotas alternativas.</p></div><Badge variant={providerConfigured ? "default" : "secondary"}>{providerConfigured === null ? "Verificando pedágios..." : providerConfigured ? "Base própria ativa" : "Base indisponível"}</Badge></div></CardHeader><CardContent><div className="flex flex-wrap items-end gap-4">
       <CityPicker className="w-full shrink-0 sm:w-[260px]" label="Origem" value={origin} onSelect={setOrigin} placeholder="Digite a cidade de origem"/>
       <div className="w-14 shrink-0 space-y-1.5"><Label className="invisible">Trocar</Label><Button className="h-[48px] w-full px-0" type="button" variant="outline" onClick={() => { const a = origin; setOrigin(destination); setDestination(a); }}><ArrowDownUp className="h-4 w-4 sm:rotate-90"/></Button></div>
       <CityPicker className="w-full shrink-0 sm:w-[260px]" label="Destino" value={destination} onSelect={setDestination} placeholder="Digite a cidade de destino"/>
+      <CityPicker className="w-full shrink-0 sm:w-[260px]" label="Passar por (opcional)" value={via} onSelect={setVia} placeholder="Ex.: Sorriso - MT"/>
       <div className="w-full shrink-0 space-y-1.5 sm:w-[260px]"><Label>Veículo</Label><Select value={vehicleType} onValueChange={setVehicleType}><SelectTrigger className="!h-[48px] min-h-[48px] w-full"><SelectValue/></SelectTrigger><SelectContent>{vehicleOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
       <div className="w-full shrink-0 space-y-1.5 sm:w-[260px]"><Label>Pagamento</Label><Select value={billingType} onValueChange={(v) => setBillingType(v as any)}><SelectTrigger className="!h-[48px] min-h-[48px] w-full"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="NORMAL">Normal / dinheiro</SelectItem><SelectItem value="TAG">TAG</SelectItem></SelectContent></Select></div>
       <div className="w-full shrink-0 space-y-1.5 sm:w-[170px]"><Label>Calcular volta</Label><div className="flex h-[48px] items-center justify-between rounded-lg border px-3"><span className="text-sm font-medium">{roundTrip ? "Ativo" : "Inativo"}</span><Switch checked={roundTrip} onCheckedChange={(checked) => { setRoundTrip(checked); if (origin && destination) void calculateRoute(checked); }}/></div></div>
       <div className="w-full shrink-0 space-y-1.5 sm:w-[160px]"><Label className="invisible">Calcular</Label><Button className="h-[48px] w-full" onClick={() => void calculateRoute()} disabled={loading}><Search className="mr-2 h-4 w-4"/>{loading ? "Calculando..." : "Calcular"}</Button></div>
     </div></CardContent></Card>
+    {routeOptions.length > 1 && <Card><CardHeader className="pb-3"><CardTitle className="text-base">Escolha a rota</CardTitle><p className="mt-1 text-xs text-muted-foreground">O cálculo encontrou alternativas. Selecione a que corresponde ao trajeto realmente feito.</p></CardHeader><CardContent><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{routeOptions.map((route, index) => <button type="button" key={route.id} onClick={() => drawRouteChoice(route, index)} className={`rounded-lg border p-4 text-left transition ${selectedRouteIndex === index ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-accent/40"}`}><div className="flex items-center justify-between gap-3"><strong className="text-sm">Rota {index + 1}</strong>{selectedRouteIndex === index && <Badge>Selecionada</Badge>}</div><div className="mt-3 grid grid-cols-3 gap-2 text-xs"><div><span className="block text-muted-foreground">Distância</span><b>{((route.distanceMeters * (roundTrip ? 2 : 1)) / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km</b></div><div><span className="block text-muted-foreground">Tempo</span><b>{formatDuration(route.durationSeconds * (roundTrip ? 2 : 1))}</b></div><div><span className="block text-muted-foreground">Pedágios</span><b>{formatBRL(route.totalCost)}</b></div></div></button>)}</div></CardContent></Card>}
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{summary.map((i) => <Card key={i.label} className="min-w-0 overflow-hidden"><CardContent className="flex min-w-0 items-center gap-3 p-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">{i.icon}</div><div className="min-w-0"><p className="truncate text-xs text-muted-foreground">{i.label}</p><p className="truncate text-base font-semibold" title={String(i.value)}>{i.value}</p></div></CardContent></Card>)}</div>
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(330px,.75fr)]"><Card className="overflow-hidden"><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><RouteIcon className="h-4 w-4 text-primary"/>Mapa da rota</CardTitle></CardHeader><CardContent className="relative p-0"><div ref={mapEl} className="h-[610px] w-full border-t bg-muted/20"/>{mapError && <div className="absolute inset-0 flex items-center justify-center bg-background/90 p-8 text-center text-sm text-destructive">{mapError}</div>}</CardContent></Card>
       <Card className="min-h-[610px]"><CardHeader className="pb-3"><div className="flex items-center justify-between"><CardTitle className="flex items-center gap-2 text-base"><ReceiptText className="h-4 w-4 text-primary"/>Pedágios da rota</CardTitle>{tolls.length > 0 && <Badge variant="outline">{formatBRL(totalCost)}</Badge>}</div></CardHeader><CardContent>{!distanceMeters ? <Empty icon={<Truck/>} title="Nenhuma rota calculada" text="Selecione origem e destino para visualizar os pedágios."/> : !tolls.length ? <Empty icon={<Tag/>} title="Nenhum pedágio cadastrado nesta rota" text="Use Editar Pedágios para adicionar uma praça clicando diretamente no mapa."/> : <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">{tolls.map((t, i) => <button key={`${t.id}-${i}`} className="w-full rounded-lg border p-3 text-left hover:bg-accent/40" onClick={() => t.coordinates && mapRef.current?.setView([t.coordinates.latitude, t.coordinates.longitude], 13)}><div className="flex justify-between gap-3"><div><p className="text-sm font-semibold">{i + 1}. {t.name}</p><p className="mt-1 text-xs text-muted-foreground">{[t.city, t.state?.code].filter(Boolean).join(" / ") || t.address}</p>{t.concession && <p className="mt-1 text-[11px] text-muted-foreground">Concessionária: {t.concession}</p>}{(t.passages || 1) > 1 && t.price != null && <p className="mt-1 text-[11px] font-medium text-primary">{t.passages} passagens × {formatBRL(t.unitPrice ?? t.price / (t.passages || 1))}</p>}</div><strong className="text-sm">{t.price == null ? "Tarifa pendente" : formatBRL(t.price)}</strong></div></button>)}</div>}</CardContent></Card></div>

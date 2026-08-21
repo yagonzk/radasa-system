@@ -162,11 +162,14 @@ function sameCity(value: string, expected: string) {
   return normalize(value) === normalize(expected);
 }
 
-function endpointHintMatch(plaza: LocalTollPlaza, origin: CityInput, destination: CityInput) {
+function endpointHintMatch(plaza: LocalTollPlaza, origin: CityInput, destination: CityInput, routeLengthKm?: number) {
   const hint = plaza.routeHint;
   if (!hint) return false;
-  return (sameCity(origin.name, hint.cityA) && sameCity(destination.name, hint.cityB))
+  const endpointsMatch = (sameCity(origin.name, hint.cityA) && sameCity(destination.name, hint.cityB))
     || (sameCity(origin.name, hint.cityB) && sameCity(destination.name, hint.cityA));
+  if (!endpointsMatch) return false;
+  if (hint.maxRouteKm && routeLengthKm && routeLengthKm > hint.maxRouteKm) return false;
+  return true;
 }
 
 function pointAtDistanceFromRouteEnd(route: RoutePoint[], distanceKm: number, fromEnd: boolean) {
@@ -252,25 +255,32 @@ export async function calculateTolls(input: {
     throw Object.assign(new Error("A geometria da rota é necessária para localizar os pedágios."), { code: "LOCAL_TOLLS_ROUTE_REQUIRED" });
   }
   const preparedRoute = prepareRoute(route);
+  const routeLengthKm = preparedRoute.cumulativeKm[preparedRoute.cumulativeKm.length - 1] || 0;
 
   const plazas = await getEffectiveTolls();
   const axes = axesFromVehicleType(input.vehicleType);
   const rawMatches = plazas
     .filter((plaza) => isStateRelevant(plaza, input.origin, input.destination))
-    .filter((plaza) => endpointHintMatch(plaza, input.origin, input.destination) || plazaNearRouteBounds(plaza, preparedRoute))
+    .filter((plaza) => endpointHintMatch(plaza, input.origin, input.destination, routeLengthKm) || plazaNearRouteBounds(plaza, preparedRoute))
     .map((plaza) => {
-      if (endpointHintMatch(plaza, input.origin, input.destination) && plaza.routeHint) {
-        const originIsCityA = sameCity(input.origin.name, plaza.routeHint.cityA);
-        const hinted = pointAtDistanceFromRouteEnd(route, plaza.routeHint.kmFromCityA, !originIsCityA);
-        return {
-          plaza: hinted.point ? { ...plaza, latitude: hinted.point.latitude, longitude: hinted.point.longitude } : plaza,
-          minDistanceKm: 0,
-          nearestIndex: hinted.index,
-          distanceFromOriginKm: hinted.distanceFromOriginKm,
-          nearestPoint: hinted.point,
-          effectiveRadiusKm: 0.1,
-          matchedByRouteHint: true,
-        };
+      if (endpointHintMatch(plaza, input.origin, input.destination, routeLengthKm) && plaza.routeHint) {
+        // O hint de KM só deve prevalecer quando a geometria escolhida continua
+        // próxima ao corredor da praça. Assim uma rota alternativa entre as mesmas
+        // cidades não recebe pedágios da MT-220 se desviar por outra rodovia.
+        const corridor = nearestRoutePoint(preparedRoute, { latitude: plaza.latitude, longitude: plaza.longitude });
+        if (corridor.minDistanceKm <= 12) {
+          const originIsCityA = sameCity(input.origin.name, plaza.routeHint.cityA);
+          const hinted = pointAtDistanceFromRouteEnd(route, plaza.routeHint.kmFromCityA, !originIsCityA);
+          return {
+            plaza: hinted.point ? { ...plaza, latitude: hinted.point.latitude, longitude: hinted.point.longitude } : plaza,
+            minDistanceKm: 0,
+            nearestIndex: hinted.index,
+            distanceFromOriginKm: hinted.distanceFromOriginKm,
+            nearestPoint: hinted.point,
+            effectiveRadiusKm: 0.1,
+            matchedByRouteHint: true,
+          };
+        }
       }
       const nearest = nearestRoutePoint(preparedRoute, { latitude: plaza.latitude, longitude: plaza.longitude });
       const effectiveRadiusKm = Math.min(Math.max(plaza.matchRadiusKm || 1.5, 0.2), plaza.sourceKind === "MANUAL" ? 3 : 2.2);
