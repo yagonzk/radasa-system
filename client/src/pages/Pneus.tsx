@@ -58,7 +58,7 @@ export default function Pneus() {
     for (let offset = 5; offset >= 0; offset--) {
       const current = new Date(now.getFullYear(), now.getMonth() - offset, 1);
       const key = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}`;
-      months.push({ key, label: current.toLocaleDateString("pt-BR", { month: "short" }), value: items.filter(p => p.dataCompra.startsWith(key)).reduce((sum, p) => sum + p.valorCompra, 0) });
+      months.push({ key, label: current.toLocaleDateString("pt-BR", { month: "short" }), value: items.filter(p => (p.dataCompra ?? "").startsWith(key)).reduce((sum, p) => sum + p.valorCompra, 0) });
     }
     return months;
   }, [items]);
@@ -70,7 +70,18 @@ export default function Pneus() {
     return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
   }, [items]);
 
-  const openCreate = () => { setEditing(null); setForm(emptyForm); setOpen(true); };
+  const historico = useMemo(() => {
+    const eventos: Array<Pneu["eventos"][number] & { pneu: Pneu }> = [];
+    for (const pneu of items) {
+      const lista = Array.isArray(pneu?.eventos) ? pneu.eventos : [];
+      for (const evento of lista) eventos.push({ ...evento, pneu });
+    }
+    return eventos
+      .sort((a, b) => +new Date(b.data) - +new Date(a.data))
+      .slice(0, 100);
+  }, [items]);
+
+  const openCreate = () => { setEditing(null); setForm({ ...emptyForm, fotos: [] }); setOpen(true); };
   const openEdit = (p: Pneu) => {
     setEditing(p);
     setForm({ numeroFogo: p.numeroFogo, marca: p.marca, modelo: p.modelo, medida: p.medida, aro: p.aro ?? "", dot: p.dot, numeroSerie: p.numeroSerie ?? "", tipo: p.tipo, valorCompra: p.valorCompra ? String(p.valorCompra) : "", fornecedor: p.fornecedor, dataCompra: p.dataCompra, maxRecapagens: p.maxRecapagens ? String(p.maxRecapagens) : "", recapagensRealizadas: p.recapagensRealizadas ? String(p.recapagensRealizadas) : "", status: p.status, condicao: p.condicao, sulcoInicial: p.sulcoInicial == null ? "" : String(p.sulcoInicial), sulcoAtual: p.sulcoAtual == null ? "" : String(p.sulcoAtual), kmAtual: p.kmAtual ? String(p.kmAtual) : "", proximoRodizioKm: p.proximoRodizioKm == null ? "" : String(p.proximoRodizioKm), observacoes: p.observacoes ?? "", fotos: (p.fotos ?? []).map(f => f.url) });
@@ -79,10 +90,11 @@ export default function Pneus() {
 
   const handlePhotos = async (files: FileList | null) => {
     if (!files) return;
-    const remaining = Math.max(0, 10 - form.fotos.length);
+    const currentFotos = Array.isArray(form.fotos) ? form.fotos : [];
+    const remaining = Math.max(0, 10 - currentFotos.length);
     const selected = Array.from(files).slice(0, remaining);
     const encoded = await Promise.all(selected.map(file => new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(file); })));
-    setForm(current => ({ ...current, fotos: [...current.fotos, ...encoded] }));
+    setForm(current => ({ ...current, fotos: [...(Array.isArray(current.fotos) ? current.fotos : []), ...encoded] }));
   };
 
   const save = async () => {
@@ -127,7 +139,7 @@ export default function Pneus() {
         <TabsContent value="instalacoes" className="mt-4"><PneuInstalacoes/></TabsContent>
         <TabsContent value="rodizios" className="mt-4"><PneuRodizios/></TabsContent>
         <TabsContent value="manutencao" className="mt-4"><PneuManutencao/></TabsContent><TabsContent value="gestao" className="mt-4"><PneuGestao/></TabsContent>
-        <TabsContent value="historico" className="mt-4"><Card><CardContent className="p-4"><div className="space-y-4">{items.flatMap(p => (p.eventos ?? []).map(e => ({ ...e, pneu: p }))).sort((a, b) => +new Date(b.data) - +new Date(a.data)).slice(0, 100).map(e => <div key={e.id} className="flex gap-3 border-b pb-4 last:border-0"><div className="mt-1 h-2.5 w-2.5 rounded-full bg-primary"/><div><p className="text-sm font-medium">Pneu {e.pneu.numeroFogo} — {e.observacoes || e.tipo}</p><p className="text-xs text-muted-foreground">{new Date(e.data).toLocaleString("pt-BR")}{e.responsavel ? ` • ${e.responsavel}` : ""}</p></div></div>)}</div></CardContent></Card></TabsContent>
+        <TabsContent value="historico" className="mt-4"><Card><CardContent className="p-4"><div className="space-y-4">{historico.map(e => <div key={e.id} className="flex gap-3 border-b pb-4 last:border-0"><div className="mt-1 h-2.5 w-2.5 rounded-full bg-primary"/><div><p className="text-sm font-medium">Pneu {e.pneu.numeroFogo || "sem número"} — {e.observacoes || e.tipo}</p><p className="text-xs text-muted-foreground">{new Date(e.data).toLocaleString("pt-BR")}{e.responsavel ? ` • ${e.responsavel}` : ""}</p></div></div>)}</div></CardContent></Card></TabsContent>
       </Tabs>
     </div>
 
@@ -144,7 +156,7 @@ export default function Pneus() {
       <div className="space-y-1.5"><Label>Sulco atual (mm)</Label><Input type="number" min="0" step="0.1" value={form.sulcoAtual} onChange={e => setForm({ ...form, sulcoAtual: e.target.value })}/></div>
       <div className="space-y-1.5"><Label>Quilometragem acumulada</Label><Input type="number" min="0" step="0.1" value={form.kmAtual} onChange={e => setForm({ ...form, kmAtual: e.target.value })}/></div>
       <div className="space-y-1.5"><Label>Próximo rodízio (km)</Label><Input type="number" min="0" step="0.1" value={form.proximoRodizioKm} onChange={e => setForm({ ...form, proximoRodizioKm: e.target.value })}/></div>
-      <div className="space-y-1.5 md:col-span-2"><Label>Fotos</Label><label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground hover:bg-muted"><ImagePlus className="h-4 w-4"/>Adicionar fotos<input type="file" accept="image/*" multiple className="hidden" onChange={e => void handlePhotos(e.target.files)}/></label>{form.fotos.length > 0 && <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">{form.fotos.map((url, i) => <div key={i} className="relative aspect-square overflow-hidden rounded-md border"><img src={url} alt={`Foto ${i+1}`} className="h-full w-full object-cover"/><button type="button" onClick={() => setForm({ ...form, fotos: form.fotos.filter((_, j) => j !== i) })} className="absolute right-1 top-1 rounded bg-background/90 px-1 text-xs">×</button></div>)}</div>}</div>
+      <div className="space-y-1.5 md:col-span-2"><Label>Fotos</Label><label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground hover:bg-muted"><ImagePlus className="h-4 w-4"/>Adicionar fotos<input type="file" accept="image/*" multiple className="hidden" onChange={e => void handlePhotos(e.target.files)}/></label>{(Array.isArray(form.fotos) ? form.fotos.length : 0) > 0 && <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">{(Array.isArray(form.fotos) ? form.fotos : []).map((url, i) => <div key={i} className="relative aspect-square overflow-hidden rounded-md border"><img src={url} alt={`Foto ${i+1}`} className="h-full w-full object-cover"/><button type="button" onClick={() => setForm({ ...form, fotos: (Array.isArray(form.fotos) ? form.fotos : []).filter((_, j) => j !== i) })} className="absolute right-1 top-1 rounded bg-background/90 px-1 text-xs">×</button></div>)}</div>}</div>
       <div className="space-y-1.5 md:col-span-2"><Label>Observações</Label><Textarea value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })}/></div>
     </div><DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button><Button onClick={save} disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button></DialogFooter></DialogContent></Dialog>
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getResourceCollection, invalidateResourceCache, peekResourceCollection } from "./api";
 
 export type StatusMotorista = "ATIVO" | "DEMITIDO";
@@ -379,7 +379,51 @@ export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");
 export const useViagens = () => useApiCrud<Viagem>("viagens", "Viagem");
 export const useAbastecimentos = () => useApiCrud<Abastecimento>("abastecimentos", "Abastecimento");
 export const useCiots = () => useApiCrud<Ciot>("ciots", "CIOT");
-export const usePneus = () => useApiCrud<Pneu>("pneus", "Pneu", { optimistic: false });
+function normalizePneuEntity(value: Pneu | null | undefined): Pneu | null {
+  if (!value || typeof value !== "object" || !value.id) return null;
+  return {
+    ...value,
+    numeroFogo: value.numeroFogo ?? "",
+    marca: value.marca ?? "",
+    modelo: value.modelo ?? "",
+    medida: value.medida ?? "",
+    aro: value.aro ?? null,
+    dot: value.dot ?? "",
+    numeroSerie: value.numeroSerie ?? null,
+    tipo: value.tipo ?? "LIVRE",
+    valorCompra: Number(value.valorCompra ?? 0),
+    fornecedor: value.fornecedor ?? "",
+    dataCompra: value.dataCompra ?? "",
+    maxRecapagens: Number(value.maxRecapagens ?? 0),
+    recapagensRealizadas: Number(value.recapagensRealizadas ?? 0),
+    status: value.status ?? "ESTOQUE",
+    condicao: value.condicao ?? "NOVO",
+    sulcoInicial: value.sulcoInicial == null ? null : Number(value.sulcoInicial),
+    sulcoAtual: value.sulcoAtual == null ? null : Number(value.sulcoAtual),
+    kmAtual: Number(value.kmAtual ?? 0),
+    proximoRodizioKm: value.proximoRodizioKm == null ? null : Number(value.proximoRodizioKm),
+    observacoes: value.observacoes ?? null,
+    fotos: Array.isArray(value.fotos) ? value.fotos : [],
+    eventos: Array.isArray(value.eventos) ? value.eventos : [],
+    recapagens: Array.isArray(value.recapagens) ? value.recapagens : [],
+    consertos: Array.isArray(value.consertos) ? value.consertos : [],
+    medicoesSulco: Array.isArray(value.medicoesSulco) ? value.medicoesSulco : [],
+    calibragens: Array.isArray(value.calibragens) ? value.calibragens : [],
+    inspecoes: Array.isArray(value.inspecoes) ? value.inspecoes : [],
+  };
+}
+
+export function usePneus() {
+  const crud = useApiCrud<Pneu>("pneus", "Pneu", { optimistic: false });
+  const items = useMemo(
+    () => (Array.isArray(crud.items) ? crud.items : [])
+      .map((item) => normalizePneuEntity(item))
+      .filter((item): item is Pneu => Boolean(item)),
+    [crud.items],
+  );
+  const getById = useCallback((id: string) => items.find((item) => item.id === id), [items]);
+  return { ...crud, items, getById };
+}
 
 export function useFechamentos() {
   const crud = useApiCrud<Fechamento>("fechamentos", "Fechamento");
