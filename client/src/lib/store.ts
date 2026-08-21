@@ -217,7 +217,7 @@ export interface PneuManutencao { medicoesSulco:PneuMedicaoSulco[]; calibragens:
 
 export type PneuAlerta = { id:string; severity:"CRITICO"|"ATENCAO"; type:string; title:string; detail:string; pneuId:string };
 export type PneuRelatorios = { period:{from:string|null;to:string|null}; summary:{pneus:number;investment:number;averageLifeKm:number}; history:Array<{pneu:string;marca:string;evento:string;data:string;responsavel:string;quilometragem:number|null;observacoes:string}>; costsByVehicle:Array<{vehicle:string;count:number;cost:number}>; rankingBrands:Array<{brand:string;count:number;cost:number;km:number}>; rankingRecappers:Array<{name:string;count:number;cost:number}>; wear:Array<{numeroFogo:string;marca:string;sulcoAtual:number|null;desgaste:number;km:number}>; nearReplacement:Array<{numeroFogo:string;marca:string;sulcoAtual:number|null;desgaste:number;km:number}> };
-export interface Pneu { id: string; numeroFogo: string; marca: string; modelo: string; medida: string; aro?: string | null; dot: string; numeroSerie?: string | null; tipo: TipoPneu; valorCompra: number; fornecedor: string; dataCompra: string; maxRecapagens: number; recapagensRealizadas: number; status: StatusPneu; condicao: CondicaoPneu; sulcoInicial?: number | null; sulcoAtual?: number | null; kmAtual: number; proximoRodizioKm?: number | null; observacoes?: string | null; fotos: PneuFoto[]; eventos: PneuEvento[]; recapagens?: PneuRecapagem[]; consertos?: PneuConserto[]; medicoesSulco?: PneuMedicaoSulco[]; calibragens?: PneuCalibragem[]; inspecoes?: PneuInspecao[]; createdAt: string; }
+export interface Pneu { id: string; numeroFogo: string; marca: string; modelo: string; medida: string; aro?: string | null; dot: string; numeroSerie?: string | null; tipo: TipoPneu; valorCompra: number; fornecedor: string; dataCompra: string; maxRecapagens: number; recapagensRealizadas: number; status: StatusPneu; condicao: CondicaoPneu; sulcoInicial?: number | null; sulcoAtual?: number | null; kmAtual: number; proximoRodizioKm?: number | null; observacoes?: string | null; notaFiscalNome?: string | null; notaFiscalStored?: boolean; fotos: PneuFoto[]; eventos: PneuEvento[]; recapagens?: PneuRecapagem[]; consertos?: PneuConserto[]; medicoesSulco?: PneuMedicaoSulco[]; calibragens?: PneuCalibragem[]; inspecoes?: PneuInspecao[]; createdAt: string; }
 
 type Entity = { id: string; createdAt: string };
 const eventName = (resource: string) => `radasa-api-change:${resource}`;
@@ -403,6 +403,8 @@ function normalizePneuEntity(value: Pneu | null | undefined): Pneu | null {
     kmAtual: Number(value.kmAtual ?? 0),
     proximoRodizioKm: value.proximoRodizioKm == null ? null : Number(value.proximoRodizioKm),
     observacoes: value.observacoes ?? null,
+    notaFiscalNome: value.notaFiscalNome ?? null,
+    notaFiscalStored: Boolean(value.notaFiscalStored),
     fotos: Array.isArray(value.fotos) ? value.fotos : [],
     eventos: Array.isArray(value.eventos) ? value.eventos : [],
     recapagens: Array.isArray(value.recapagens) ? value.recapagens : [],

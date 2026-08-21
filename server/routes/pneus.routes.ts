@@ -1,16 +1,29 @@
 import { Router } from "express";
 import { pneusGestaoController } from "../controllers/pneus-gestao.controller.js";
 import { pneusController } from "../controllers/pneus.controller.js";
+import { pneusService } from "../services/pneus.service.js";
 import { pneusOperacoesController } from "../controllers/pneus-operacoes.controller.js";
 import { pneusManutencaoController } from "../controllers/pneus-manutencao.controller.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { validate } from "../middlewares/validate.js";
-import { bodySchema, partialBodySchema, pneuBody, pneuInstalacaoBody, pneuRetiradaBody, pneuRodizioBody, pneuSulcoBody, pneuCalibragemBody, pneuRecapagemBody, pneuConsertoBody, pneuInspecaoBody } from "../validators/schemas.js";
+import { requestParam } from "../utils/request-param.js";
+import { bodySchema, partialBodySchema, pneuBody, pneuNotaFiscalBody, pneuInstalacaoBody, pneuRetiradaBody, pneuRodizioBody, pneuSulcoBody, pneuCalibragemBody, pneuRecapagemBody, pneuConsertoBody, pneuInspecaoBody } from "../validators/schemas.js";
 
 export const pneusRoutes = Router();
 
 pneusRoutes.get("/gestao/alertas", asyncHandler(pneusGestaoController.alerts));
 pneusRoutes.get("/gestao/relatorios", asyncHandler(pneusGestaoController.reports));
+
+pneusRoutes.get("/:id/nota-fiscal", asyncHandler(async (req, res) => {
+  res.json(await pneusService.getNotaFiscal(requestParam(req.params.id)));
+}));
+pneusRoutes.put("/:id/nota-fiscal", validate(bodySchema(pneuNotaFiscalBody)), asyncHandler(async (req, res) => {
+  res.json(await pneusService.saveNotaFiscal(requestParam(req.params.id), req.body));
+}));
+pneusRoutes.delete("/:id/nota-fiscal", asyncHandler(async (req, res) => {
+  await pneusService.removeNotaFiscal(requestParam(req.params.id));
+  res.status(204).send();
+}));
 
 pneusRoutes.get("/:id/manutencao", asyncHandler(pneusManutencaoController.get));
 pneusRoutes.post("/:id/sulcos", validate(bodySchema(pneuSulcoBody)), asyncHandler(pneusManutencaoController.addSulco));

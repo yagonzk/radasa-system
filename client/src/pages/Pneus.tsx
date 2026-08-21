@@ -10,8 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { usePneus, type Pneu, type StatusPneu, type TipoPneu, type CondicaoPneu } from "@/lib/store";
-import { CircleDollarSign, History, ImagePlus, Package, Pencil, Plus, RefreshCcw, Search, ShieldAlert, Trash2, Truck, Wrench, Recycle, Gauge, CircleOff, CircleDotDashed } from "lucide-react";
-import { useMemo, useState } from "react";
+import { api } from "@/lib/api";
+import { CircleDollarSign, Download, Eye, FileText, History, ImagePlus, Package, Pencil, Plus, RefreshCcw, Search, ShieldAlert, Trash2, Truck, Upload, Wrench, Recycle, Gauge, CircleOff, CircleDotDashed } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PneuInstalacoes, PneuRodizios } from "@/components/pneus/PneuOperacoes";
 import { PneuManutencao } from "@/components/pneus/PneuManutencao";
@@ -72,8 +73,186 @@ function compareNumeroFogoDesc(a: Pneu, b: Pneu) {
   });
 }
 
+type PneuNotaFiscalResponse = { url: string; nome: string };
+
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler o arquivo."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function PneuNotasFiscais({
+  items,
+  onRefresh,
+}: {
+  items: Pneu[];
+  onRefresh: () => Promise<unknown>;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [target, setTarget] = useState<Pneu | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return [...items]
+      .filter((pneu) => !q || [pneu.numeroFogo, pneu.marca, pneu.modelo, pneu.fornecedor, pneu.notaFiscalNome]
+        .some((value) => String(value ?? "").toLowerCase().includes(q)))
+      .sort(compareNumeroFogoDesc);
+  }, [items, search]);
+
+  const chooseFile = (pneu: Pneu) => {
+    setTarget(pneu);
+    if (inputRef.current) {
+      inputRef.current.value = "";
+      inputRef.current.click();
+    }
+  };
+
+  const upload = async (file: File | undefined) => {
+    if (!file || !target) return;
+    const allowed = file.type === "application/pdf" || file.type.startsWith("image/");
+    if (!allowed) {
+      toast.error("Anexe a nota fiscal em PDF ou imagem.");
+      return;
+    }
+    if (file.size > 2_500_000) {
+      toast.error("A nota fiscal deve ter no máximo 2,5 MB.");
+      return;
+    }
+
+    setBusyId(target.id);
+    try {
+      const notaFiscalUrl = await fileToDataUrl(file);
+      await api.put(`/pneus/${target.id}/nota-fiscal`, {
+        notaFiscalUrl,
+        notaFiscalNome: file.name,
+      });
+      await onRefresh();
+      toast.success("Nota fiscal anexada ao pneu.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível anexar a nota fiscal.");
+    } finally {
+      setBusyId(null);
+      setTarget(null);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const loadNota = async (pneu: Pneu) => {
+    const response = await api.get<PneuNotaFiscalResponse>(`/pneus/${pneu.id}/nota-fiscal`);
+    return response.data;
+  };
+
+  const preview = async (pneu: Pneu) => {
+    const popup = window.open("", "_blank");
+    setBusyId(pneu.id);
+    try {
+      const nota = await loadNota(pneu);
+      if (popup) popup.location.href = nota.url;
+      else toast.error("Permita pop-ups no navegador para visualizar a nota fiscal.");
+    } catch (error: any) {
+      popup?.close();
+      toast.error(error?.response?.data?.message || "Não foi possível abrir a nota fiscal.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const download = async (pneu: Pneu) => {
+    setBusyId(pneu.id);
+    try {
+      const nota = await loadNota(pneu);
+      const link = document.createElement("a");
+      link.href = nota.url;
+      link.download = nota.nome || `nota-fiscal-pneu-${pneu.numeroFogo || pneu.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível baixar a nota fiscal.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeNota = async (pneu: Pneu) => {
+    if (!confirm(`Remover a nota fiscal vinculada ao pneu ${pneu.numeroFogo || "sem número"}?`)) return;
+    setBusyId(pneu.id);
+    try {
+      await api.delete(`/pneus/${pneu.id}/nota-fiscal`);
+      await onRefresh();
+      toast.success("Nota fiscal removida.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível remover a nota fiscal.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(event) => void upload(event.target.files?.[0])}
+      />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base"><FileText className="h-5 w-5" />Notas fiscais dos pneus</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">Anexe uma nota fiscal em PDF ou imagem para cada pneu cadastrado. O arquivo pode ser substituído ou removido a qualquer momento.</p>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input className="pl-9" placeholder="Pesquisar pneu ou nota fiscal" value={search} onChange={(event) => setSearch(event.target.value)} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader><TableRow><TableHead>Nº de fogo</TableHead><TableHead>Marca / Modelo</TableHead><TableHead>Compra</TableHead><TableHead>Valor</TableHead><TableHead>Nota fiscal</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {rows.map((pneu) => {
+                  const busy = busyId === pneu.id;
+                  return <TableRow key={pneu.id}>
+                    <TableCell className="font-semibold">{pneu.numeroFogo || "—"}</TableCell>
+                    <TableCell>{[pneu.marca, pneu.modelo].filter(Boolean).join(" - ") || "—"}</TableCell>
+                    <TableCell>{date(pneu.dataCompra)}</TableCell>
+                    <TableCell>{money(pneu.valorCompra)}</TableCell>
+                    <TableCell>{pneu.notaFiscalStored ? <div><Badge variant="secondary">Anexada</Badge><p className="mt-1 max-w-56 truncate text-xs text-muted-foreground" title={pneu.notaFiscalNome || "Nota fiscal"}>{pneu.notaFiscalNome || "Nota fiscal"}</p></div> : <span className="text-muted-foreground">Não anexada</span>}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex flex-wrap justify-end gap-1">
+                        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => chooseFile(pneu)}><Upload className="mr-1 h-4 w-4" />{pneu.notaFiscalStored ? "Substituir" : "Anexar"}</Button>
+                        {pneu.notaFiscalStored && <>
+                          <Button type="button" size="icon" variant="ghost" title="Visualizar nota fiscal" disabled={busy} onClick={() => void preview(pneu)}><Eye className="h-4 w-4" /></Button>
+                          <Button type="button" size="icon" variant="ghost" title="Baixar nota fiscal" disabled={busy} onClick={() => void download(pneu)}><Download className="h-4 w-4" /></Button>
+                          <Button type="button" size="icon" variant="ghost" className="text-destructive" title="Remover nota fiscal" disabled={busy} onClick={() => void removeNota(pneu)}><Trash2 className="h-4 w-4" /></Button>
+                        </>}
+                      </div>
+                    </TableCell>
+                  </TableRow>;
+                })}
+                {rows.length === 0 && <TableRow><TableCell colSpan={6} className="h-28 text-center text-muted-foreground">Nenhum pneu encontrado.</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function Pneus() {
-  const { items, create, update, remove } = usePneus();
+  const { items, create, update, remove, refresh } = usePneus();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Pneu | null>(null);
   const [details, setDetails] = useState<Pneu | null>(null);
@@ -187,7 +366,7 @@ export default function Pneus() {
       </div>
 
       <Tabs defaultValue="cadastro">
-        <TabsList className="flex h-auto flex-wrap"><TabsTrigger value="cadastro">Cadastro</TabsTrigger><TabsTrigger value="estoque">Estoque</TabsTrigger><TabsTrigger value="instalacoes">Instalações</TabsTrigger><TabsTrigger value="rodizios">Rodízios</TabsTrigger><TabsTrigger value="manutencao">Manutenção</TabsTrigger><TabsTrigger value="historico">Histórico</TabsTrigger><TabsTrigger value="gestao">Gestão e relatórios</TabsTrigger></TabsList>
+        <TabsList className="flex h-auto flex-wrap"><TabsTrigger value="cadastro">Cadastro</TabsTrigger><TabsTrigger value="estoque">Estoque</TabsTrigger><TabsTrigger value="notas">Notas fiscais</TabsTrigger><TabsTrigger value="instalacoes">Instalações</TabsTrigger><TabsTrigger value="rodizios">Rodízios</TabsTrigger><TabsTrigger value="manutencao">Manutenção</TabsTrigger><TabsTrigger value="historico">Histórico</TabsTrigger><TabsTrigger value="gestao">Gestão e relatórios</TabsTrigger></TabsList>
         <TabsContent value="cadastro" className="mt-4 space-y-4">
           <Card><CardContent className="p-4"><div className="flex flex-col gap-3 md:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Pesquisar número de fogo, marca, modelo, medida, ARO ou fornecedor" value={search} onChange={e => setSearch(e.target.value)}/></div><Select value={status} onValueChange={v => setStatus(v as any)}><SelectTrigger className="md:w-56"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="TODOS">Todos os status</SelectItem>{Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></div></CardContent></Card>
           <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Nº de fogo</TableHead><TableHead>Marca / Modelo</TableHead><TableHead>Medida</TableHead><TableHead>ARO</TableHead><TableHead>Tipo</TableHead><TableHead>Status</TableHead><TableHead>Sulco atual</TableHead><TableHead>Compra</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{cadastroItems.map(p => <TableRow key={p.id}><TableCell className="font-semibold"><button className="text-primary hover:underline" onClick={() => setDetails(p)}>{p.numeroFogo || "—"}</button></TableCell><TableCell>{[p.marca, p.modelo].filter(Boolean).join(" - ") || "—"}</TableCell><TableCell>{p.medida || "—"}</TableCell><TableCell>{p.aro || "—"}</TableCell><TableCell>{tipoLabels[p.tipo]}</TableCell><TableCell><Badge variant={p.status === "DESCARTADO" ? "destructive" : p.status === "INSTALADO" ? "default" : "secondary"}>{statusLabels[p.status]}</Badge></TableCell><TableCell>{p.sulcoAtual == null ? "—" : `${p.sulcoAtual.toFixed(1)} mm`}</TableCell><TableCell>{date(p.dataCompra)}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" onClick={() => setDetails(p)}><History className="h-4 w-4"/></Button><Button variant="ghost" size="icon" title="Editar informações do pneu" aria-label="Editar informações do pneu" onClick={() => openEdit(p)}><Pencil className="h-4 w-4"/></Button><Button variant="ghost" size="icon" className="text-destructive" onClick={() => archive(p)}><Trash2 className="h-4 w-4"/></Button></div></TableCell></TableRow>)}{cadastroItems.length === 0 && <TableRow><TableCell colSpan={9} className="h-28 text-center text-muted-foreground">Nenhum pneu encontrado.</TableCell></TableRow>}</TableBody></Table></div></CardContent></Card>
@@ -238,6 +417,7 @@ export default function Pneus() {
             </CardContent>
           </Card>
         </TabsContent>
+        <TabsContent value="notas" className="mt-4"><PneuNotasFiscais items={items} onRefresh={refresh} /></TabsContent>
         <TabsContent value="instalacoes" className="mt-4"><PneuInstalacoes/></TabsContent>
         <TabsContent value="rodizios" className="mt-4"><PneuRodizios/></TabsContent>
         <TabsContent value="manutencao" className="mt-4"><PneuManutencao/></TabsContent><TabsContent value="gestao" className="mt-4"><PneuGestao/></TabsContent>

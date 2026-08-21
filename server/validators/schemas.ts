@@ -325,6 +325,11 @@ export const pneuBody = z.object({
   createdAt: z.string().optional(),
 });
 
+export const pneuNotaFiscalBody = z.object({
+  notaFiscalUrl: z.string().min(1).max(3_800_000),
+  notaFiscalNome: z.string().trim().min(1).max(500),
+});
+
 export const bodySchema = (schema: z.ZodTypeAny) => z.object({ body: schema, params: z.unknown().optional(), query: z.unknown().optional() });
 export const partialBodySchema = (schema: z.ZodObject<any>) => z.object({ body: schema.partial(), params: z.object({ id }), query: z.unknown().optional() });
 

@@ -563,6 +563,8 @@ model Pneu {
   kmAtual              Decimal                @default(0) @db.Decimal(14, 1)
   proximoRodizioKm     Decimal?               @db.Decimal(14, 1)
   observacoes          String?                @db.Text
+  notaFiscalUrl        String?                @db.Text
+  notaFiscalNome       String?
   deletedAt            DateTime?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt

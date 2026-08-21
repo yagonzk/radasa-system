@@ -1,0 +1,3 @@
+ALTER TABLE "pneus"
+ADD COLUMN IF NOT EXISTS "notaFiscalUrl" TEXT,
+ADD COLUMN IF NOT EXISTS "notaFiscalNome" TEXT;

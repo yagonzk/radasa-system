@@ -6,9 +6,10 @@ import { randomUUID } from "node:crypto";
 
 const include = { fotos: true, eventos: { orderBy: { data: "desc" as const } }, recapagens: { orderBy: { numeroRecapagem: "desc" as const } }, consertos: { orderBy: { data: "desc" as const } }, medicoesSulco: { orderBy: { data: "desc" as const }, take: 12 }, calibragens: { orderBy: { data: "desc" as const }, take: 1 }, inspecoes: { orderBy: { data: "desc" as const }, take: 1 } } as const;
 const serialize = (p: any) => {
-  const { codigoBarras: _codigoBarras, qrCode: _qrCode, ...rest } = p;
+  const { codigoBarras: _codigoBarras, qrCode: _qrCode, notaFiscalUrl: _notaFiscalUrl, ...rest } = p;
   return {
   ...rest,
+  notaFiscalStored: Boolean(p.notaFiscalUrl),
   valorCompra: number(p.valorCompra), sulcoInicial: p.sulcoInicial == null ? null : number(p.sulcoInicial),
   sulcoAtual: p.sulcoAtual == null ? null : number(p.sulcoAtual), kmAtual: number(p.kmAtual),
   proximoRodizioKm: p.proximoRodizioKm == null ? null : number(p.proximoRodizioKm),
@@ -72,6 +73,47 @@ export const pneusService = {
       if (input.fotos) { await tx.pneuFoto.deleteMany({ where: { pneuId: id } }); }
       return tx.pneu.update({ where: { id }, data: { ...data(merged, current.numeroFogo), ...(input.fotos ? { fotos: { create: input.fotos.map((url: string) => ({ url })) } } : {}), eventos: { create: { tipo: statusChanged ? "STATUS" : "ALTERACAO", observacoes: statusChanged ? `Status alterado de ${current.status} para ${input.status}.` : "Dados cadastrais atualizados.", dados: statusChanged ? { anterior: current.status, atual: input.status } : undefined } } }, include });
     }));
+  },
+  async getNotaFiscal(id: string) {
+    const pneu = await prisma.pneu.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, notaFiscalUrl: true, notaFiscalNome: true },
+    });
+    if (!pneu) throw new AppError(404, "Pneu não encontrado.");
+    if (!pneu.notaFiscalUrl) throw new AppError(404, "Este pneu não possui nota fiscal anexada.");
+    return { url: pneu.notaFiscalUrl, nome: pneu.notaFiscalNome || `nota-fiscal-pneu-${id}.pdf` };
+  },
+  async saveNotaFiscal(id: string, input: { notaFiscalUrl: string; notaFiscalNome: string }) {
+    const pneu = await prisma.pneu.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!pneu) throw new AppError(404, "Pneu não encontrado.");
+    await prisma.pneu.update({
+      where: { id },
+      data: {
+        notaFiscalUrl: input.notaFiscalUrl,
+        notaFiscalNome: input.notaFiscalNome,
+        eventos: {
+          create: {
+            tipo: "ALTERACAO",
+            observacoes: `Nota fiscal anexada: ${input.notaFiscalNome}.`,
+          },
+        },
+      },
+    });
+    return { stored: true, nome: input.notaFiscalNome };
+  },
+  async removeNotaFiscal(id: string) {
+    const pneu = await prisma.pneu.findFirst({ where: { id, deletedAt: null }, select: { id: true, notaFiscalUrl: true } });
+    if (!pneu) throw new AppError(404, "Pneu não encontrado.");
+    await prisma.pneu.update({
+      where: { id },
+      data: {
+        notaFiscalUrl: null,
+        notaFiscalNome: null,
+        eventos: pneu.notaFiscalUrl
+          ? { create: { tipo: "ALTERACAO", observacoes: "Nota fiscal removida do pneu." } }
+          : undefined,
+      },
+    });
   },
   async remove(id: string) { const p = await prisma.pneu.findFirst({ where: { id, deletedAt: null } }); if (!p) throw new AppError(404, "Pneu não encontrado."); await prisma.pneu.update({ where: { id }, data: { deletedAt: new Date(), eventos: { create: { tipo: "STATUS", observacoes: "Pneu arquivado (soft delete)." } } } }); },
 };

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowRightLeft, CircleDot, RotateCcw, Save, Truck, Wrench } from "lucide-react";
-import { usePneuOperacoes, usePneus, useVeiculos, type PneuInstalacao, type Veiculo } from "@/lib/store";
+import { ArrowRightLeft, RotateCcw, Truck, Wrench } from "lucide-react";
+import { usePneuOperacoes, usePneus, useVeiculos, type PneuInstalacao } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,48 +19,47 @@ interface ChassisPosition {
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
-const positionKey = (item: { eixo: string; posicao: string }) => `${item.eixo}|||${item.posicao}`;
-const tireOptions = [4, 6, 8, 10, 12, 14, 16];
-const spareOptions = [0, 1, 2, 3];
-
-function generatePositions(tireCount: number, spareCount: number): ChassisPosition[] {
-  const safeTires = Math.max(4, Math.min(16, tireCount));
-  const positions: ChassisPosition[] = [
-    { eixo: "Dianteiro", posicao: "Esquerdo", side: "left", lane: 0 },
-    { eixo: "Dianteiro", posicao: "Direito", side: "right", lane: 0 },
-  ];
-
-  let remaining = safeTires - 2;
-  let axle = 1;
-  while (remaining > 0) {
-    const axleTires = Math.min(4, remaining);
-    const eixo = `Tração ${axle}`;
-    if (axleTires >= 4) {
-      positions.push(
-        { eixo, posicao: "Esquerdo externo", side: "left", lane: 0 },
-        { eixo, posicao: "Esquerdo interno", side: "left", lane: 1 },
-        { eixo, posicao: "Direito interno", side: "right", lane: 1 },
-        { eixo, posicao: "Direito externo", side: "right", lane: 0 },
-      );
-    } else {
-      positions.push(
-        { eixo, posicao: "Esquerdo", side: "left", lane: 0 },
-        { eixo, posicao: "Direito", side: "right", lane: 0 },
-      );
-    }
-    remaining -= axleTires;
-    axle += 1;
-  }
-
-  for (let index = 1; index <= spareCount; index += 1) {
-    positions.push({ eixo: "Estepe", posicao: `Estepe ${index}`, side: "spare", lane: index - 1 });
-  }
-
-  return positions;
+function normalizeEixo(eixo: string) {
+  const aliases: Record<string, string> = {
+    Dianteiro: "Eixo 1",
+    "Dianteiro 2": "Eixo 2",
+    Traseiro: "Eixo 2",
+    "Tração 1": "Eixo 3",
+    "Tração 2": "Eixo 4",
+    "Tração 3": "Eixo 4",
+  };
+  return aliases[eixo] ?? eixo;
 }
 
+function normalizePosicao(item: { eixo: string; posicao: string }) {
+  return { eixo: normalizeEixo(item.eixo), posicao: item.posicao };
+}
+
+const positionKey = (item: { eixo: string; posicao: string }) => {
+  const normalized = normalizePosicao(item);
+  return `${normalized.eixo}|||${normalized.posicao}`;
+};
+
+// Configuração única da frota: caminhão 4 eixos (8x2),
+// com 12 pneus rodando e 1 estepe.
+const FIXED_POSITIONS: ChassisPosition[] = [
+  { eixo: "Eixo 1", posicao: "Esquerdo", side: "left", lane: 0 },
+  { eixo: "Eixo 1", posicao: "Direito", side: "right", lane: 0 },
+  { eixo: "Eixo 2", posicao: "Esquerdo", side: "left", lane: 0 },
+  { eixo: "Eixo 2", posicao: "Direito", side: "right", lane: 0 },
+  { eixo: "Eixo 3", posicao: "Esquerdo externo", side: "left", lane: 0 },
+  { eixo: "Eixo 3", posicao: "Esquerdo interno", side: "left", lane: 1 },
+  { eixo: "Eixo 3", posicao: "Direito interno", side: "right", lane: 1 },
+  { eixo: "Eixo 3", posicao: "Direito externo", side: "right", lane: 0 },
+  { eixo: "Eixo 4", posicao: "Esquerdo externo", side: "left", lane: 0 },
+  { eixo: "Eixo 4", posicao: "Esquerdo interno", side: "left", lane: 1 },
+  { eixo: "Eixo 4", posicao: "Direito interno", side: "right", lane: 1 },
+  { eixo: "Eixo 4", posicao: "Direito externo", side: "right", lane: 0 },
+  { eixo: "Estepe", posicao: "Estepe 1", side: "spare", lane: 0 },
+];
+
 function tireTone(item?: PneuInstalacao) {
-  if (!item) return "border-muted-foreground/40 bg-background text-muted-foreground";
+  if (!item) return "border-muted-foreground/45 bg-card text-muted-foreground";
   const groove = item.pneu.sulcoAtual;
   if (groove != null && groove <= 2) return "border-destructive bg-destructive/15 text-destructive";
   if (groove != null && groove <= 4) return "border-amber-500 bg-amber-500/15 text-amber-700 dark:text-amber-300";
@@ -82,17 +81,21 @@ function TireButton({
     <button
       type="button"
       onClick={onClick}
-      className={`group flex min-w-0 flex-col items-center gap-1 rounded-xl p-1.5 transition hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? "bg-primary/10 ring-2 ring-primary" : ""}`}
+      className={`group flex min-w-0 flex-col items-center gap-1 rounded-md p-1 transition hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? "bg-primary/10 ring-2 ring-primary" : ""}`}
       title={`${position.eixo} - ${position.posicao}`}
     >
-      <div className={`relative flex h-16 w-11 items-center justify-center overflow-hidden rounded-[45%] border-2 shadow-sm ${tireTone(item)}`}>
-        <div className="absolute inset-y-1 left-1/2 w-px -translate-x-1/2 bg-current/30" />
-        <div className="absolute inset-x-1 top-1/4 h-px bg-current/30" />
-        <div className="absolute inset-x-1 bottom-1/4 h-px bg-current/30" />
-        <span className="relative z-10 max-w-9 truncate text-[9px] font-bold">{item?.pneu.numeroFogo ?? "+"}</span>
+      <div className={`relative flex h-14 w-10 items-center justify-center border-2 shadow-sm ${tireTone(item)}`}>
+        <div className="absolute inset-y-1 left-1/2 w-px -translate-x-1/2 bg-current/25" />
+        <span className="relative z-10 max-w-8 truncate text-[8px] font-bold">{item?.pneu.numeroFogo ?? "+"}</span>
       </div>
-      <span className="max-w-24 truncate text-[10px] font-medium">{position.posicao}</span>
-      {item ? <span className="max-w-28 truncate text-[9px] text-muted-foreground">{item.pneu.marca} · {item.pneu.sulcoAtual ?? "—"} mm</span> : <span className="text-[9px] text-muted-foreground">Livre</span>}
+      <span className="max-w-24 truncate text-[9px] font-medium">{position.posicao}</span>
+      {item ? (
+        <span className="max-w-24 truncate text-[8px] text-muted-foreground">
+          {item.pneu.marca || "Pneu"} · {item.pneu.sulcoAtual ?? "—"} mm
+        </span>
+      ) : (
+        <span className="text-[8px] text-muted-foreground">Livre</span>
+      )}
     </button>
   );
 }
@@ -110,151 +113,104 @@ function ChassisMap({
   onPositionClick: (position: ChassisPosition, item?: PneuInstalacao) => void;
   title: string;
 }) {
-  const axleNames = Array.from(new Set(positions.filter((position) => position.side !== "spare").map((position) => position.eixo)));
-  const spares = positions.filter((position) => position.side === "spare");
+  const axleRows = [
+    { label: "EIXO 1", detail: "Dianteiro", eixo: "Eixo 1" },
+    { label: "EIXO 2", detail: "Dianteiro", eixo: "Eixo 2" },
+    { label: "EIXO 3", detail: "Rodado duplo", eixo: "Eixo 3" },
+    { label: "EIXO 4", detail: "Rodado duplo", eixo: "Eixo 4" },
+  ];
+  const spare = positions.find((position) => position.side === "spare");
 
   return (
-    <div className="mx-auto max-w-5xl rounded-2xl border bg-muted/20 p-4 md:p-8">
-      <div className="mb-6 text-center">
+    <div className="mx-auto max-w-4xl rounded-2xl border bg-muted/20 p-4 md:p-7">
+      <div className="mb-5 text-center">
         <p className="text-sm font-semibold">{title}</p>
-        <p className="text-xs text-muted-foreground">Clique diretamente em um pneu ou posição livre</p>
+        <p className="text-xs text-muted-foreground">Configuração fixa: caminhão 4 eixos · 12 pneus + 1 estepe</p>
       </div>
 
-      <div className="relative mx-auto max-w-3xl pb-4">
-        <div className="mx-auto mb-5 h-20 w-44 rounded-t-[2.5rem] rounded-b-xl border-2 bg-background shadow-sm">
-          <div className="mx-auto mt-3 h-7 w-28 rounded-lg border bg-muted/40" />
-          <p className="mt-2 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Cabine</p>
-        </div>
+      <div className="mx-auto grid max-w-3xl gap-5 lg:grid-cols-[minmax(0,1fr)_120px] lg:items-start">
+        <div className="relative mx-auto w-full max-w-xl py-5">
+          <div className="mb-3 text-center text-[9px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Frente</div>
+          <div className="absolute bottom-8 left-1/2 top-10 w-3 -translate-x-1/2 rounded-sm bg-foreground/90 shadow-sm" />
 
-        <div className="absolute bottom-10 left-1/2 top-20 w-10 -translate-x-1/2 rounded-xl border-2 bg-background shadow-inner">
-          <div className="mx-auto h-full w-px bg-border" />
-        </div>
+          <div className="relative z-10 space-y-7">
+            {axleRows.map((row) => {
+              const axlePositions = positions.filter((position) => position.eixo === row.eixo);
+              const left = axlePositions
+                .filter((position) => position.side === "left")
+                .sort((a, b) => a.lane - b.lane);
+              const right = axlePositions
+                .filter((position) => position.side === "right")
+                .sort((a, b) => b.lane - a.lane);
 
-        <div className="relative z-10 space-y-8">
-          {axleNames.map((axleName) => {
-            const axlePositions = positions.filter((position) => position.eixo === axleName);
-            const left = axlePositions.filter((position) => position.side === "left").sort((a, b) => b.lane - a.lane);
-            const right = axlePositions.filter((position) => position.side === "right").sort((a, b) => a.lane - b.lane);
-            return (
-              <div key={axleName} className="relative grid grid-cols-[1fr_72px_1fr] items-center gap-2">
-                <div className="absolute left-[12%] right-[12%] top-1/2 h-2 -translate-y-1/2 rounded-full border bg-background" />
-                <div className="relative z-10 flex justify-end gap-1">
-                  {left.map((position) => {
-                    const key = positionKey(position);
-                    const item = activeByPosition.get(key);
-                    return <TireButton key={key} position={position} item={item} selected={selectedKeys.includes(key)} onClick={() => onPositionClick(position, item)} />;
-                  })}
+              return (
+                <div key={row.eixo} className="relative grid grid-cols-[1fr_72px_1fr] items-center gap-1 sm:gap-2">
+                  <div className="absolute left-[7%] right-[7%] top-1/2 h-2 -translate-y-1/2 rounded-sm bg-foreground/90" />
+                  <div className="relative z-10 flex justify-end gap-1">
+                    {left.map((position) => {
+                      const key = positionKey(position);
+                      const item = activeByPosition.get(key);
+                      return <TireButton key={key} position={position} item={item} selected={selectedKeys.includes(key)} onClick={() => onPositionClick(position, item)} />;
+                    })}
+                  </div>
+                  <div className="relative z-10 justify-self-center rounded border bg-card px-2 py-1 text-center shadow-sm">
+                    <p className="text-[9px] font-bold">{row.label}</p>
+                    <p className="text-[7px] text-muted-foreground">{row.detail}</p>
+                  </div>
+                  <div className="relative z-10 flex justify-start gap-1">
+                    {right.map((position) => {
+                      const key = positionKey(position);
+                      const item = activeByPosition.get(key);
+                      return <TireButton key={key} position={position} item={item} selected={selectedKeys.includes(key)} onClick={() => onPositionClick(position, item)} />;
+                    })}
+                  </div>
                 </div>
-                <div className="relative z-10 rounded-lg border bg-card px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wide shadow-sm">{axleName}</div>
-                <div className="relative z-10 flex justify-start gap-1">
-                  {right.map((position) => {
-                    const key = positionKey(position);
-                    const item = activeByPosition.get(key);
-                    return <TireButton key={key} position={position} item={item} selected={selectedKeys.includes(key)} onClick={() => onPositionClick(position, item)} />;
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {spares.length > 0 && (
-          <div className="relative z-10 mx-auto mt-8 max-w-md rounded-xl border border-dashed bg-background/80 p-3">
-            <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Estepes</p>
-            <div className="flex flex-wrap justify-center gap-3">
-              {spares.map((position) => {
-                const key = positionKey(position);
-                const item = activeByPosition.get(key);
-                return <TireButton key={key} position={position} item={item} selected={selectedKeys.includes(key)} onClick={() => onPositionClick(position, item)} />;
-              })}
-            </div>
+              );
+            })}
           </div>
-        )}
-      </div>
+          <div className="mt-3 text-center text-[9px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Traseira</div>
+        </div>
 
-      <div className="mt-5 flex flex-wrap justify-center gap-4 text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-emerald-500" /> Normal</span>
-        <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-amber-500" /> Atenção</span>
-        <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-destructive" /> Crítico</span>
-        <span className="flex items-center gap-1"><CircleDot className="h-3 w-3 text-muted-foreground" /> Livre</span>
+        {spare && (() => {
+          const key = positionKey(spare);
+          const item = activeByPosition.get(key);
+          return (
+            <div className="rounded-xl border border-dashed bg-background/80 p-3 lg:mt-12">
+              <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Estepe</p>
+              <div className="flex justify-center">
+                <TireButton position={spare} item={item} selected={selectedKeys.includes(key)} onClick={() => onPositionClick(spare, item)} />
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
 }
 
-function ChassisConfiguration({
-  vehicle,
-  active,
-  onUpdate,
-}: {
-  vehicle?: Veiculo;
-  active: PneuInstalacao[];
-  onUpdate: (vehicleId: string, data: { quantidadePneus?: number; quantidadeEstepes?: number }) => Promise<unknown>;
-}) {
-  const [tireCount, setTireCount] = useState(String(vehicle?.quantidadePneus ?? 10));
-  const [spareCount, setSpareCount] = useState(String(vehicle?.quantidadeEstepes ?? 1));
-
-  const vehicleKey = `${vehicle?.id ?? ""}-${vehicle?.quantidadePneus ?? 10}-${vehicle?.quantidadeEstepes ?? 1}`;
-  useEffect(() => {
-    setTireCount(String(vehicle?.quantidadePneus ?? 10));
-    setSpareCount(String(vehicle?.quantidadeEstepes ?? 1));
-  }, [vehicleKey, vehicle?.quantidadePneus, vehicle?.quantidadeEstepes]);
-
-  if (!vehicle) return null;
-
-  const save = async () => {
-    const quantidadePneus = Number(tireCount);
-    const quantidadeEstepes = Number(spareCount);
-    const allowed = new Set(generatePositions(quantidadePneus, quantidadeEstepes).map(positionKey));
-    const hiddenInstalled = active.filter((item) => !allowed.has(positionKey(item)));
-    if (hiddenInstalled.length > 0) {
-      toast.error("Retire ou reposicione os pneus que ficariam fora da nova configuração antes de salvar.");
-      return;
-    }
-    try {
-      await onUpdate(vehicle.id, { quantidadePneus, quantidadeEstepes });
-      toast.success("Configuração do chassi salva.");
-    } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Não foi possível salvar a configuração do chassi.");
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader className="pb-3"><CardTitle className="text-base">Configuração do chassi</CardTitle></CardHeader>
-      <CardContent className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
-        <div className="space-y-1.5">
-          <Label>Quantidade de pneus</Label>
-          <Select value={tireCount} onValueChange={setTireCount}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{tireOptions.map((value) => <SelectItem key={value} value={String(value)}>{value} pneus</SelectItem>)}</SelectContent></Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Quantidade de estepes</Label>
-          <Select value={spareCount} onValueChange={setSpareCount}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{spareOptions.map((value) => <SelectItem key={value} value={String(value)}>{value} {value === 1 ? "estepe" : "estepes"}</SelectItem>)}</SelectContent></Select>
-        </div>
-        <Button onClick={save}><Save className="mr-2 h-4 w-4" />Salvar configuração</Button>
-      </CardContent>
-    </Card>
-  );
-}
-
 export function PneuInstalacoes() {
   const { items: pneus } = usePneus();
-  const { items: veiculos, update: updateVehicle } = useVeiculos();
+  const { items: veiculos } = useVeiculos();
   const { instalacoes, instalar, retirar } = usePneuOperacoes();
   const [vehicleId, setVehicleId] = useState("");
-  const [trailerId, setTrailerId] = useState("SEM_CARRETA");
   const [installOpen, setInstallOpen] = useState(false);
   const [retireItem, setRetireItem] = useState<PneuInstalacao | null>(null);
   const [target, setTarget] = useState<ChassisPosition | null>(null);
   const [installForm, setInstallForm] = useState({ pneuId: "", dataInstalacao: today(), kmInstalacao: "", responsavel: "" });
   const [retireForm, setRetireForm] = useState({ dataRetirada: today(), kmRetirada: "", motivoRetirada: "", statusDestino: "ESTOQUE" as "ESTOQUE" | "MANUTENCAO" | "RECAPAGEM" });
 
-  const targetId = trailerId !== "SEM_CARRETA" ? trailerId : vehicleId;
-  const selectedVehicle = veiculos.find((vehicle) => vehicle.id === targetId);
-  const active = useMemo(() => instalacoes.filter((item) => item.ativo && (item.carretaId || item.veiculoId) === targetId), [instalacoes, targetId]);
+  const caminhoes = useMemo(
+    () => veiculos.filter((vehicle) => vehicle.subcategoria === "CAMINHAO" || !vehicle.subcategoria),
+    [veiculos],
+  );
+  const selectedVehicle = caminhoes.find((vehicle) => vehicle.id === vehicleId);
+  const active = useMemo(
+    () => instalacoes.filter((item) => item.ativo && item.veiculoId === vehicleId && !item.carretaId),
+    [instalacoes, vehicleId],
+  );
   const activeByPosition = useMemo(() => new Map(active.map((item) => [positionKey(item), item])), [active]);
   const available = pneus.filter((p) => p.status === "ESTOQUE");
-  const positions = useMemo(() => generatePositions(selectedVehicle?.quantidadePneus ?? 10, selectedVehicle?.quantidadeEstepes ?? 1), [selectedVehicle?.quantidadePneus, selectedVehicle?.quantidadeEstepes]);
+  const positions = FIXED_POSITIONS;
 
   const openPosition = (position: ChassisPosition, installed?: PneuInstalacao) => {
     if (installed) {
@@ -273,7 +229,7 @@ export function PneuInstalacoes() {
     try {
       await instalar(installForm.pneuId, {
         veiculoId: vehicleId,
-        carretaId: trailerId === "SEM_CARRETA" ? null : trailerId,
+        carretaId: null,
         eixo: target.eixo,
         posicao: target.posicao,
         dataInstalacao: installForm.dataInstalacao,
@@ -299,12 +255,10 @@ export function PneuInstalacoes() {
   };
 
   return <div className="space-y-4">
-    <Card><CardContent className="grid gap-4 p-4 md:grid-cols-2">
-      <div className="space-y-1.5"><Label>Caminhão</Label><Select value={vehicleId} onValueChange={(value) => { setVehicleId(value); setTrailerId("SEM_CARRETA"); }}><SelectTrigger><SelectValue placeholder="Selecione a placa"/></SelectTrigger><SelectContent>{veiculos.map(v => <SelectItem key={v.id} value={v.id}>{v.placa}{v.modelo ? ` - ${v.modelo}` : ""}</SelectItem>)}</SelectContent></Select></div>
-      <div className="space-y-1.5"><Label>Carreta (opcional)</Label><Select value={trailerId} onValueChange={setTrailerId}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="SEM_CARRETA">Sem carreta</SelectItem>{veiculos.filter(v => v.id !== vehicleId).map(v => <SelectItem key={v.id} value={v.id}>{v.placa}{v.modelo ? ` - ${v.modelo}` : ""}</SelectItem>)}</SelectContent></Select></div>
+    <Card><CardContent className="p-4">
+      <div className="space-y-1.5"><Label>Caminhão</Label><Select value={vehicleId} onValueChange={setVehicleId}><SelectTrigger><SelectValue placeholder="Selecione a placa"/></SelectTrigger><SelectContent>{caminhoes.map(v => <SelectItem key={v.id} value={v.id}>{v.placa}{v.modelo ? ` - ${v.modelo}` : ""}</SelectItem>)}</SelectContent></Select></div>
+      <p className="mt-2 text-xs text-muted-foreground">O mapa usa sempre a configuração padrão de 4 eixos, com 12 pneus e 1 estepe.</p>
     </CardContent></Card>
-
-    {vehicleId && <ChassisConfiguration key={targetId} vehicle={selectedVehicle} active={active} onUpdate={updateVehicle} />}
 
     <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Truck className="h-5 w-5"/>Mapa de posições</CardTitle></CardHeader><CardContent>
       {!vehicleId ? <div className="py-12 text-center text-sm text-muted-foreground">Selecione um caminhão para visualizar e gerenciar as posições.</div> : <ChassisMap positions={positions} activeByPosition={activeByPosition} onPositionClick={openPosition} title={selectedVehicle ? `${selectedVehicle.placa}${selectedVehicle.modelo ? ` · ${selectedVehicle.modelo}` : ""}` : "Veículo selecionado"} />}
@@ -330,13 +284,14 @@ export function PneuRodizios() {
   const { items: veiculos } = useVeiculos();
   const { instalacoes, rodizios, rodiziar } = usePneuOperacoes();
   const [vehicleId, setVehicleId] = useState("");
-  const [trailerId, setTrailerId] = useState("SEM_CARRETA");
   const [form, setForm] = useState({ data: today(), quilometragem: "", responsavel: "", motivo: "", origemA: "", origemB: "" });
-  const targetId = trailerId !== "SEM_CARRETA" ? trailerId : vehicleId;
-  const selectedVehicle = veiculos.find((vehicle) => vehicle.id === targetId);
-  const active = instalacoes.filter(i => i.ativo && (i.carretaId || i.veiculoId) === targetId);
+  const caminhoes = useMemo(
+    () => veiculos.filter((vehicle) => vehicle.subcategoria === "CAMINHAO" || !vehicle.subcategoria),
+    [veiculos],
+  );
+  const active = instalacoes.filter(i => i.ativo && i.veiculoId === vehicleId && !i.carretaId);
   const activeByPosition = useMemo(() => new Map(active.map((item) => [positionKey(item), item])), [active]);
-  const positions = useMemo(() => generatePositions(selectedVehicle?.quantidadePneus ?? 10, selectedVehicle?.quantidadeEstepes ?? 1), [selectedVehicle?.quantidadePneus, selectedVehicle?.quantidadeEstepes]);
+  const positions = FIXED_POSITIONS;
   const selectedKeys = [form.origemA, form.origemB].map((id) => active.find((item) => item.id === id)).filter(Boolean).map((item) => positionKey(item!));
 
   const selectOnMap = (_position: ChassisPosition, item?: PneuInstalacao) => {
@@ -354,7 +309,7 @@ export function PneuRodizios() {
     try {
       await rodiziar({
         veiculoId: vehicleId,
-        carretaId: trailerId === "SEM_CARRETA" ? null : trailerId,
+        carretaId: null,
         data: form.data,
         quilometragem: Number(form.quilometragem),
         responsavel: form.responsavel,
@@ -371,7 +326,7 @@ export function PneuRodizios() {
 
   return <div className="space-y-4">
     <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><RotateCcw className="h-5 w-5"/>Novo rodízio</CardTitle></CardHeader><CardContent className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2"><div className="space-y-1.5"><Label>Caminhão *</Label><Select value={vehicleId} onValueChange={(value) => { setVehicleId(value); setTrailerId("SEM_CARRETA"); setForm({...form, origemA:"", origemB:""}); }}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent>{veiculos.map(v => <SelectItem key={v.id} value={v.id}>{v.placa}</SelectItem>)}</SelectContent></Select></div><div className="space-y-1.5"><Label>Carreta</Label><Select value={trailerId} onValueChange={(value) => { setTrailerId(value); setForm({...form, origemA:"", origemB:""}); }}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="SEM_CARRETA">Sem carreta</SelectItem>{veiculos.filter(v=>v.id!==vehicleId).map(v => <SelectItem key={v.id} value={v.id}>{v.placa}</SelectItem>)}</SelectContent></Select></div></div>
+      <div className="space-y-1.5"><Label>Caminhão *</Label><Select value={vehicleId} onValueChange={(value) => { setVehicleId(value); setForm({...form, origemA:"", origemB:""}); }}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent>{caminhoes.map(v => <SelectItem key={v.id} value={v.id}>{v.placa}</SelectItem>)}</SelectContent></Select></div>
       {vehicleId && <ChassisMap positions={positions} activeByPosition={activeByPosition} selectedKeys={selectedKeys} onPositionClick={selectOnMap} title="Selecione dois pneus no mapa para realizar o rodízio" />}
       <div className="grid gap-4 md:grid-cols-2"><div className="space-y-1.5"><Label>Posição A *</Label><Select value={form.origemA} onValueChange={v=>setForm({...form,origemA:v})}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent>{active.map(i=><SelectItem key={i.id} value={i.id}>{i.eixo} - {i.posicao} ({i.pneu.numeroFogo})</SelectItem>)}</SelectContent></Select></div><div className="space-y-1.5"><Label>Posição B *</Label><Select value={form.origemB} onValueChange={v=>setForm({...form,origemB:v})}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent>{active.map(i=><SelectItem key={i.id} value={i.id}>{i.eixo} - {i.posicao} ({i.pneu.numeroFogo})</SelectItem>)}</SelectContent></Select></div></div>
       <div className="flex items-center justify-center gap-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground"><ArrowRightLeft className="h-5 w-5"/>As duas posições selecionadas serão trocadas entre si.</div>
