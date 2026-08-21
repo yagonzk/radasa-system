@@ -25,6 +25,20 @@ const emptyForm = { numeroFogo: "", marca: "", modelo: "", medida: "", aro: "", 
 function money(value: number) { return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 function date(value: string) { return value ? new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR") : "—"; }
 
+function compareNumeroFogoDesc(a: Pneu, b: Pneu) {
+  const numeroA = String(a.numeroFogo ?? "").trim();
+  const numeroB = String(b.numeroFogo ?? "").trim();
+
+  if (!numeroA && !numeroB) return 0;
+  if (!numeroA) return 1;
+  if (!numeroB) return -1;
+
+  return numeroB.localeCompare(numeroA, "pt-BR", {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
 export default function Pneus() {
   const { items, create, update, remove } = usePneus();
   const [open, setOpen] = useState(false);
@@ -40,6 +54,16 @@ export default function Pneus() {
     const matchesSearch = !q || [p.numeroFogo, p.marca, p.modelo, p.medida, p.aro, p.fornecedor].some(v => String(v ?? "").toLowerCase().includes(q));
     return matchesSearch && (status === "TODOS" || p.status === status);
   }), [items, search, status]);
+
+  const cadastroItems = useMemo(
+    () => [...filtered].sort(compareNumeroFogoDesc),
+    [filtered],
+  );
+
+  const estoqueItems = useMemo(
+    () => items.filter((p) => p.status === "ESTOQUE").sort(compareNumeroFogoDesc),
+    [items],
+  );
 
   const stats = useMemo(() => {
     const ativos = items.filter(p => p.status !== "DESCARTADO");
@@ -133,9 +157,54 @@ export default function Pneus() {
         <TabsList className="flex h-auto flex-wrap"><TabsTrigger value="cadastro">Cadastro</TabsTrigger><TabsTrigger value="estoque">Estoque</TabsTrigger><TabsTrigger value="instalacoes">Instalações</TabsTrigger><TabsTrigger value="rodizios">Rodízios</TabsTrigger><TabsTrigger value="manutencao">Manutenção</TabsTrigger><TabsTrigger value="historico">Histórico</TabsTrigger><TabsTrigger value="gestao">Gestão e relatórios</TabsTrigger></TabsList>
         <TabsContent value="cadastro" className="mt-4 space-y-4">
           <Card><CardContent className="p-4"><div className="flex flex-col gap-3 md:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Pesquisar número de fogo, marca, modelo, medida, ARO ou fornecedor" value={search} onChange={e => setSearch(e.target.value)}/></div><Select value={status} onValueChange={v => setStatus(v as any)}><SelectTrigger className="md:w-56"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="TODOS">Todos os status</SelectItem>{Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent></Select></div></CardContent></Card>
-          <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Nº de fogo</TableHead><TableHead>Marca / Modelo</TableHead><TableHead>Medida</TableHead><TableHead>ARO</TableHead><TableHead>Tipo</TableHead><TableHead>Status</TableHead><TableHead>Sulco atual</TableHead><TableHead>Compra</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{filtered.map(p => <TableRow key={p.id}><TableCell className="font-semibold"><button className="text-primary hover:underline" onClick={() => setDetails(p)}>{p.numeroFogo}</button></TableCell><TableCell>{[p.marca, p.modelo].filter(Boolean).join(" - ") || "—"}</TableCell><TableCell>{p.medida || "—"}</TableCell><TableCell>{p.aro || "—"}</TableCell><TableCell>{tipoLabels[p.tipo]}</TableCell><TableCell><Badge variant={p.status === "DESCARTADO" ? "destructive" : p.status === "INSTALADO" ? "default" : "secondary"}>{statusLabels[p.status]}</Badge></TableCell><TableCell>{p.sulcoAtual == null ? "—" : `${p.sulcoAtual.toFixed(1)} mm`}</TableCell><TableCell>{date(p.dataCompra)}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" onClick={() => setDetails(p)}><History className="h-4 w-4"/></Button><Button variant="ghost" size="icon" title="Editar informações do pneu" aria-label="Editar informações do pneu" onClick={() => openEdit(p)}><Pencil className="h-4 w-4"/></Button><Button variant="ghost" size="icon" className="text-destructive" onClick={() => archive(p)}><Trash2 className="h-4 w-4"/></Button></div></TableCell></TableRow>)}{filtered.length === 0 && <TableRow><TableCell colSpan={9} className="h-28 text-center text-muted-foreground">Nenhum pneu encontrado.</TableCell></TableRow>}</TableBody></Table></div></CardContent></Card>
+          <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Nº de fogo</TableHead><TableHead>Marca / Modelo</TableHead><TableHead>Medida</TableHead><TableHead>ARO</TableHead><TableHead>Tipo</TableHead><TableHead>Status</TableHead><TableHead>Sulco atual</TableHead><TableHead>Compra</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{cadastroItems.map(p => <TableRow key={p.id}><TableCell className="font-semibold"><button className="text-primary hover:underline" onClick={() => setDetails(p)}>{p.numeroFogo || "—"}</button></TableCell><TableCell>{[p.marca, p.modelo].filter(Boolean).join(" - ") || "—"}</TableCell><TableCell>{p.medida || "—"}</TableCell><TableCell>{p.aro || "—"}</TableCell><TableCell>{tipoLabels[p.tipo]}</TableCell><TableCell><Badge variant={p.status === "DESCARTADO" ? "destructive" : p.status === "INSTALADO" ? "default" : "secondary"}>{statusLabels[p.status]}</Badge></TableCell><TableCell>{p.sulcoAtual == null ? "—" : `${p.sulcoAtual.toFixed(1)} mm`}</TableCell><TableCell>{date(p.dataCompra)}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" onClick={() => setDetails(p)}><History className="h-4 w-4"/></Button><Button variant="ghost" size="icon" title="Editar informações do pneu" aria-label="Editar informações do pneu" onClick={() => openEdit(p)}><Pencil className="h-4 w-4"/></Button><Button variant="ghost" size="icon" className="text-destructive" onClick={() => archive(p)}><Trash2 className="h-4 w-4"/></Button></div></TableCell></TableRow>)}{cadastroItems.length === 0 && <TableRow><TableCell colSpan={9} className="h-28 text-center text-muted-foreground">Nenhum pneu encontrado.</TableCell></TableRow>}</TableBody></Table></div></CardContent></Card>
         </TabsContent>
-        <TabsContent value="estoque" className="mt-4"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{Object.entries(condicaoLabels).map(([key, label]) => <Card key={key}><CardHeader><CardTitle className="text-sm">{label}</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{items.filter(p => p.condicao === key && p.status !== "DESCARTADO").length}</p><p className="text-xs text-muted-foreground">pneus cadastrados</p></CardContent></Card>)}</div></TabsContent>
+        <TabsContent value="estoque" className="mt-4 space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {Object.entries(condicaoLabels).map(([key, label]) => <Card key={key}><CardHeader><CardTitle className="text-sm">{label}</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{estoqueItems.filter(p => p.condicao === key).length}</p><p className="text-xs text-muted-foreground">pneus em estoque</p></CardContent></Card>)}
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between gap-3 text-base">
+                <span>Pneus em estoque</span>
+                <Badge variant="secondary">{estoqueItems.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nº de fogo</TableHead>
+                      <TableHead>Marca / Modelo</TableHead>
+                      <TableHead>Medida</TableHead>
+                      <TableHead>ARO</TableHead>
+                      <TableHead>Condição</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Sulco atual</TableHead>
+                      <TableHead>Compra</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {estoqueItems.map((p) => <TableRow key={p.id}>
+                      <TableCell className="font-semibold"><button className="text-primary hover:underline" onClick={() => setDetails(p)}>{p.numeroFogo || "—"}</button></TableCell>
+                      <TableCell>{[p.marca, p.modelo].filter(Boolean).join(" - ") || "—"}</TableCell>
+                      <TableCell>{p.medida || "—"}</TableCell>
+                      <TableCell>{p.aro || "—"}</TableCell>
+                      <TableCell><Badge variant="secondary">{condicaoLabels[p.condicao]}</Badge></TableCell>
+                      <TableCell>{tipoLabels[p.tipo]}</TableCell>
+                      <TableCell>{p.sulcoAtual == null ? "—" : `${p.sulcoAtual.toFixed(1)} mm`}</TableCell>
+                      <TableCell>{date(p.dataCompra)}</TableCell>
+                      <TableCell className="text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" title="Ver detalhes" onClick={() => setDetails(p)}><History className="h-4 w-4"/></Button><Button variant="ghost" size="icon" title="Editar informações do pneu" onClick={() => openEdit(p)}><Pencil className="h-4 w-4"/></Button></div></TableCell>
+                    </TableRow>)}
+                    {estoqueItems.length === 0 && <TableRow><TableCell colSpan={9} className="h-28 text-center text-muted-foreground">Nenhum pneu está em estoque.</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
         <TabsContent value="instalacoes" className="mt-4"><PneuInstalacoes/></TabsContent>
         <TabsContent value="rodizios" className="mt-4"><PneuRodizios/></TabsContent>
         <TabsContent value="manutencao" className="mt-4"><PneuManutencao/></TabsContent><TabsContent value="gestao" className="mt-4"><PneuGestao/></TabsContent>
