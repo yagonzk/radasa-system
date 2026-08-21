@@ -251,9 +251,10 @@ function requireEntity<T>(data: unknown, entityName: string): T {
   throw new Error(`Resposta inválida ao salvar ${entityName}.`);
 }
 
-function useApiCrud<T extends Entity>(resource: string, entityName: string) {
+function useApiCrud<T extends Entity>(resource: string, entityName: string, options?: { optimistic?: boolean }) {
   const [items, setItems] = useState<T[]>(() => peekResourceCollection<T>(resource) ?? []);
   const sourceId = useRef(generateId()).current;
+  const optimistic = options?.optimistic !== false;
   const mutationRevision = useRef(0);
   const replaceLocalItem = useCallback((item: T) => {
     setItems(current => {
@@ -300,29 +301,34 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string) {
   const create = useCallback(async (data: Omit<T, "id" | "createdAt">): Promise<T> => {
     const newItem = { ...data, id: generateId(), createdAt: new Date().toISOString() } as T;
     mutationRevision.current += 1;
-    setItems(current => [...current, newItem]);
+    if (optimistic) setItems(current => [...current, newItem]);
 
     try {
       const response = await api.post<unknown>(`/${resource}`, newItem);
       const createdItem = requireEntity<T>(response.data, entityName);
-      setItems(current => current.map(item => item.id === newItem.id ? createdItem : item));
+      setItems(current => {
+        if (!optimistic) return [...current, createdItem];
+        return current.map(item => item.id === newItem.id ? createdItem : item);
+      });
       invalidateResourceCache(resource);
       notifyApiChange(resource, sourceId);
       return createdItem;
     } catch (error) {
-      setItems(current => current.filter(item => item.id !== newItem.id));
+      if (optimistic) setItems(current => current.filter(item => item.id !== newItem.id));
       throw error;
     }
-  }, [entityName, resource, sourceId]);
+  }, [entityName, optimistic, resource, sourceId]);
 
   const update = useCallback(async (id: string, data: Partial<Omit<T, "id" | "createdAt">>): Promise<T> => {
     let previous: T | undefined;
     mutationRevision.current += 1;
-    setItems(current => current.map(item => {
-      if (item.id !== id) return item;
-      previous = item;
-      return { ...item, ...data };
-    }));
+    if (optimistic) {
+      setItems(current => current.map(item => {
+        if (item.id !== id) return item;
+        previous = item;
+        return { ...item, ...data };
+      }));
+    }
 
     try {
       const response = await api.put<unknown>(`/${resource}/${id}`, data);
@@ -332,12 +338,12 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string) {
       notifyApiChange(resource, sourceId);
       return updatedItem;
     } catch (error) {
-      if (previous) {
+      if (optimistic && previous) {
         setItems(current => current.map(item => item.id === id ? previous! : item));
       }
       throw error;
     }
-  }, [entityName, resource, sourceId]);
+  }, [entityName, optimistic, resource, sourceId]);
 
   const remove = useCallback(async (id: string): Promise<void> => {
     let previous: T | undefined;
@@ -373,7 +379,7 @@ export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");
 export const useViagens = () => useApiCrud<Viagem>("viagens", "Viagem");
 export const useAbastecimentos = () => useApiCrud<Abastecimento>("abastecimentos", "Abastecimento");
 export const useCiots = () => useApiCrud<Ciot>("ciots", "CIOT");
-export const usePneus = () => useApiCrud<Pneu>("pneus", "Pneu");
+export const usePneus = () => useApiCrud<Pneu>("pneus", "Pneu", { optimistic: false });
 
 export function useFechamentos() {
   const crud = useApiCrud<Fechamento>("fechamentos", "Fechamento");
