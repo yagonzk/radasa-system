@@ -1,7 +1,9 @@
-import { useState, useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
-import { useViagens, useMotoristas, useVeiculos, type Viagem } from "@/lib/store";
+import { useLocais, useViagens, useMotoristas, useVeiculos, type Local, type Motorista, type Viagem } from "@/lib/store";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
+import { api } from "@/lib/api";
+import { extrairTextoPdf, type PdfTextProgress } from "@/lib/pdfText";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -20,12 +22,98 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, Edit3, Eye } from "lucide-react";
+import { Plus, Trash2, Edit3, Eye, FileText, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
+
+
+type LerRomaneioViagemResponse = {
+  parserVersion: string;
+  dataManifesto: string;
+  placa: string;
+  valorFrete: number;
+  romaneios: string[];
+  motoristaNome: string;
+  cidadeDestino: string;
+  distanciaKm: number;
+  avisos: string[];
+};
+
+type RomaneioVinculado = {
+  arquivo: string;
+  numeros: string[];
+  camposPreenchidos: string[];
+  observacoes: string[];
+};
+
+function normalizeLookup(value: string) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function normalizePlate(value: string) {
+  return String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+function progressLabel(progress: PdfTextProgress) {
+  const page = progress.totalPages > 1 ? ` ${progress.page}/${progress.totalPages}` : "";
+  if (progress.stage === "ocr") return `Lendo romaneio${page} · ${Math.round(progress.progress * 100)}%`;
+  if (progress.stage === "ocr-loading") return `Preparando OCR${page}...`;
+  return `Preparando PDF${page}...`;
+}
+function findRegisteredPlate(parsedPlate: string, vehicles: Array<{ placa: string }>) {
+  const key = normalizePlate(parsedPlate);
+  return vehicles.find((vehicle) => normalizePlate(vehicle.placa) === key)?.placa ?? "";
+}
+function findMotoristaId(text: string, parsedName: string, motoristas: Motorista[]) {
+  const textKey = normalizeLookup(text);
+  const parsedKey = normalizeLookup(parsedName);
+  const candidates = motoristas.filter((motorista) => motorista.status === "ATIVO").map((motorista) => {
+    const nameKey = normalizeLookup(motorista.nome);
+    let score = 0;
+    if (nameKey && textKey.includes(nameKey)) score = 1000 + nameKey.length;
+    if (parsedKey && nameKey === parsedKey) score = Math.max(score, 2000);
+    if (parsedKey && parsedKey.length >= 3 && nameKey.includes(parsedKey)) score = Math.max(score, 1500 + parsedKey.length);
+    if (parsedKey && nameKey.length >= 3 && parsedKey.includes(nameKey)) score = Math.max(score, 1400 + nameKey.length);
+    const firstName = nameKey.split(" ")[0] ?? "";
+    if (parsedKey && firstName.length >= 3 && parsedKey.split(" ").includes(firstName)) score = Math.max(score, 1200 + firstName.length);
+    return { motorista, score };
+  }).filter((entry) => entry.score > 0).sort((a,b) => b.score-a.score);
+  if (!candidates.length) return "";
+  if (candidates.length > 1 && candidates[0].score === candidates[1].score) return "";
+  return candidates[0].motorista.id;
+}
+function findCidadeDestino(text: string, parsedCity: string, locais: Local[], viagens: Viagem[]) {
+  if (parsedCity.trim()) return parsedCity.trim();
+  const normalizedWhole = normalizeLookup(text);
+  const clientIndex = normalizedWhole.indexOf("CLIENTE ");
+  const searchArea = clientIndex >= 0 ? normalizedWhole.slice(clientIndex) : normalizedWhole;
+  const knownCities = Array.from(new Set([
+    ...locais.map((local) => local.cidade),
+    ...viagens.map((viagem) => viagem.cidadeEntrega),
+  ].map((city) => city?.trim()).filter((city): city is string => Boolean(city))));
+  let best = { city: "", index: -1, length: 0 };
+  for (const city of knownCities) {
+    const key = normalizeLookup(city);
+    if (key.length < 4) continue;
+    const index = searchArea.lastIndexOf(key);
+    if (index > best.index || (index === best.index && key.length > best.length)) best = { city, index, length: key.length };
+  }
+  return best.city;
+}
+function previousDistanceForCity(city: string, viagens: Viagem[]) {
+  const key = normalizeLookup(city);
+  if (!key) return 0;
+  const previous = viagens.filter((viagem) => normalizeLookup(viagem.cidadeEntrega) === key && Number(viagem.distanciaKm) > 0).sort((a,b) => b.dataManifesto.localeCompare(a.dataManifesto));
+  return Number(previous[0]?.distanciaKm ?? 0);
+}
 
 export default function Viagens() {
   const { items: viagens, create, update, remove } = useViagens();
   const { items: motoristas } = useMotoristas();
+  const { items: locais } = useLocais();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingViagem, setEditingViagem] = useState<Viagem | null>(null);
@@ -48,6 +136,10 @@ export default function Viagens() {
   const [valorAbastecimento, setValorAbastecimento] = useState("");
   const [valorChapa, setValorChapa] = useState("");
   const [saving, setSaving] = useState(false);
+  const romaneioInputRef = useRef<HTMLInputElement>(null);
+  const [readingRomaneio, setReadingRomaneio] = useState(false);
+  const [readingRomaneioLabel, setReadingRomaneioLabel] = useState("");
+  const [romaneioVinculado, setRomaneioVinculado] = useState<RomaneioVinculado | null>(null);
 
   const motoristasAtivos = useMemo(
     () => motoristas.filter((motorista) => motorista.status === "ATIVO"),
@@ -88,11 +180,13 @@ export default function Viagens() {
       return;
     }
     resetForm();
+    setRomaneioVinculado(null);
     setEditingViagem(null);
     setFormOpen(true);
   };
 
   const handleOpenEdit = (v: Viagem) => {
+    setRomaneioVinculado(null);
     setEditingViagem(v);
     setPlaca(v.placa);
     setMotoristaId(v.motoristaId);
@@ -118,6 +212,64 @@ export default function Viagens() {
     setValorDiaria("");
     setValorAbastecimento("");
     setValorChapa("");
+  };
+
+  const handleReadRomaneio = async (file?: File) => {
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("Selecione um romaneio em PDF.");
+      return;
+    }
+    setReadingRomaneio(true);
+    setReadingRomaneioLabel("Preparando PDF...");
+    try {
+      const text = await extrairTextoPdf(file, (progress) => setReadingRomaneioLabel(progressLabel(progress)), { forceOcr: true });
+      const response = await api.post<LerRomaneioViagemResponse>("/viagens/ler-romaneio", { texto: text }, { timeout: 240_000 });
+      const parsed = response.data;
+      resetForm();
+      setEditingViagem(null);
+      const registeredPlate = findRegisteredPlate(parsed.placa, veiculos);
+      const matchedMotoristaId = findMotoristaId(text, parsed.motoristaNome, motoristas);
+      const destination = findCidadeDestino(text, parsed.cidadeDestino, locais, viagens);
+      const historicalDistance = !parsed.distanciaKm && destination ? previousDistanceForCity(destination, viagens) : 0;
+      const distance = Number(parsed.distanciaKm || historicalDistance || 0);
+      if (registeredPlate) setPlaca(registeredPlate);
+      if (matchedMotoristaId) setMotoristaId(matchedMotoristaId);
+      if (parsed.valorFrete > 0) setValorFrete(String(parsed.valorFrete));
+      if (parsed.dataManifesto) setDataManifesto(parsed.dataManifesto);
+      if (destination) setCidadeEntrega(destination);
+      if (distance > 0) setDistanciaKm(String(distance));
+      setValorPedagio("");
+      setValorDiaria("");
+      setValorAbastecimento("");
+      setValorChapa("");
+      const preenchidos = [
+        registeredPlate && "placa",
+        matchedMotoristaId && "motorista",
+        parsed.valorFrete > 0 && "valor do frete",
+        parsed.dataManifesto && "data do manifesto",
+        destination && "cidade de destino",
+        distance > 0 && "distância em KM",
+      ].filter((value): value is string => Boolean(value));
+      const observacoes: string[] = [];
+      if (parsed.placa && !registeredPlate) observacoes.push(`Placa ${parsed.placa} não está cadastrada.`);
+      if (!matchedMotoristaId) observacoes.push("Motorista não identificado entre os cadastros ativos.");
+      if (!destination) observacoes.push("Cidade de destino não identificada no romaneio.");
+      if (!distance) observacoes.push("Distância não identificada no romaneio nem no histórico desta cidade.");
+      if (historicalDistance > 0) observacoes.push("A distância foi recuperada da viagem mais recente para a mesma cidade.");
+      observacoes.push(...(parsed.avisos ?? []));
+      setRomaneioVinculado({ arquivo: file.name, numeros: parsed.romaneios ?? [], camposPreenchidos: preenchidos, observacoes: Array.from(new Set(observacoes)) });
+      setFormOpen(true);
+      if (preenchidos.length >= 5) toast.success(`Romaneio lido. ${preenchidos.length} campos da viagem foram preenchidos automaticamente.`);
+      else toast.warning(`Romaneio lido com ${preenchidos.length} campos preenchidos. Revise os campos pendentes.`);
+    } catch (error: any) {
+      console.error("Falha ao ler romaneio para Viagens.", error);
+      toast.error(error?.response?.data?.message ?? error?.message ?? "Não foi possível ler o romaneio.");
+    } finally {
+      setReadingRomaneio(false);
+      setReadingRomaneioLabel("");
+      if (romaneioInputRef.current) romaneioInputRef.current.value = "";
+    }
   };
 
   const handleSave = async () => {
@@ -207,10 +359,14 @@ export default function Viagens() {
               Registre frete, rota e custos em uma única ficha. Viagens concluídas continuam disponíveis para edição e exclusão.
             </p>
           </div>
-          <Button onClick={handleOpenCreate}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Registrar viagem
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <input ref={romaneioInputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(event) => void handleReadRomaneio(event.target.files?.[0])} />
+            <Button variant="outline" disabled={readingRomaneio} onClick={() => romaneioInputRef.current?.click()}>
+              {readingRomaneio ? <LoaderCircle className="mr-1.5 h-4 w-4 animate-spin" /> : <FileText className="mr-1.5 h-4 w-4" />}
+              {readingRomaneio ? readingRomaneioLabel || "Lendo romaneio..." : "Ler romaneio"}
+            </Button>
+            <Button onClick={handleOpenCreate}><Plus className="mr-1.5 h-4 w-4" />Registrar viagem</Button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -462,6 +618,19 @@ export default function Viagens() {
           </DialogHeader>
 
           <div className="space-y-4">
+            {romaneioVinculado && !editingViagem && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <div className="flex items-start gap-2">
+                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">Romaneio vinculado</p>
+                    <p className="truncate text-xs text-muted-foreground" title={romaneioVinculado.arquivo}>{romaneioVinculado.arquivo}{romaneioVinculado.numeros.length ? ` · Nº ${romaneioVinculado.numeros.join(", ")}` : ""}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Preenchido automaticamente: {romaneioVinculado.camposPreenchidos.length ? romaneioVinculado.camposPreenchidos.join(", ") : "nenhum campo"}.</p>
+                    {romaneioVinculado.observacoes.length > 0 && <div className="mt-2 space-y-0.5 text-xs text-amber-700 dark:text-amber-400">{romaneioVinculado.observacoes.slice(0, 4).map((observacao) => <p key={observacao}>• {observacao}</p>)}</div>}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Placa</Label>
