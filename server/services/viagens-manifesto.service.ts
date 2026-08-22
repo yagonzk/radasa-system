@@ -1,7 +1,7 @@
 import { completarDadosAnttCte } from "./cte-antt-auto.service.js";
 import { AppError } from "../utils/app-error.js";
 
-export const VIAGENS_MANIFESTO_PARSER_VERSION = "2026.08.21.02";
+export const VIAGENS_MANIFESTO_PARSER_VERSION = "2026.08.21.03";
 
 export type ManifestoViagemInterpretado = {
   parserVersion: string;
@@ -85,69 +85,152 @@ function extractDriver(text: string) {
   return labeled?.[1]?.replace(/\s{2,}/g, " ").trim() ?? "";
 }
 
-function extractCityUfPairs(value: string) {
-  return Array.from(value.matchAll(/([A-ZÀ-Ü][A-Za-zÀ-ÿ.' -]{2,70}?)\s*\/\s*([A-Z]{2})\b/g))
+function cleanRouteCity(value: string) {
+  return String(value ?? "")
+    .replace(/^(?:RAD)\s+/i, "")
+    .replace(/^(?:FILIAL\s+(?:ORIG\.?|DEST\.?))\s+/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function extractCitySlashValues(value: string) {
+  return Array.from(value.matchAll(/([A-ZÀ-Ü][A-Za-zÀ-ÿ.' -]{2,90}?)\s*\/(?:\s*([A-Z]{2})\b)?/gi))
     .map((match) => ({
-      cidade: match[1]
-        .replace(/\s{2,}/g, " ")
-        .replace(/^(?:RAD|FILIAL\s+(?:ORIG\.?|DEST\.?))\s+/i, "")
-        .trim(),
-      uf: match[2].toUpperCase(),
+      cidade: cleanRouteCity(match[1]),
+      uf: (match[2] ?? "").toUpperCase(),
     }))
-    .filter((item) => item.cidade.length >= 2);
+    .filter((item) => {
+      const key = normalize(item.cidade).replace(/[^A-Z0-9]+/g, " ").trim();
+      return item.cidade.length >= 2
+        && !/^(?:MUNICIPIO|MUNICÍPIO|FILIAL|ORIGEM|DESTINO|VALE PEDAGIO|VALE PEDÁGIO)$/.test(key);
+    });
+}
+
+const UF_CODES = new Set([
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+  "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+  "SP", "SE", "TO",
+]);
+
+function extractUnloadUf(text: string) {
+  const lines = text
+    .split("\n")
+    .map((line) => line.replace(/\s{2,}/g, " ").trim())
+    .filter(Boolean);
+
+  const headerIndex = lines.findIndex((line) => /UF\s+Descareg\.?/i.test(line));
+  if (headerIndex >= 0) {
+    const states: string[] = [];
+    for (let index = headerIndex + 1; index < Math.min(lines.length, headerIndex + 9); index += 1) {
+      if (/CONTROLE\s+DO\s+FISCO/i.test(lines[index])) break;
+      for (const token of lines[index].match(/\b[A-Z]{2}\b/g) ?? []) {
+        if (UF_CODES.has(token)) states.push(token);
+      }
+    }
+    // No DAMDFE, após os cabeçalhos vêm UF Carreg. e UF Descareg. nesta ordem.
+    // Se ambas estiverem presentes, a última antes de CONTROLE DO FISCO é a descarga.
+    if (states.length) return states.at(-1) ?? "";
+  }
+
+  const direct = text.match(/UF\s+Descareg\.?\s*[:\-]?\s*(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/i);
+  return direct?.[1]?.toUpperCase() ?? "";
+}
+
+function findRouteHeaderLine(lines: string[], label: RegExp) {
+  return lines.findIndex((line) => label.test(line));
+}
+
+function extractOriginFromRouteLines(lines: string[]) {
+  const originHeaderIndex = findRouteHeaderLine(lines, /Munic[ií]pio\s+Origem/i);
+  if (originHeaderIndex < 0) return { cidade: "", uf: "" };
+
+  for (let index = originHeaderIndex; index < Math.min(lines.length, originHeaderIndex + 7); index += 1) {
+    const line = index === originHeaderIndex
+      ? lines[index].replace(/^.*?Munic[ií]pio\s+Origem/i, "")
+      : lines[index];
+    if (index > originHeaderIndex && /Filial\s+Orig\.?/i.test(line)) break;
+    const values = extractCitySlashValues(line);
+    if (values.length) return values[0];
+  }
+  return { cidade: "", uf: "" };
+}
+
+function extractDestinationFromRouteLines(
+  lines: string[],
+  origin: { cidade: string; uf: string },
+) {
+  const destinationHeaderIndex = findRouteHeaderLine(lines, /Munic[ií]pio\s+Destino/i);
+  const originKey = normalize(origin.cidade).replace(/[^A-Z0-9]+/g, " ").trim();
+
+  // PDF.js e leitores de PDF podem devolver o DAMDFE de duas maneiras:
+  // 1) cada coluna em uma linha: Municipio Destino -> RAD -> São José... /
+  // 2) cabeçalhos em uma linha e valores na seguinte:
+  //    Ipiranga do Norte / MT  RAD  São José do Rio Claro /
+  // Em ambos os casos escolhemos a primeira cidade DIFERENTE do Município Origem.
+  const scanStart = destinationHeaderIndex >= 0 ? destinationHeaderIndex : 0;
+  const scanEnd = destinationHeaderIndex >= 0
+    ? Math.min(lines.length, destinationHeaderIndex + 8)
+    : lines.length;
+
+  for (let index = scanStart; index < scanEnd; index += 1) {
+    if (index > scanStart && /(?:Filial\s+Dest\.?|Dados\s+do\s+Seguro)/i.test(lines[index])) break;
+
+    let line = lines[index];
+    if (index === destinationHeaderIndex) {
+      line = line.replace(/^.*?Munic[ií]pio\s+Destino/i, "");
+    }
+    if (/^(?:RAD|Filial\s+(?:Orig\.?|Dest\.?))$/i.test(line.trim())) continue;
+
+    const values = extractCitySlashValues(line);
+    for (const value of values) {
+      const key = normalize(value.cidade).replace(/[^A-Z0-9]+/g, " ").trim();
+      if (!key || key === originKey) continue;
+      return value;
+    }
+  }
+
+  // Quando a ordem lógica do PDF coloca a linha física de valores ANTES da
+  // linha "Municipio Destino", procura no bloco inteiro pela segunda cidade.
+  for (const line of lines) {
+    const values = extractCitySlashValues(line);
+    for (const value of values) {
+      const key = normalize(value.cidade).replace(/[^A-Z0-9]+/g, " ").trim();
+      if (!key || key === originKey) continue;
+      return value;
+    }
+  }
+
+  return { cidade: "", uf: "" };
 }
 
 function extractOriginDestination(text: string) {
-  const block = findBlock(text, /Origem\s*\/\s*Destino/i, /Dados\s+do\s+Seguro/i, 1800);
+  const block = findBlock(text, /Origem\s*\/\s*Destino/i, /Dados\s+do\s+Seguro/i, 2200);
   const lines = block
     .split("\n")
     .map((line) => line.replace(/\s{2,}/g, " ").trim())
     .filter(Boolean);
 
-  // Regra principal do DAMDFE: CIDADE DE ENTREGA deve vir EXCLUSIVAMENTE
-  // do campo "Municipio Destino". No layout de referência, os cabeçalhos
-  // "Municipio Origem" e "Municipio Destino" aparecem na mesma linha e,
-  // logo abaixo, aparecem "Ipiranga do Norte / MT  Colniza / MT".
-  const headerIndex = lines.findIndex(
-    (line) => /Munic[ií]pio\s+Origem/i.test(line) && /Munic[ií]pio\s+Destino/i.test(line),
-  );
+  const origin = extractOriginFromRouteLines(lines);
+  let destination = extractDestinationFromRouteLines(lines, origin);
 
-  if (headerIndex >= 0) {
-    const pairs: Array<{ cidade: string; uf: string }> = [];
-    for (let index = headerIndex + 1; index < Math.min(lines.length, headerIndex + 7); index += 1) {
-      if (/Filial\s+Orig\.?/i.test(lines[index])) break;
-      pairs.push(...extractCityUfPairs(lines[index]));
-      if (pairs.length >= 2) break;
-    }
-    if (pairs.length >= 2) {
-      return {
-        origemCidade: pairs[0].cidade,
-        origemUf: pairs[0].uf,
-        cidadeDestino: pairs[1].cidade,
-        destinoUf: pairs[1].uf,
-      };
-    }
+  // Fallback físico do cabeçalho: em algumas extrações os dois municípios
+  // ficam na mesma linha e o destino pode vir sem UF, por exemplo:
+  // "Ipiranga do Norte / MT São José do Rio Claro /".
+  if (!destination.cidade) {
+    const allValues = lines.flatMap(extractCitySlashValues);
+    const originKey = normalize(origin.cidade).replace(/[^A-Z0-9]+/g, " ").trim();
+    destination = allValues.find((value) => {
+      const key = normalize(value.cidade).replace(/[^A-Z0-9]+/g, " ").trim();
+      return key && key !== originKey;
+    }) ?? { cidade: "", uf: "" };
   }
 
-  // Fallback ainda preso ao bloco Origem/Destino: usa as duas primeiras
-  // ocorrências Município/UF e nunca tenta inferir destino por cliente/endereço.
-  const pairs = extractCityUfPairs(block);
-  if (pairs.length >= 2) {
-    return {
-      origemCidade: pairs[0].cidade,
-      origemUf: pairs[0].uf,
-      cidadeDestino: pairs[1].cidade,
-      destinoUf: pairs[1].uf,
-    };
-  }
-
-  // Layout alternativo em que o OCR mantém "Municipio Destino" junto do valor.
-  const direct = block.match(/Munic[ií]pio\s+Destino[\s:\-]*([A-ZÀ-Ü][A-Za-zÀ-ÿ.' -]{2,70}?)\s*\/\s*([A-Z]{2})\b/i);
+  const unloadUf = extractUnloadUf(text);
   return {
-    origemCidade: "",
-    origemUf: "",
-    cidadeDestino: direct?.[1]?.replace(/\s{2,}/g, " ").trim() ?? "",
-    destinoUf: direct?.[2]?.toUpperCase() ?? "",
+    origemCidade: origin.cidade,
+    origemUf: origin.uf,
+    cidadeDestino: destination.cidade,
+    destinoUf: destination.uf || unloadUf,
   };
 }
 
