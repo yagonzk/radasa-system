@@ -138,6 +138,7 @@ model Cliente {
   manifestoProdutos ManifestoProduto[]
   abastecimentos Abastecimento[]
   ciots          Ciot[]
+  precosFiscais  FiscalPrecoProduto[]
 
   @@index([nomeFantasia])
   @@index([codigoInterno])
@@ -154,10 +155,31 @@ model Produto {
   updatedAt            DateTime               @updatedAt
   manifestos           ManifestoProduto[]
   abastecimentos       AbastecimentoProduto[]
+  precosFiscais        FiscalPrecoProduto[]
 
   @@index([nome])
   @@index([codigoInterno])
   @@map("produtos")
+}
+
+
+model FiscalPrecoProduto {
+  id                    String   @id @default(cuid())
+  produtoId             String
+  clienteId             String?
+  vigenciaInicio        DateTime @db.Date
+  custoUnitarioLebrinha Decimal  @db.Decimal(14, 4)
+  vendaUnitarioCliente  Decimal  @db.Decimal(14, 4)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  produto               Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  cliente               Cliente? @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([produtoId])
+  @@index([clienteId])
+  @@index([vigenciaInicio])
+  @@index([produtoId, clienteId, vigenciaInicio])
+  @@map("fiscal_precos_produtos")
 }
 
 

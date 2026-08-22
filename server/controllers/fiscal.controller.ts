@@ -1,10 +1,39 @@
 import type { Request, Response } from "express";
 import { fiscalService } from "../services/fiscal.service.js";
 
+function periodFromRequest(req: Request) {
+  return {
+    from: typeof req.query.from === "string" && req.query.from.trim()
+      ? req.query.from.trim()
+      : undefined,
+    to: typeof req.query.to === "string" && req.query.to.trim()
+      ? req.query.to.trim()
+      : undefined,
+  };
+}
+
 export const fiscalController = {
   async resumo(req: Request, res: Response) {
-    const from = typeof req.query.from === "string" && req.query.from.trim() ? req.query.from.trim() : undefined;
-    const to = typeof req.query.to === "string" && req.query.to.trim() ? req.query.to.trim() : undefined;
-    res.json(await fiscalService.resumo({ from, to }));
+    res.json(await fiscalService.resumo(periodFromRequest(req)));
+  },
+
+  async rentabilidade(req: Request, res: Response) {
+    res.json(await fiscalService.rentabilidade(periodFromRequest(req)));
+  },
+
+  async listPrecosProdutos(_req: Request, res: Response) {
+    res.json(await fiscalService.listPrecosProdutos());
+  },
+
+  async createPrecoProduto(req: Request, res: Response) {
+    res.status(201).json(await fiscalService.createPrecoProduto(req.body));
+  },
+
+  async updatePrecoProduto(req: Request, res: Response) {
+    res.json(await fiscalService.updatePrecoProduto(req.params.id, req.body));
+  },
+
+  async removePrecoProduto(req: Request, res: Response) {
+    res.json(await fiscalService.removePrecoProduto(req.params.id));
   },
 };

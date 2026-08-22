@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import * as XLSX from "xlsx";
 import Layout from "@/components/Layout";
+import FiscalRentabilidade from "@/components/fiscal/FiscalRentabilidade";
 import { api } from "@/lib/api";
 import { formatBRL } from "@/lib/exportUtils";
 import { Button } from "@/components/ui/button";
@@ -295,7 +296,7 @@ export default function Fiscal() {
               <Badge variant="outline">Faturamento x despesas</Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Compare o faturamento dos Romaneios com abastecimentos e demais custos registrados no sistema.
+              Compare faturamento e despesas e acompanhe a rentabilidade por cliente, produto e frete.
             </p>
           </div>
           <Button variant="outline" disabled={!data || loading} onClick={exportXlsx}>
@@ -392,6 +393,8 @@ export default function Fiscal() {
                 </CardContent>
               </Card>
             </div>
+
+            <FiscalRentabilidade from={from} to={to} />
 
             <Card>
               <CardHeader>
