@@ -23,8 +23,11 @@ import {
   Truck,
   CircleDollarSign,
   ChevronDown,
+  Eye,
+  EyeOff,
   Filter,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -280,42 +283,59 @@ function buildGroups(lines: LinhaRomaneioFiscal[]) {
 }
 
 function MiniCard({
+  cardKey,
   title,
   value,
+  hiddenValue,
   detail,
-  icon,
+  Icon,
+  visible,
+  onToggleVisible,
   className = "",
   valueClassName = "",
-  iconClassName = "bg-primary/10 text-primary",
 }: {
+  cardKey: string;
   title: string;
   value: string;
+  hiddenValue: string;
   detail: string;
-  icon: React.ReactNode;
+  Icon: LucideIcon;
+  visible: boolean;
+  onToggleVisible: (key: string) => void;
   className?: string;
   valueClassName?: string;
-  iconClassName?: string;
 }) {
   return (
-    <Card className={`min-w-0 overflow-visible ${className}`}>
+    <Card className={`relative min-w-0 overflow-hidden ${className}`}>
       <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {title}
-            </p>
-            <p
-              className={`mt-1 whitespace-nowrap text-lg font-bold tabular-nums xl:text-xl ${valueClassName}`}
-              title={value}
-            >
-              {value}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-          </div>
-          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
-            {icon}
-          </div>
+        <div className="min-h-8 pr-8">
+          <p className="flex min-w-0 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground">
+            <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{title}</span>
+          </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => onToggleVisible(cardKey)}
+          className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={visible ? `Ocultar ${title}` : `Mostrar ${title}`}
+          title={visible ? "Ocultar valor" : "Mostrar valor"}
+        >
+          {visible ? (
+            <EyeOff className="h-4 w-4" />
+          ) : (
+            <Eye className="h-4 w-4" />
+          )}
+        </button>
+
+        <p
+          className={`mt-1 whitespace-nowrap text-lg font-bold tabular-nums xl:text-xl ${valueClassName}`}
+          title={visible ? value : "Valor oculto"}
+        >
+          {visible ? value : hiddenValue}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
       </CardContent>
     </Card>
   );
@@ -344,6 +364,21 @@ export default function FiscalRentabilidade({
   const [placa, setPlaca] = useState("__todas__");
   const [romaneio, setRomaneio] = useState("__todos__");
   const [payment, setPayment] = useState<PaymentFilter>("todos");
+  const [visibleDashboardValues, setVisibleDashboardValues] = useState<Record<string, boolean>>({
+    freteCliente: true,
+    recebido: true,
+    aReceber: true,
+    totalLebrinha: true,
+    diferenca: true,
+    margem: true,
+  });
+
+  const toggleDashboardValue = (key: string) => {
+    setVisibleDashboardValues((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -693,43 +728,66 @@ export default function FiscalRentabilidade({
                 return (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
                     <MiniCard
+                      cardKey="freteCliente"
                       title="Frete Cliente"
                       value={formatBRL(dashboard.receberCliente)}
+                      hiddenValue="R$ ••••••"
                       detail="Receber c/ Cliente"
-                      icon={<ReceiptText className="h-4 w-4" />}
+                      Icon={ReceiptText}
+                      visible={visibleDashboardValues.freteCliente}
+                      onToggleVisible={toggleDashboardValue}
                     />
                     <MiniCard
+                      cardKey="recebido"
                       title="Recebido"
                       value={formatBRL(dashboard.recebidoCliente)}
+                      hiddenValue="R$ ••••••"
                       detail="Já marcado como pago"
-                      icon={<WalletCards className="h-4 w-4" />}
+                      Icon={WalletCards}
+                      visible={visibleDashboardValues.recebido}
+                      onToggleVisible={toggleDashboardValue}
                     />
                     <MiniCard
+                      cardKey="aReceber"
                       title="A Receber"
                       value={formatBRL(dashboard.aReceberCliente)}
+                      hiddenValue="R$ ••••••"
                       detail="Ainda pendente"
-                      icon={<WalletCards className="h-4 w-4" />}
+                      Icon={WalletCards}
+                      visible={visibleDashboardValues.aReceber}
+                      onToggleVisible={toggleDashboardValue}
                     />
                     <MiniCard
+                      cardKey="totalLebrinha"
                       title="Total Lebrinha"
                       value={formatBRL(dashboard.totalLebrinha)}
+                      hiddenValue="R$ ••••••"
                       detail="Acertar + bonificação"
-                      icon={<Truck className="h-4 w-4" />}
+                      Icon={Truck}
+                      visible={visibleDashboardValues.totalLebrinha}
+                      onToggleVisible={toggleDashboardValue}
                     />
                     <MiniCard
+                      cardKey="diferenca"
                       title="Diferença"
                       value={formatBRL(dashboard.diferenca)}
+                      hiddenValue="R$ ••••••"
                       detail="Cliente − Lebrinha"
-                      icon={<CircleDollarSign className="h-4 w-4" />}
+                      Icon={CircleDollarSign}
+                      visible={visibleDashboardValues.diferenca}
+                      onToggleVisible={toggleDashboardValue}
                     />
                     <MiniCard
+                      cardKey="margem"
                       title="Margem"
                       value={pct(dashboard.margem)}
+                      hiddenValue="••••%"
                       detail={`${margem.label} · alta ≥ 30% · mediana ≥ 15%`}
-                      icon={<CircleDollarSign className="h-4 w-4" />}
+                      Icon={CircleDollarSign}
+                      visible={visibleDashboardValues.margem}
+                      onToggleVisible={toggleDashboardValue}
                       className={margem.cardClass}
                       valueClassName={margem.textClass}
-                      iconClassName={margem.iconClass}
                     />
                   </div>
                 );
