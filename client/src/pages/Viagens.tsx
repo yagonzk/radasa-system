@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
-import { useLocais, useViagens, useMotoristas, useVeiculos, type Local, type Motorista, type Veiculo, type Viagem } from "@/lib/store";
+import { useViagens, useMotoristas, useVeiculos, type Motorista, type Veiculo, type Viagem } from "@/lib/store";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 import { api } from "@/lib/api";
 import { extrairTextoPdf, type PdfTextProgress } from "@/lib/pdfText";
@@ -91,24 +91,6 @@ function findMotoristaId(text: string, parsedName: string, motoristas: Motorista
   if (candidates.length > 1 && candidates[0].score === candidates[1].score) return "";
   return candidates[0].motorista.id;
 }
-function findCidadeDestino(text: string, parsedCity: string, locais: Local[], viagens: Viagem[]) {
-  if (parsedCity.trim()) return parsedCity.trim();
-  const normalizedWhole = normalizeLookup(text);
-  const clientIndex = normalizedWhole.indexOf("CLIENTE ");
-  const searchArea = clientIndex >= 0 ? normalizedWhole.slice(clientIndex) : normalizedWhole;
-  const knownCities = Array.from(new Set([
-    ...locais.map((local) => local.cidade),
-    ...viagens.map((viagem) => viagem.cidadeEntrega),
-  ].map((city) => city?.trim()).filter((city): city is string => Boolean(city))));
-  let best = { city: "", index: -1, length: 0 };
-  for (const city of knownCities) {
-    const key = normalizeLookup(city);
-    if (key.length < 4) continue;
-    const index = searchArea.lastIndexOf(key);
-    if (index > best.index || (index === best.index && key.length > best.length)) best = { city, index, length: key.length };
-  }
-  return best.city;
-}
 function previousDistanceForCity(city: string, viagens: Viagem[]) {
   const key = normalizeLookup(city);
   if (!key) return 0;
@@ -119,7 +101,6 @@ function previousDistanceForCity(city: string, viagens: Viagem[]) {
 export default function Viagens() {
   const { items: viagens, create, update, remove } = useViagens();
   const { items: motoristas } = useMotoristas();
-  const { items: locais } = useLocais();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingViagem, setEditingViagem] = useState<Viagem | null>(null);
@@ -250,7 +231,7 @@ export default function Viagens() {
       const registeredPlate = registeredVehicle?.placa ?? "";
       const linkedMotoristaId = linkedMotoristaForVehicle(registeredVehicle);
       const matchedMotoristaId = linkedMotoristaId || findMotoristaId(text, parsed.motoristaNome, motoristas);
-      const destination = findCidadeDestino(text, parsed.cidadeDestino, locais, viagens);
+      const destination = parsed.cidadeDestino.trim();
       const historicalDistance = !parsed.distanciaKm && destination ? previousDistanceForCity(destination, viagens) : 0;
       const distance = Number(parsed.distanciaKm || historicalDistance || 0);
       if (registeredPlate) setPlaca(registeredPlate);
@@ -275,7 +256,7 @@ export default function Viagens() {
       if (parsed.placa && !registeredPlate) observacoes.push(`Placa ${parsed.placa} não está cadastrada.`);
       if (registeredVehicle?.motoristaId && !linkedMotoristaId) observacoes.push("O motorista vinculado à placa não está ativo; foi tentada a identificação pelo manifesto.");
       if (!matchedMotoristaId) observacoes.push("Motorista não identificado. Vincule um motorista à placa em Cadastros > Veículos.");
-      if (!destination) observacoes.push("Cidade de destino não identificada no manifesto.");
+      if (!destination) observacoes.push("Município Destino não identificado no bloco Origem/Destino do manifesto.");
       if (!distance) observacoes.push("O DAMDFE não informa KM e não foi possível calcular a rota nem recuperar uma distância do histórico.");
       if (parsed.distanciaFonte === "rota" && parsed.distanciaKm > 0) observacoes.push("A distância foi calculada automaticamente entre a origem e o destino do manifesto.");
       if (historicalDistance > 0) observacoes.push("A distância foi recuperada da viagem mais recente para a mesma cidade.");
