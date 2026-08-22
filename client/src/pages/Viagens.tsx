@@ -83,7 +83,7 @@ const viagemColumns: Array<{
 ];
 
 function viagemTotalCusto(viagem: Viagem) {
-  return viagem.valorPedagio + viagem.valorDiaria + viagem.valorAbastecimento + viagem.valorChapa;
+  return viagem.valorPedagio + viagem.valorDiaria + viagem.valorChapa;
 }
 
 function viagemCustoPorKm(viagem: Viagem) {
@@ -196,7 +196,6 @@ export default function Viagens() {
   const [distanciaKm, setDistanciaKm] = useState("");
   const [valorPedagio, setValorPedagio] = useState("");
   const [valorDiaria, setValorDiaria] = useState("");
-  const [valorAbastecimento, setValorAbastecimento] = useState("");
   const [valorChapa, setValorChapa] = useState("");
   const [saving, setSaving] = useState(false);
   const manifestoInputRef = useRef<HTMLInputElement>(null);
@@ -342,7 +341,6 @@ export default function Viagens() {
     setDistanciaKm(String(v.distanciaKm));
     setValorPedagio(String(v.valorPedagio));
     setValorDiaria(String(v.valorDiaria));
-    setValorAbastecimento(String(v.valorAbastecimento));
     setValorChapa(String(v.valorChapa));
     setFormOpen(true);
   };
@@ -356,7 +354,6 @@ export default function Viagens() {
     setDistanciaKm("");
     setValorPedagio("");
     setValorDiaria("");
-    setValorAbastecimento("");
     setValorChapa("");
   };
 
@@ -389,8 +386,7 @@ export default function Viagens() {
       if (distance > 0) setDistanciaKm(String(distance));
       setValorPedagio("");
       setValorDiaria("");
-      setValorAbastecimento("");
-      setValorChapa("");
+        setValorChapa("");
       const preenchidos = [
         registeredPlate && "placa",
         matchedMotoristaId && "motorista",
@@ -456,7 +452,7 @@ export default function Viagens() {
       distanciaKm: parseFloat(distanciaKm) || 0,
       valorPedagio: parseFloat(valorPedagio) || 0,
       valorDiaria: parseFloat(valorDiaria) || 0,
-      valorAbastecimento: parseFloat(valorAbastecimento) || 0,
+      valorAbastecimento: 0,
       valorChapa: parseFloat(valorChapa) || 0,
     };
 
@@ -926,26 +922,15 @@ export default function Viagens() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Abastecimento (R$)</Label>
+                <Label className="text-sm font-medium">Chapa (R$)</Label>
                 <Input
                   type="number"
                   step="0.01"
-                  value={valorAbastecimento}
-                  onChange={(e) => setValorAbastecimento(e.target.value)}
+                  value={valorChapa}
+                  onChange={(e) => setValorChapa(e.target.value)}
                   placeholder="0,00"
                 />
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Chapa (R$)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={valorChapa}
-                onChange={(e) => setValorChapa(e.target.value)}
-                placeholder="0,00"
-              />
             </div>
 
             {/* Total calculation */}
@@ -967,7 +952,6 @@ export default function Viagens() {
                   {formatBRL(
                     parseFloat(valorPedagio || "0") +
                       parseFloat(valorDiaria || "0") +
-                      parseFloat(valorAbastecimento || "0") +
                       parseFloat(valorChapa || "0")
                   )}
                 </span>
@@ -982,7 +966,6 @@ export default function Viagens() {
                     {formatBRL(
                       (parseFloat(valorPedagio || "0") +
                         parseFloat(valorDiaria || "0") +
-                        parseFloat(valorAbastecimento || "0") +
                         parseFloat(valorChapa || "0")) /
                         parseFloat(distanciaKm || "1")
                     )}
@@ -991,7 +974,7 @@ export default function Viagens() {
               )}
 
               <div className={`flex items-center justify-between border-t border-border pt-2 ${
-                (parseFloat(valorFrete || "0") - (parseFloat(valorPedagio || "0") + parseFloat(valorDiaria || "0") + parseFloat(valorAbastecimento || "0") + parseFloat(valorChapa || "0"))) >= 0
+                (parseFloat(valorFrete || "0") - (parseFloat(valorPedagio || "0") + parseFloat(valorDiaria || "0") + parseFloat(valorChapa || "0"))) >= 0
                   ? 'text-green-600 dark:text-green-400'
                   : 'text-red-600 dark:text-red-400'
               }`}>
@@ -1003,7 +986,6 @@ export default function Viagens() {
                     parseFloat(valorFrete || "0") - (
                       parseFloat(valorPedagio || "0") +
                       parseFloat(valorDiaria || "0") +
-                      parseFloat(valorAbastecimento || "0") +
                       parseFloat(valorChapa || "0")
                     )
                   )}
@@ -1039,7 +1021,6 @@ export default function Viagens() {
             const totalCusto =
               viewingViagem.valorPedagio +
               viewingViagem.valorDiaria +
-              viewingViagem.valorAbastecimento +
               viewingViagem.valorChapa;
             const custoPorKm = viewingViagem.distanciaKm > 0 ? totalCusto / viewingViagem.distanciaKm : 0;
             const lucroBruto = viewingViagem.valorFrete - totalCusto;
@@ -1089,10 +1070,6 @@ export default function Viagens() {
                     <div className="flex justify-between">
                       <span>Diária</span>
                       <span className="font-medium">{formatBRL(viewingViagem.valorDiaria)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Abastecimento</span>
-                      <span className="font-medium">{formatBRL(viewingViagem.valorAbastecimento)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Chapa</span>
