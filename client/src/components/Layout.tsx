@@ -1,6 +1,6 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, CircleDotDashed, Boxes, FileBadge2, ChevronDown, ChevronRight, FilePlus2, History, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useEffect, useState } from "react";
@@ -14,81 +14,60 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-const navItems: NavItem[] = [
+const navGroups = [
   {
-    label: "Visão geral",
-    href: "/",
-    icon: <LayoutDashboard className="h-[18px] w-[18px]" />,
-    matchPaths: ["/"],
+    label: "Operação",
+    icon: <BriefcaseBusiness className="h-[18px] w-[18px]" />,
+    items: [
+      { label: "Romaneios", href: "/romaneios", icon: <ClipboardList className="h-4 w-4" />, matchPaths: ["/romaneios", "/manifestos"] },
+      { label: "Viagens", href: "/viagens", icon: <Truck className="h-4 w-4" />, matchPaths: ["/viagens"] },
+      { label: "Abastecimentos", href: "/abastecimentos", icon: <Fuel className="h-4 w-4" />, matchPaths: ["/abastecimentos"] },
+      { label: "Pedágios", href: "/pedagios", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/pedagios"] },
+      { label: "Fiscal", href: "/fiscal", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/fiscal"] },
+      { label: "CIOT", href: "/ciot/gerar", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/ciot"] },
+    ],
   },
   {
-    label: "Cadastros",
-    href: "/cadastros",
-    icon: <Users className="h-[18px] w-[18px]" />,
-    matchPaths: ["/cadastros"],
-  },
-  {
-    label: "Pedágios",
-    href: "/pedagios",
-    icon: <BadgeDollarSign className="h-[18px] w-[18px]" />,
-    matchPaths: ["/pedagios"],
-  },
-  {
-    label: "Viagens",
-    href: "/viagens",
-    icon: <Truck className="h-[18px] w-[18px]" />,
-    matchPaths: ["/viagens"],
-  },
-  {
-    label: "Romaneios",
-    href: "/romaneios",
-    icon: <ClipboardList className="h-[18px] w-[18px]" />,
-    matchPaths: ["/romaneios", "/manifestos"],
-  },
-  {
-    label: "Fiscal",
-    href: "/fiscal",
-    icon: <BadgeDollarSign className="h-[18px] w-[18px]" />,
-    matchPaths: ["/fiscal"],
-  },
-  {
-    label: "Comissões",
-    href: "/fechamentos",
-    icon: <HandCoins className="h-[18px] w-[18px]" />,
-    matchPaths: ["/fechamentos"],
-  },
-  {
-    label: "Abastecimento",
-    href: "/abastecimentos",
-    icon: <Fuel className="h-[18px] w-[18px]" />,
-    matchPaths: ["/abastecimentos"],
+    label: "Financeiro",
+    icon: <WalletCards className="h-[18px] w-[18px]" />,
+    items: [
+      { label: "Comissões", href: "/fechamentos", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/fechamentos"] },
+    ],
   },
   {
     label: "Almoxarifado",
-    href: "/estoque",
     icon: <Boxes className="h-[18px] w-[18px]" />,
-    matchPaths: ["/estoque"],
+    items: [
+      { label: "Estoque e movimentações", href: "/estoque", icon: <Boxes className="h-4 w-4" />, matchPaths: ["/estoque"] },
+    ],
   },
   {
-    label: "Pneus",
-    href: "/pneus",
-    icon: <CircleDotDashed className="h-[18px] w-[18px]" />,
-    matchPaths: ["/pneus"],
+    label: "Cadastros",
+    icon: <Users className="h-[18px] w-[18px]" />,
+    items: [
+      { label: "Frota", href: "/cadastros/veiculos", icon: <Truck className="h-4 w-4" />, matchPaths: ["/cadastros/veiculos", "/pneus"] },
+      { label: "Pessoas", href: "/cadastros/motoristas", icon: <Users className="h-4 w-4" />, matchPaths: ["/cadastros/motoristas", "/cadastros/chapas"] },
+      { label: "Comercial", href: "/cadastros/clientes", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/cadastros/clientes", "/cadastros/produtos", "/cadastros/empresa"] },
+      { label: "Localidades", href: "/cadastros/locais", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/cadastros/locais"] },
+    ],
   },
   {
-    label: "Aprovação de contas",
-    href: "/aprovacao-contas",
-    icon: <ShieldCheck className="h-[18px] w-[18px]" />,
-    matchPaths: ["/aprovacao-contas"],
+    label: "Administração",
+    icon: <Settings2 className="h-[18px] w-[18px]" />,
     adminOnly: true,
+    items: [
+      { label: "Aprovação de contas", href: "/aprovacao-contas", icon: <ShieldCheck className="h-4 w-4" />, matchPaths: ["/aprovacao-contas"] },
+      { label: "Logs do sistema", href: "/logs", icon: <ScrollText className="h-4 w-4" />, matchPaths: ["/logs"] },
+    ],
   },
-];
+] satisfies Array<{ label: string; icon: ReactNode; adminOnly?: boolean; items: NavItem[] }>;
+
 
 export default function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
-  const [ciotOpen, setCiotOpen] = useState(() => location.startsWith("/ciot"));
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(navGroups.map(group => [group.label, group.items.some(item => item.matchPaths.some(path => location.startsWith(path)))])));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isDark = theme === "dark";
 
@@ -140,103 +119,61 @@ export default function Layout({ children }: { children: ReactNode }) {
 
         {/* Nav */}
         <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {navItems.filter((item) => !item.adminOnly || user?.role === "ADMIN").map((item) => {
-            const active = isActive(item);
+          <Link
+            href="/"
+            onClick={() => setMobileMenuOpen(false)}
+            className={cn(
+              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all",
+              location === "/" ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+            )}
+          >
+            <LayoutDashboard className={cn("h-[18px] w-[18px]", location === "/" && "text-primary")} />
+            Dashboard
+            {location === "/" && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+          </Link>
+
+          {navGroups.filter(group => !group.adminOnly || user?.role === "ADMIN").map(group => {
+            const groupActive = group.items.some(isActive);
+            const open = openGroups[group.label] ?? false;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-150",
-                  active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
-                    : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+              <div key={group.label} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setOpenGroups(current => ({ ...current, [group.label]: !open }))}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all",
+                    groupActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                  )}
+                >
+                  <span className={cn(groupActive && "text-primary")}>{group.icon}</span>
+                  {group.label}
+                  {open ? <ChevronDown className="ml-auto h-4 w-4" /> : <ChevronRight className="ml-auto h-4 w-4" />}
+                </button>
+                {open && (
+                  <div className="ml-4 space-y-1 border-l border-sidebar-border pl-3">
+                    {group.items.map(item => {
+                      const active = isActive(item);
+                      return (
+                        <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)} className={cn(
+                          "flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors",
+                          active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                        )}>
+                          {item.icon}{item.label}
+                        </Link>
+                      );
+                    })}
+                    {group.label === "Operação" && location.startsWith("/ciot") && (
+                      <div className="ml-3 space-y-1 border-l border-sidebar-border pl-2">
+                        <Link href="/ciot/gerar" className="block rounded px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-sidebar-accent">Gerar CIOTs</Link>
+                        <Link href="/ciot/gerados" className="block rounded px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-sidebar-accent">CIOTs gerados</Link>
+                        <Link href="/ciot/configuracao" className="block rounded px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-sidebar-accent">Configuração ANTT</Link>
+                      </div>
+                    )}
+                  </div>
                 )}
-              >
-                <span className={cn("transition-colors", active ? "text-primary" : "text-muted-foreground")}>
-                  {item.icon}
-                </span>
-                {item.label}
-                {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
-              </Link>
+              </div>
             );
           })}
-
-          <div className="space-y-1">
-            <button
-              type="button"
-              onClick={() => setCiotOpen((current) => !current)}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-150",
-                location.startsWith("/ciot")
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
-                  : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-              )}
-              aria-expanded={ciotOpen}
-            >
-              <span
-                className={cn(
-                  "transition-colors",
-                  location.startsWith("/ciot") ? "text-primary" : "text-muted-foreground",
-                )}
-              >
-                <FileBadge2 className="h-[18px] w-[18px]" />
-              </span>
-              CIOT
-              {ciotOpen ? (
-                <ChevronDown className="ml-auto h-4 w-4" />
-              ) : (
-                <ChevronRight className="ml-auto h-4 w-4" />
-              )}
-            </button>
-
-            {ciotOpen && (
-              <div className="ml-4 space-y-1 border-l border-sidebar-border pl-3">
-                <Link
-                  href="/ciot/gerar"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors",
-                    location.startsWith("/ciot/gerar")
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-                  )}
-                >
-                  <FilePlus2 className="h-4 w-4" />
-                  Gerar CIOTs
-                </Link>
-
-                <Link
-                  href="/ciot/gerados"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors",
-                    location.startsWith("/ciot/gerados")
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-                  )}
-                >
-                  <History className="h-4 w-4" />
-                  CIOTs gerados
-                </Link>
-
-                <Link
-                  href="/ciot/configuracao"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-colors",
-                    location.startsWith("/ciot/configuracao")
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-                  )}
-                >
-                  <Settings2 className="h-4 w-4" />
-                  Configuração ANTT
-                </Link>
-              </div>
-            )}
-          </div>
         </nav>
 
         {/* User profile */}

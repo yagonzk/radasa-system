@@ -1,0 +1,19 @@
+RADASA SYSTEM - ATUALIZACAO DE MENU E SUBABAS
+
+1. Entre na pasta do projeto.
+
+2. Instale as dependencias, se necessario:
+pnpm install
+
+3. Validacao:
+pnpm run check
+
+4. Publicacao no GitHub:
+git add .
+git commit -m "feat: reorganiza menu em areas e subabas"
+git push origin main
+
+5. Publicacao Cloudflare:
+pnpm run deploy
+
+OBSERVACAO: esta alteracao e de interface/navegacao e nao cria nova migration de banco de dados.

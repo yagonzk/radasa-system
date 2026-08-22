@@ -1,6 +1,6 @@
 import Layout from "@/components/Layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useRoute } from "wouter";
+import { Link, useLocation, useRoute } from "wouter";
 import { useEffect } from "react";
 import { getResourceCollection } from "@/lib/api";
 import MotoristaTab from "@/components/cadastros/MotoristaTab";
@@ -14,6 +14,7 @@ import EmpresaTab from "@/components/cadastros/EmpresaTab";
 export default function Cadastros() {
   const [match, params] = useRoute("/cadastros/:tab");
   const activeTab = match ? params.tab : "motoristas";
+  const [, navigate] = useLocation();
 
   useEffect(() => {
     // A aba visível carrega normalmente. Logo depois, aquecemos em background os
@@ -37,19 +38,40 @@ export default function Cadastros() {
             Cadastros
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Gerencie motoristas, chapas, clientes, produtos, locais e veículos da operação.
+            Cadastros organizados por área para encontrar cada informação com mais rapidez.
           </p>
         </div>
 
-        <Tabs defaultValue={activeTab} className="w-full">
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
-            <TabsTrigger value="motoristas">Motoristas</TabsTrigger>
-            <TabsTrigger value="chapas">Chapas</TabsTrigger>
-            <TabsTrigger value="clientes">Clientes</TabsTrigger>
-            <TabsTrigger value="produtos">Produtos</TabsTrigger>
-            <TabsTrigger value="locais">Locais</TabsTrigger>
-            <TabsTrigger value="veiculos">Veículos</TabsTrigger>
-            <TabsTrigger value="empresa">Empresa</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={(tab) => navigate(`/cadastros/${tab}`)} className="w-full">
+          <TabsList className="grid h-auto w-full grid-cols-1 gap-3 bg-transparent p-0 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border bg-card p-3 shadow-sm">
+              <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Frota</p>
+              <div className="grid grid-cols-2 gap-1">
+                <TabsTrigger value="veiculos">Veículos</TabsTrigger>
+                <Link href="/pneus" className="inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground">Pneus</Link>
+              </div>
+            </div>
+            <div className="rounded-xl border bg-card p-3 shadow-sm">
+              <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Pessoas</p>
+              <div className="grid grid-cols-2 gap-1">
+                <TabsTrigger value="motoristas">Motoristas</TabsTrigger>
+                <TabsTrigger value="chapas">Chapas</TabsTrigger>
+              </div>
+            </div>
+            <div className="rounded-xl border bg-card p-3 shadow-sm">
+              <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Comercial</p>
+              <div className="grid grid-cols-3 gap-1">
+                <TabsTrigger value="clientes">Clientes</TabsTrigger>
+                <TabsTrigger value="produtos">Produtos</TabsTrigger>
+                <TabsTrigger value="empresa">Empresa</TabsTrigger>
+              </div>
+            </div>
+            <div className="rounded-xl border bg-card p-3 shadow-sm">
+              <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Localidades</p>
+              <div className="grid grid-cols-1 gap-1">
+                <TabsTrigger value="locais">Cidades / Locais</TabsTrigger>
+              </div>
+            </div>
           </TabsList>
 
           <TabsContent value="motoristas" className="mt-6">
