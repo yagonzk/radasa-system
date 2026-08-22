@@ -22,6 +22,7 @@ import {
   WalletCards,
   Truck,
   CircleDollarSign,
+  Check,
   ChevronDown,
   Eye,
   EyeOff,
@@ -364,6 +365,8 @@ export default function FiscalRentabilidade({
   const [placa, setPlaca] = useState("__todas__");
   const [romaneio, setRomaneio] = useState("__todos__");
   const [payment, setPayment] = useState<PaymentFilter>("todos");
+  const [activeHeaderFilter, setActiveHeaderFilter] = useState<"cliente" | "produto" | null>(null);
+  const [headerFilterSearch, setHeaderFilterSearch] = useState("");
   const [visibleDashboardValues, setVisibleDashboardValues] = useState<Record<string, boolean>>({
     freteCliente: true,
     recebido: true,
@@ -424,6 +427,22 @@ export default function FiscalRentabilidade({
       a[1].localeCompare(b[1], "pt-BR"),
     );
   }, [data]);
+
+  const clientesFiltradosNoPopover = useMemo(() => {
+    const query = headerFilterSearch.trim().toLocaleLowerCase("pt-BR");
+    if (!query) return clientes;
+    return clientes.filter(([, name]) =>
+      name.toLocaleLowerCase("pt-BR").includes(query),
+    );
+  }, [clientes, headerFilterSearch]);
+
+  const produtosFiltradosNoPopover = useMemo(() => {
+    const query = headerFilterSearch.trim().toLocaleLowerCase("pt-BR");
+    if (!query) return produtos;
+    return produtos.filter(([, name]) =>
+      name.toLocaleLowerCase("pt-BR").includes(query),
+    );
+  }, [headerFilterSearch, produtos]);
 
   const placas = useMemo(
     () => unique((data?.linhas ?? []).map((row) => row.placa)),
@@ -832,7 +851,13 @@ export default function FiscalRentabilidade({
                       <thead className="border-b bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
                         <tr>
                           <th className="px-3 py-3 text-left">
-                            <Popover>
+                            <Popover
+                              open={activeHeaderFilter === "cliente"}
+                              onOpenChange={(open) => {
+                                setActiveHeaderFilter(open ? "cliente" : null);
+                                setHeaderFilterSearch("");
+                              }}
+                            >
                               <PopoverTrigger asChild>
                                 <button
                                   type="button"
@@ -844,27 +869,84 @@ export default function FiscalRentabilidade({
                                   <ChevronDown className="h-3.5 w-3.5" />
                                 </button>
                               </PopoverTrigger>
-                              <PopoverContent align="start" className="w-72 p-3 normal-case">
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                  Filtrar cliente
-                                </p>
-                                <Select value={clienteId} onValueChange={setClienteId}>
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__todos__">Todos os clientes</SelectItem>
-                                    {clientes.map(([id, name]) => (
-                                      <SelectItem key={id} value={id}>{name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                              <PopoverContent align="start" className="w-80 p-0 normal-case">
+                                <div className="border-b p-3">
+                                  <Input
+                                    value={headerFilterSearch}
+                                    onChange={(event) => setHeaderFilterSearch(event.target.value)}
+                                    placeholder="Pesquisar cliente..."
+                                    autoFocus
+                                  />
+                                </div>
+
+                                <div className="max-h-64 overflow-y-auto p-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setClienteId("__todos__");
+                                      setActiveHeaderFilter(null);
+                                    }}
+                                    className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${
+                                      clienteId === "__todos__" ? "bg-primary/10 text-primary" : ""
+                                    }`}
+                                  >
+                                    <span>Todos os clientes</span>
+                                    {clienteId === "__todos__" && <Check className="h-4 w-4 shrink-0" />}
+                                  </button>
+
+                                  {clientesFiltradosNoPopover.length === 0 ? (
+                                    <p className="py-5 text-center text-xs text-muted-foreground">
+                                      Nenhum cliente encontrado.
+                                    </p>
+                                  ) : (
+                                    clientesFiltradosNoPopover.map(([id, name]) => (
+                                      <button
+                                        type="button"
+                                        key={id}
+                                        onClick={() => {
+                                          setClienteId(id);
+                                          setActiveHeaderFilter(null);
+                                        }}
+                                        className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${
+                                          clienteId === id ? "bg-primary/10 text-primary" : ""
+                                        }`}
+                                      >
+                                        <span className="min-w-0 flex-1 truncate" title={name}>{name}</span>
+                                        {clienteId === id && <Check className="h-4 w-4 shrink-0" />}
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+
+                                <div className="flex gap-2 border-t p-3">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="flex-1"
+                                    onClick={() => setClienteId("__todos__")}
+                                  >
+                                    Limpar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="flex-1"
+                                    onClick={() => setActiveHeaderFilter(null)}
+                                  >
+                                    OK
+                                  </Button>
+                                </div>
                               </PopoverContent>
                             </Popover>
                           </th>
 
                           <th className="px-3 py-3 text-left">
-                            <Popover>
+                            <Popover
+                              open={activeHeaderFilter === "produto"}
+                              onOpenChange={(open) => {
+                                setActiveHeaderFilter(open ? "produto" : null);
+                                setHeaderFilterSearch("");
+                              }}
+                            >
                               <PopoverTrigger asChild>
                                 <button
                                   type="button"
@@ -876,21 +958,72 @@ export default function FiscalRentabilidade({
                                   <ChevronDown className="h-3.5 w-3.5" />
                                 </button>
                               </PopoverTrigger>
-                              <PopoverContent align="start" className="w-72 p-3 normal-case">
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                  Filtrar produto
-                                </p>
-                                <Select value={produtoId} onValueChange={setProdutoId}>
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__todos__">Todos os produtos</SelectItem>
-                                    {produtos.map(([id, name]) => (
-                                      <SelectItem key={id} value={id}>{name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                              <PopoverContent align="start" className="w-80 p-0 normal-case">
+                                <div className="border-b p-3">
+                                  <Input
+                                    value={headerFilterSearch}
+                                    onChange={(event) => setHeaderFilterSearch(event.target.value)}
+                                    placeholder="Pesquisar produto..."
+                                    autoFocus
+                                  />
+                                </div>
+
+                                <div className="max-h-64 overflow-y-auto p-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setProdutoId("__todos__");
+                                      setActiveHeaderFilter(null);
+                                    }}
+                                    className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${
+                                      produtoId === "__todos__" ? "bg-primary/10 text-primary" : ""
+                                    }`}
+                                  >
+                                    <span>Todos os produtos</span>
+                                    {produtoId === "__todos__" && <Check className="h-4 w-4 shrink-0" />}
+                                  </button>
+
+                                  {produtosFiltradosNoPopover.length === 0 ? (
+                                    <p className="py-5 text-center text-xs text-muted-foreground">
+                                      Nenhum produto encontrado.
+                                    </p>
+                                  ) : (
+                                    produtosFiltradosNoPopover.map(([id, name]) => (
+                                      <button
+                                        type="button"
+                                        key={id}
+                                        onClick={() => {
+                                          setProdutoId(id);
+                                          setActiveHeaderFilter(null);
+                                        }}
+                                        className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${
+                                          produtoId === id ? "bg-primary/10 text-primary" : ""
+                                        }`}
+                                      >
+                                        <span className="min-w-0 flex-1 truncate" title={name}>{name}</span>
+                                        {produtoId === id && <Check className="h-4 w-4 shrink-0" />}
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+
+                                <div className="flex gap-2 border-t p-3">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="flex-1"
+                                    onClick={() => setProdutoId("__todos__")}
+                                  >
+                                    Limpar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="flex-1"
+                                    onClick={() => setActiveHeaderFilter(null)}
+                                  >
+                                    OK
+                                  </Button>
+                                </div>
                               </PopoverContent>
                             </Popover>
                           </th>
