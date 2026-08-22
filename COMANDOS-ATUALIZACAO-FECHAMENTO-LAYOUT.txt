@@ -1,0 +1,17 @@
+RADASA SYSTEM - ATUALIZACAO FECHAMENTO RESPONSIVO V15
+
+Nao ha nova migration nesta versao.
+
+1. Instalar/atualizar dependencias:
+pnpm install
+
+2. Validar TypeScript:
+pnpm run check
+
+3. Commit e push:
+git add .
+git commit -m "fix: corrige layout responsivo do fechamento"
+git push origin main
+
+4. Publicar no Cloudflare:
+pnpm run deploy

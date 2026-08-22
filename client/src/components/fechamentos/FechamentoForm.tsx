@@ -252,14 +252,14 @@ export default function FechamentoForm({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-[1180px] max-h-[calc(100vh-2rem)] overflow-x-hidden overflow-y-auto p-5 sm:p-6">
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-[1280px] max-h-[calc(100vh-1.5rem)] overflow-x-hidden overflow-y-auto p-4 sm:p-5">
         <DialogHeader>
           <DialogTitle>
             {editingFechamento ? "Editar Fechamento" : "Novo Fechamento"}
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr_1fr] lg:items-end">
           {/* Motorista selection */}
           <div className="min-w-0 space-y-1.5">
@@ -346,7 +346,7 @@ export default function FechamentoForm({
             )}
 
             {viagens.length > 0 && (
-              <div className="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
+              <div className="grid gap-2 xl:grid-cols-2">
                 {viagens.map((viagem, index) => {
                   const local = locais.find((l) => l.id === viagem.localId);
                   const subtotal = local
@@ -355,19 +355,19 @@ export default function FechamentoForm({
                   return (
                     <div
                       key={index}
-                      className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-muted/30 p-2"
+                      className="grid min-w-0 grid-cols-[32px_minmax(0,1fr)_64px_96px_32px] items-center gap-2 rounded-lg border border-border bg-muted/30 px-2 py-1.5"
                     >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400">
                         <MapPin className="h-4 w-4" />
                       </div>
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 overflow-hidden">
                         <Select
                           value={viagem.localId}
                           onValueChange={(val) =>
                             updateViagem(index, { localId: val })
                           }
                         >
-                          <SelectTrigger className="h-9">
+                          <SelectTrigger className="h-9 w-full min-w-0 overflow-hidden [&>span]:block [&>span]:truncate">
                             <SelectValue placeholder="Selecione o local" />
                           </SelectTrigger>
                           <SelectContent>
@@ -379,7 +379,7 @@ export default function FechamentoForm({
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="w-16 shrink-0">
+                      <div className="w-16">
                         <Input
                           type="number"
                           min={1}
@@ -393,13 +393,13 @@ export default function FechamentoForm({
                           placeholder="Qtd"
                         />
                       </div>
-                      <div className="w-[86px] shrink-0 text-right text-sm font-medium text-foreground">
+                      <div className="w-24 whitespace-nowrap text-right text-sm font-semibold text-foreground">
                         {formatBRL(subtotal)}
                       </div>
                       <button
                         type="button"
                         onClick={() => removeViagem(index)}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
