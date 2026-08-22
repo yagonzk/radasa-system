@@ -1,0 +1,21 @@
+RADASA SYSTEM - ATUALIZAÇÃO MUNICÍPIOS PA/MT
+
+1. Aplicar migrations no banco:
+pnpm exec prisma migrate deploy
+
+2. Gerar Prisma Client:
+pnpm exec prisma generate
+
+3. Conferir TypeScript:
+pnpm run check
+
+4. Commit e push:
+git add .
+git commit -m "feat: cadastra municipios de PA e MT com UF"
+git push origin main
+
+5. Publicar no Cloudflare:
+pnpm run deploy
+
+Migration adicionada:
+20260822130000_seed_municipios_pa_mt
