@@ -26,21 +26,27 @@ import { Plus, Trash2, Edit3, Eye, FileText, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 
 
-type LerRomaneioViagemResponse = {
+type LerManifestoViagemResponse = {
   parserVersion: string;
+  numeroManifesto: string;
+  chaveAcesso: string;
   dataManifesto: string;
   placa: string;
   valorFrete: number;
-  romaneios: string[];
   motoristaNome: string;
+  origemCidade: string;
+  origemUf: string;
   cidadeDestino: string;
+  destinoUf: string;
   distanciaKm: number;
+  distanciaFonte: "manifesto" | "rota" | "";
   avisos: string[];
 };
 
-type RomaneioVinculado = {
+type ManifestoVinculado = {
   arquivo: string;
-  numeros: string[];
+  numero: string;
+  chaveAcesso: string;
   camposPreenchidos: string[];
   observacoes: string[];
 };
@@ -59,7 +65,7 @@ function normalizePlate(value: string) {
 }
 function progressLabel(progress: PdfTextProgress) {
   const page = progress.totalPages > 1 ? ` ${progress.page}/${progress.totalPages}` : "";
-  if (progress.stage === "ocr") return `Lendo romaneio${page} · ${Math.round(progress.progress * 100)}%`;
+  if (progress.stage === "ocr") return `Lendo manifesto${page} · ${Math.round(progress.progress * 100)}%`;
   if (progress.stage === "ocr-loading") return `Preparando OCR${page}...`;
   return `Preparando PDF${page}...`;
 }
@@ -136,10 +142,10 @@ export default function Viagens() {
   const [valorAbastecimento, setValorAbastecimento] = useState("");
   const [valorChapa, setValorChapa] = useState("");
   const [saving, setSaving] = useState(false);
-  const romaneioInputRef = useRef<HTMLInputElement>(null);
-  const [readingRomaneio, setReadingRomaneio] = useState(false);
-  const [readingRomaneioLabel, setReadingRomaneioLabel] = useState("");
-  const [romaneioVinculado, setRomaneioVinculado] = useState<RomaneioVinculado | null>(null);
+  const manifestoInputRef = useRef<HTMLInputElement>(null);
+  const [readingManifesto, setReadingManifesto] = useState(false);
+  const [readingManifestoLabel, setReadingManifestoLabel] = useState("");
+  const [manifestoVinculado, setManifestoVinculado] = useState<ManifestoVinculado | null>(null);
 
   const motoristasAtivos = useMemo(
     () => motoristas.filter((motorista) => motorista.status === "ATIVO"),
@@ -192,13 +198,13 @@ export default function Viagens() {
       return;
     }
     resetForm();
-    setRomaneioVinculado(null);
+    setManifestoVinculado(null);
     setEditingViagem(null);
     setFormOpen(true);
   };
 
   const handleOpenEdit = (v: Viagem) => {
-    setRomaneioVinculado(null);
+    setManifestoVinculado(null);
     setEditingViagem(v);
     setPlaca(v.placa);
     setMotoristaId(v.motoristaId);
@@ -226,17 +232,17 @@ export default function Viagens() {
     setValorChapa("");
   };
 
-  const handleReadRomaneio = async (file?: File) => {
+  const handleReadManifesto = async (file?: File) => {
     if (!file) return;
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      toast.error("Selecione um romaneio em PDF.");
+      toast.error("Selecione um manifesto DAMDFE/MDF-e em PDF.");
       return;
     }
-    setReadingRomaneio(true);
-    setReadingRomaneioLabel("Preparando PDF...");
+    setReadingManifesto(true);
+    setReadingManifestoLabel("Preparando PDF...");
     try {
-      const text = await extrairTextoPdf(file, (progress) => setReadingRomaneioLabel(progressLabel(progress)), { forceOcr: true });
-      const response = await api.post<LerRomaneioViagemResponse>("/viagens/ler-romaneio", { texto: text }, { timeout: 240_000 });
+      const text = await extrairTextoPdf(file, (progress) => setReadingManifestoLabel(progressLabel(progress)));
+      const response = await api.post<LerManifestoViagemResponse>("/viagens/ler-manifesto", { texto: text }, { timeout: 240_000 });
       const parsed = response.data;
       resetForm();
       setEditingViagem(null);
@@ -267,23 +273,30 @@ export default function Viagens() {
       ].filter((value): value is string => Boolean(value));
       const observacoes: string[] = [];
       if (parsed.placa && !registeredPlate) observacoes.push(`Placa ${parsed.placa} não está cadastrada.`);
-      if (registeredVehicle?.motoristaId && !linkedMotoristaId) observacoes.push("O motorista vinculado à placa não está ativo; foi tentada a identificação pelo romaneio.");
+      if (registeredVehicle?.motoristaId && !linkedMotoristaId) observacoes.push("O motorista vinculado à placa não está ativo; foi tentada a identificação pelo manifesto.");
       if (!matchedMotoristaId) observacoes.push("Motorista não identificado. Vincule um motorista à placa em Cadastros > Veículos.");
-      if (!destination) observacoes.push("Cidade de destino não identificada no romaneio.");
-      if (!distance) observacoes.push("Distância não identificada no romaneio nem no histórico desta cidade.");
+      if (!destination) observacoes.push("Cidade de destino não identificada no manifesto.");
+      if (!distance) observacoes.push("O DAMDFE não informa KM e não foi possível calcular a rota nem recuperar uma distância do histórico.");
+      if (parsed.distanciaFonte === "rota" && parsed.distanciaKm > 0) observacoes.push("A distância foi calculada automaticamente entre a origem e o destino do manifesto.");
       if (historicalDistance > 0) observacoes.push("A distância foi recuperada da viagem mais recente para a mesma cidade.");
       observacoes.push(...(parsed.avisos ?? []));
-      setRomaneioVinculado({ arquivo: file.name, numeros: parsed.romaneios ?? [], camposPreenchidos: preenchidos, observacoes: Array.from(new Set(observacoes)) });
+      setManifestoVinculado({
+        arquivo: file.name,
+        numero: parsed.numeroManifesto ?? "",
+        chaveAcesso: parsed.chaveAcesso ?? "",
+        camposPreenchidos: preenchidos,
+        observacoes: Array.from(new Set(observacoes)),
+      });
       setFormOpen(true);
-      if (preenchidos.length >= 5) toast.success(`Romaneio lido. ${preenchidos.length} campos da viagem foram preenchidos automaticamente.`);
-      else toast.warning(`Romaneio lido com ${preenchidos.length} campos preenchidos. Revise os campos pendentes.`);
+      if (preenchidos.length >= 5) toast.success(`Manifesto lido. ${preenchidos.length} campos da viagem foram preenchidos automaticamente.`);
+      else toast.warning(`Manifesto lido com ${preenchidos.length} campos preenchidos. Revise os campos pendentes.`);
     } catch (error: any) {
-      console.error("Falha ao ler romaneio para Viagens.", error);
-      toast.error(error?.response?.data?.message ?? error?.message ?? "Não foi possível ler o romaneio.");
+      console.error("Falha ao ler manifesto para Viagens.", error);
+      toast.error(error?.response?.data?.message ?? error?.message ?? "Não foi possível ler o manifesto.");
     } finally {
-      setReadingRomaneio(false);
-      setReadingRomaneioLabel("");
-      if (romaneioInputRef.current) romaneioInputRef.current.value = "";
+      setReadingManifesto(false);
+      setReadingManifestoLabel("");
+      if (manifestoInputRef.current) manifestoInputRef.current.value = "";
     }
   };
 
@@ -371,14 +384,14 @@ export default function Viagens() {
               Viagens
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Registre frete, rota e custos em uma única ficha. Viagens concluídas continuam disponíveis para edição e exclusão.
+              Registre frete, rota e custos em uma única ficha. Use Ler manifesto para preencher automaticamente os dados do DAMDFE/MDF-e.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <input ref={romaneioInputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(event) => void handleReadRomaneio(event.target.files?.[0])} />
-            <Button variant="outline" disabled={readingRomaneio} onClick={() => romaneioInputRef.current?.click()}>
-              {readingRomaneio ? <LoaderCircle className="mr-1.5 h-4 w-4 animate-spin" /> : <FileText className="mr-1.5 h-4 w-4" />}
-              {readingRomaneio ? readingRomaneioLabel || "Lendo romaneio..." : "Ler romaneio"}
+            <input ref={manifestoInputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(event) => void handleReadManifesto(event.target.files?.[0])} />
+            <Button variant="outline" disabled={readingManifesto} onClick={() => manifestoInputRef.current?.click()}>
+              {readingManifesto ? <LoaderCircle className="mr-1.5 h-4 w-4 animate-spin" /> : <FileText className="mr-1.5 h-4 w-4" />}
+              {readingManifesto ? readingManifestoLabel || "Lendo manifesto..." : "Ler manifesto"}
             </Button>
             <Button onClick={handleOpenCreate}><Plus className="mr-1.5 h-4 w-4" />Registrar viagem</Button>
           </div>
@@ -633,15 +646,15 @@ export default function Viagens() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {romaneioVinculado && !editingViagem && (
+            {manifestoVinculado && !editingViagem && (
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
                 <div className="flex items-start gap-2">
                   <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">Romaneio vinculado</p>
-                    <p className="truncate text-xs text-muted-foreground" title={romaneioVinculado.arquivo}>{romaneioVinculado.arquivo}{romaneioVinculado.numeros.length ? ` · Nº ${romaneioVinculado.numeros.join(", ")}` : ""}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Preenchido automaticamente: {romaneioVinculado.camposPreenchidos.length ? romaneioVinculado.camposPreenchidos.join(", ") : "nenhum campo"}.</p>
-                    {romaneioVinculado.observacoes.length > 0 && <div className="mt-2 space-y-0.5 text-xs text-amber-700 dark:text-amber-400">{romaneioVinculado.observacoes.slice(0, 4).map((observacao) => <p key={observacao}>• {observacao}</p>)}</div>}
+                    <p className="text-sm font-semibold">Manifesto vinculado</p>
+                    <p className="truncate text-xs text-muted-foreground" title={manifestoVinculado.arquivo}>{manifestoVinculado.arquivo}{manifestoVinculado.numero ? ` · MDF-e Nº ${manifestoVinculado.numero}` : ""}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Preenchido automaticamente: {manifestoVinculado.camposPreenchidos.length ? manifestoVinculado.camposPreenchidos.join(", ") : "nenhum campo"}.</p>
+                    {manifestoVinculado.observacoes.length > 0 && <div className="mt-2 space-y-0.5 text-xs text-amber-700 dark:text-amber-400">{manifestoVinculado.observacoes.slice(0, 4).map((observacao) => <p key={observacao}>• {observacao}</p>)}</div>}
                   </div>
                 </div>
               </div>
