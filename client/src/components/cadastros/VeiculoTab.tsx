@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { useVeiculos, type SubcategoriaVeiculo, type Veiculo } from "@/lib/store";
+import { useMotoristas, useVeiculos, type SubcategoriaVeiculo, type Veiculo } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,9 +19,10 @@ interface FormState {
   placa: string;
   modelo: string;
   subcategoria: SubcategoriaVeiculo | "";
+  motoristaId: string;
 }
 
-const emptyForm: FormState = { placa: "", modelo: "", subcategoria: "" };
+const emptyForm: FormState = { placa: "", modelo: "", subcategoria: "", motoristaId: "" };
 
 const subcategoriaLabels: Record<SubcategoriaVeiculo, string> = {
   CAMINHAO: "Caminhão",
@@ -47,17 +48,36 @@ function formatPlate(value: unknown) {
 
 export default function VeiculoTab() {
   const { items, create, update, remove } = useVeiculos();
+  const { items: motoristas } = useMotoristas();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const motoristaById = useMemo(
+    () => new Map(motoristas.map((motorista) => [motorista.id, motorista])),
+    [motoristas],
+  );
+
+  const motoristasDisponiveis = useMemo(
+    () => motoristas.filter((motorista) => motorista.status === "ATIVO" || motorista.id === form.motoristaId),
+    [motoristas, form.motoristaId],
+  );
+
   const filteredItems = useMemo(() => {
     const normalizedQuery = normalizeSearch(query).trim();
     if (!normalizedQuery) return items;
-    return items.filter((item) => normalizeSearch([item.placa, item.modelo, item.subcategoria ? subcategoriaLabels[item.subcategoria] : "Sem categoria"].join(" ")).includes(normalizedQuery));
-  }, [items, query]);
+    return items.filter((item) => {
+      const motorista = item.motoristaId ? motoristaById.get(item.motoristaId) : null;
+      return normalizeSearch([
+        item.placa,
+        item.modelo,
+        item.subcategoria ? subcategoriaLabels[item.subcategoria] : "Sem categoria",
+        motorista?.nome ?? "Sem motorista",
+      ].join(" ")).includes(normalizedQuery);
+    });
+  }, [items, query, motoristaById]);
 
   const handleOpenCreate = () => {
     setForm(emptyForm);
@@ -66,7 +86,7 @@ export default function VeiculoTab() {
   };
 
   const handleOpenEdit = (item: Veiculo) => {
-    setForm({ placa: formatPlate(item.placa), modelo: item.modelo || "", subcategoria: item.subcategoria || "" });
+    setForm({ placa: formatPlate(item.placa), modelo: item.modelo || "", subcategoria: item.subcategoria || "", motoristaId: item.motoristaId || "" });
     setEditingId(item.id);
     setOpen(true);
   };
@@ -89,13 +109,18 @@ export default function VeiculoTab() {
       return;
     }
 
+    if (!form.motoristaId) {
+      toast.error("Selecione o motorista vinculado à placa.");
+      return;
+    }
+
     setSaving(true);
     try {
       if (editingId) {
-        await update(editingId, { placa: placaFormatada, modelo: form.modelo, subcategoria: form.subcategoria });
+        await update(editingId, { placa: placaFormatada, modelo: form.modelo, subcategoria: form.subcategoria, motoristaId: form.motoristaId });
         toast.success("Veículo atualizado com sucesso!");
       } else {
-        await create({ placa: placaFormatada, modelo: form.modelo, subcategoria: form.subcategoria });
+        await create({ placa: placaFormatada, modelo: form.modelo, subcategoria: form.subcategoria, motoristaId: form.motoristaId });
         toast.success("Veículo cadastrado com sucesso!");
       }
       setOpen(false);
@@ -134,6 +159,18 @@ export default function VeiculoTab() {
         <span className="text-muted-foreground">{item.modelo || "—"}</span>
       ),
     },
+    {
+      key: "motoristaId",
+      label: "Motorista vinculado",
+      render: (item: Veiculo) => {
+        const motorista = item.motoristaId ? motoristaById.get(item.motoristaId) : null;
+        return (
+          <span className={motorista ? "font-medium" : "text-amber-600 dark:text-amber-400"}>
+            {motorista?.nome || "Não vinculado"}
+          </span>
+        );
+      },
+    },
   ];
 
   return (
@@ -141,7 +178,7 @@ export default function VeiculoTab() {
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex w-full flex-col gap-3 sm:max-w-xl">
           <p className="text-sm text-muted-foreground">{items.length} veículo(s) cadastrado(s)</p>
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por placa, modelo ou subcategoria..." />
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por placa, modelo, subcategoria ou motorista..." />
         </div>
         <Button onClick={handleOpenCreate} size="sm">
           <Plus className="mr-1.5 h-4 w-4" />
@@ -187,6 +224,27 @@ export default function VeiculoTab() {
                   <SelectItem value="MOTO">Moto</SelectItem>
                 </SelectContent>
               </Select>
+            </FormField>
+            <FormField label="Motorista vinculado">
+              <Select
+                value={form.motoristaId}
+                onValueChange={(value) => setForm({ ...form, motoristaId: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o motorista desta placa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {motoristasDisponiveis.map((motorista) => (
+                    <SelectItem key={motorista.id} value={motorista.id}>
+                      {motorista.nome}
+                      {motorista.status === "DEMITIDO" ? " (Demitido)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Ao ler um romaneio na aba Viagens, a placa usará automaticamente este motorista.
+              </p>
             </FormField>
             <FormField label="Modelo (opcional)">
               <Input

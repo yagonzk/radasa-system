@@ -101,6 +101,7 @@ model Motorista {
   viagens     Viagem[]
   fechamentos Fechamento[]
   ciots       Ciot[]
+  veiculos    Veiculo[]
 
   @@index([nome])
   @@map("motoristas")
@@ -202,6 +203,7 @@ model Veiculo {
   placa                  String
   modelo                 String?
   subcategoria           SubcategoriaVeiculo?
+  motoristaId            String?
   quantidadePneus        Int              @default(10)
   quantidadeEstepes      Int              @default(1)
   createdAt              DateTime         @default(now())
@@ -212,9 +214,11 @@ model Veiculo {
   rodiziosPneus          PneuRodizio[]    @relation("VeiculoRodizios")
   rodiziosComoCarreta    PneuRodizio[]    @relation("CarretaRodizios")
   ciots                  Ciot[]
+  motorista              Motorista?       @relation(fields: [motoristaId], references: [id], onDelete: SetNull)
 
   @@index([placa])
   @@index([subcategoria])
+  @@index([motoristaId])
   @@map("veiculos")
 }
 

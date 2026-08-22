@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
-import { useLocais, useViagens, useMotoristas, useVeiculos, type Local, type Motorista, type Viagem } from "@/lib/store";
+import { useLocais, useViagens, useMotoristas, useVeiculos, type Local, type Motorista, type Veiculo, type Viagem } from "@/lib/store";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 import { api } from "@/lib/api";
 import { extrairTextoPdf, type PdfTextProgress } from "@/lib/pdfText";
@@ -63,9 +63,9 @@ function progressLabel(progress: PdfTextProgress) {
   if (progress.stage === "ocr-loading") return `Preparando OCR${page}...`;
   return `Preparando PDF${page}...`;
 }
-function findRegisteredPlate(parsedPlate: string, vehicles: Array<{ placa: string }>) {
+function findRegisteredVehicle(parsedPlate: string, vehicles: Veiculo[]) {
   const key = normalizePlate(parsedPlate);
-  return vehicles.find((vehicle) => normalizePlate(vehicle.placa) === key)?.placa ?? "";
+  return vehicles.find((vehicle) => normalizePlate(vehicle.placa) === key) ?? null;
 }
 function findMotoristaId(text: string, parsedName: string, motoristas: Motorista[]) {
   const textKey = normalizeLookup(text);
@@ -170,6 +170,18 @@ export default function Viagens() {
     return sum + (v.valorPedagio + v.valorDiaria + v.valorAbastecimento + v.valorChapa);
   }, 0);
 
+  const linkedMotoristaForVehicle = (vehicle: Veiculo | null | undefined) => {
+    if (!vehicle?.motoristaId) return "";
+    const motorista = motoristas.find((item) => item.id === vehicle.motoristaId);
+    return motorista?.status === "ATIVO" ? motorista.id : "";
+  };
+
+  const handlePlacaChange = (novaPlaca: string) => {
+    setPlaca(novaPlaca);
+    const vehicle = veiculos.find((item) => normalizePlate(item.placa) === normalizePlate(novaPlaca));
+    setMotoristaId(linkedMotoristaForVehicle(vehicle));
+  };
+
   const handleOpenCreate = () => {
     if (motoristasAtivos.length === 0) {
       toast.error("Cadastre ou reative pelo menos um motorista antes de criar uma viagem.");
@@ -228,8 +240,10 @@ export default function Viagens() {
       const parsed = response.data;
       resetForm();
       setEditingViagem(null);
-      const registeredPlate = findRegisteredPlate(parsed.placa, veiculos);
-      const matchedMotoristaId = findMotoristaId(text, parsed.motoristaNome, motoristas);
+      const registeredVehicle = findRegisteredVehicle(parsed.placa, veiculos);
+      const registeredPlate = registeredVehicle?.placa ?? "";
+      const linkedMotoristaId = linkedMotoristaForVehicle(registeredVehicle);
+      const matchedMotoristaId = linkedMotoristaId || findMotoristaId(text, parsed.motoristaNome, motoristas);
       const destination = findCidadeDestino(text, parsed.cidadeDestino, locais, viagens);
       const historicalDistance = !parsed.distanciaKm && destination ? previousDistanceForCity(destination, viagens) : 0;
       const distance = Number(parsed.distanciaKm || historicalDistance || 0);
@@ -253,7 +267,8 @@ export default function Viagens() {
       ].filter((value): value is string => Boolean(value));
       const observacoes: string[] = [];
       if (parsed.placa && !registeredPlate) observacoes.push(`Placa ${parsed.placa} não está cadastrada.`);
-      if (!matchedMotoristaId) observacoes.push("Motorista não identificado entre os cadastros ativos.");
+      if (registeredVehicle?.motoristaId && !linkedMotoristaId) observacoes.push("O motorista vinculado à placa não está ativo; foi tentada a identificação pelo romaneio.");
+      if (!matchedMotoristaId) observacoes.push("Motorista não identificado. Vincule um motorista à placa em Cadastros > Veículos.");
       if (!destination) observacoes.push("Cidade de destino não identificada no romaneio.");
       if (!distance) observacoes.push("Distância não identificada no romaneio nem no histórico desta cidade.");
       if (historicalDistance > 0) observacoes.push("A distância foi recuperada da viagem mais recente para a mesma cidade.");
@@ -634,7 +649,7 @@ export default function Viagens() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Placa</Label>
-                <Select value={placa} onValueChange={setPlaca}>
+                <Select value={placa} onValueChange={handlePlacaChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a placa" />
                   </SelectTrigger>

@@ -20,6 +20,19 @@ function formatPlate(value: unknown) {
   return `${normalized.slice(0, 3)}-${normalized.slice(3)}`;
 }
 
+
+async function validateMotoristaId(value: unknown) {
+  const motoristaId = String(value ?? "").trim();
+  if (!motoristaId) return null;
+
+  const motorista = await prisma.motorista.findUnique({
+    where: { id: motoristaId },
+    select: { id: true },
+  });
+  if (!motorista) throw new AppError(400, "Motorista vinculado não encontrado.");
+  return motoristaId;
+}
+
 async function syncVehicleIntoManifestos(vehicle: { id: string; placa: string; modelo?: string | null }, previousPlate?: string) {
   const currentPlate = formatPlate(vehicle.placa);
   const oldPlate = formatPlate(previousPlate);
@@ -75,9 +88,11 @@ export const veiculosService = {
 
   async create(data: any) {
     const { createdAt, ...rest } = data;
+    const motoristaId = await validateMotoristaId(rest.motoristaId);
     const item = await prisma.veiculo.create({
       data: {
         ...rest,
+        motoristaId,
         placa: formatPlate(rest.placa),
         ...(createdAt ? { createdAt: new Date(createdAt) } : {}),
       },
@@ -97,10 +112,14 @@ export const veiculosService = {
     if (!current) throw new AppError(404, "Veiculo não encontrado.");
 
     const { createdAt, ...rest } = data;
+    const motoristaId = rest.motoristaId !== undefined
+      ? await validateMotoristaId(rest.motoristaId)
+      : undefined;
     const item = await prisma.veiculo.update({
       where: { id },
       data: {
         ...rest,
+        ...(rest.motoristaId !== undefined ? { motoristaId } : {}),
         ...(rest.placa !== undefined ? { placa: formatPlate(rest.placa) } : {}),
       },
     });
