@@ -4,6 +4,7 @@ import {
   useFechamentos,
   useMotoristas,
   useLocais,
+  useViagens,
   type Fechamento,
 } from "@/lib/store";
 import { formatBRL, formatDate, exportToCSV, exportToPDF } from "@/lib/exportUtils";
@@ -27,6 +28,7 @@ export default function Fechamentos() {
   const { items: fechamentos, create, update, remove } = useFechamentos();
   const { items: motoristas } = useMotoristas();
   const { items: locais } = useLocais();
+  const { items: viagensCadastradas } = useViagens();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingFechamento, setEditingFechamento] = useState<Fechamento | null>(null);
@@ -114,8 +116,8 @@ export default function Fechamentos() {
               Cálculo de Comissão
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Selecione o motorista, adicione os locais visitados e calcule a
-              comissão do período.
+              Selecione o motorista e o período. As viagens são carregadas automaticamente
+              da aba Viagens conforme o destino.
             </p>
           </div>
           <Button onClick={handleOpenCreate}>
@@ -286,6 +288,7 @@ export default function Fechamentos() {
         onClose={() => setFormOpen(false)}
         motoristas={motoristas}
         locais={locais}
+        viagensCadastradas={viagensCadastradas}
         editingFechamento={editingFechamento}
         onCreate={create}
         onUpdate={update}

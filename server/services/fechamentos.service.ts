@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { parseDateOnly } from "../utils/date.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
+import { valorComissaoPorDestino } from "../utils/comissao.js";
 
 const include = { viagens: { select: { localId: true, quantidade: true } } } as const;
 const serialize = (item: any) => ({
@@ -19,7 +20,7 @@ async function calcularValorTotal(viagens: Array<{ localId: string; quantidade: 
   const localIds = Array.from(new Set(viagens.map((viagem) => viagem.localId)));
   const locais = await prisma.local.findMany({
     where: { id: { in: localIds } },
-    select: { id: true, valorComissao: true },
+    select: { id: true, cidade: true, uf: true, valorComissao: true },
   });
 
   if (locais.length !== localIds.length) {
@@ -27,7 +28,14 @@ async function calcularValorTotal(viagens: Array<{ localId: string; quantidade: 
   }
 
   const valoresPorLocal = new Map(
-    locais.map((local) => [local.id, number(local.valorComissao)])
+    locais.map((local) => [
+      local.id,
+      valorComissaoPorDestino({
+        cidade: local.cidade,
+        uf: local.uf,
+        valorLegado: number(local.valorComissao),
+      }),
+    ])
   );
 
   return viagens.reduce((total, viagem) => {

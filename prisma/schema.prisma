@@ -189,12 +189,14 @@ model EstoqueTipoProduto {
 model Local {
   id            String             @id @default(cuid())
   cidade        String
+  uf            String?            @db.VarChar(2)
   valorComissao Decimal            @db.Decimal(14, 2)
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   fechamentos   FechamentoViagem[]
 
   @@index([cidade])
+  @@index([uf])
   @@map("locais")
 }
 

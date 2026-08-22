@@ -4,6 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -16,10 +23,31 @@ import { toast } from "sonner";
 
 interface FormState {
   cidade: string;
-  valorComissao: string;
+  uf: string;
 }
 
-const emptyForm: FormState = { cidade: "", valorComissao: "" };
+const emptyForm: FormState = { cidade: "", uf: "" };
+
+const ufs = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO",
+  "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI",
+  "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+];
+
+function normalizedCity(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s*[/,\-]\s*[A-Z]{2}\s*$/, "")
+    .trim();
+}
+
+function valorComissaoPrevisto(cidade: string, uf: string) {
+  if (normalizedCity(cidade) === "COLNIZA") return 350;
+  if (uf === "PA") return 300;
+  return 275;
+}
 
 export default function LocaisTab() {
   const { items, create, update, remove } = useLocais();
@@ -32,7 +60,7 @@ export default function LocaisTab() {
   const filteredItems = useMemo(() => {
     const normalizedQuery = normalizeSearch(query).trim();
     if (!normalizedQuery) return items;
-    return items.filter((item) => normalizeSearch([item.cidade, item.valorComissao].join(" ")).includes(normalizedQuery));
+    return items.filter((item) => normalizeSearch([item.cidade, item.uf, item.valorComissao].join(" ")).includes(normalizedQuery));
   }, [items, query]);
 
   const handleOpenCreate = () => {
@@ -44,7 +72,7 @@ export default function LocaisTab() {
   const handleOpenEdit = (item: Local) => {
     setForm({
       cidade: item.cidade,
-      valorComissao: String(item.valorComissao),
+      uf: item.uf || (Math.abs(item.valorComissao - 300) < 0.005 ? "PA" : ""),
     });
     setEditingId(item.id);
     setOpen(true);
@@ -57,15 +85,19 @@ export default function LocaisTab() {
       toast.error("Preencha o nome da cidade.");
       return;
     }
-    const valorComissao = parseFloat(form.valorComissao) || 0;
+    if (!form.uf) {
+      toast.error("Selecione a UF do local.");
+      return;
+    }
+    const valorComissao = valorComissaoPrevisto(form.cidade, form.uf);
 
     setSaving(true);
     try {
       if (editingId) {
-        await update(editingId, { cidade: form.cidade, valorComissao });
+        await update(editingId, { cidade: form.cidade, uf: form.uf, valorComissao });
         toast.success("Local atualizado com sucesso!");
       } else {
-        await create({ cidade: form.cidade, valorComissao });
+        await create({ cidade: form.cidade, uf: form.uf, valorComissao });
         toast.success("Local cadastrado com sucesso!");
       }
       setOpen(false);
@@ -91,6 +123,13 @@ export default function LocaisTab() {
       ),
     },
     {
+      key: "uf",
+      label: "UF",
+      render: (item: Local) => (
+        <span className="font-medium">{item.uf || "—"}</span>
+      ),
+    },
+    {
       key: "valorComissao",
       label: "Valor de Comissão",
       render: (item: Local) => (
@@ -106,7 +145,7 @@ export default function LocaisTab() {
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex w-full flex-col gap-3 sm:max-w-xl">
           <p className="text-sm text-muted-foreground">{items.length} local(s) cadastrado(s)</p>
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por cidade ou valor..." />
+          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por cidade, UF ou valor..." />
         </div>
         <Button onClick={handleOpenCreate} size="sm">
           <Plus className="mr-1.5 h-4 w-4" />
@@ -139,17 +178,29 @@ export default function LocaisTab() {
                 placeholder="Nome da cidade"
               />
             </FormField>
-            <FormField label="Valor de Comissão (R$)">
-              <Input
-                type="number"
-                step="0.01"
-                value={form.valorComissao}
-                onChange={(e) =>
-                  setForm({ ...form, valorComissao: e.target.value })
-                }
-                placeholder="0,00"
-              />
+            <FormField label="UF">
+              <Select value={form.uf} onValueChange={(value) => setForm({ ...form, uf: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a UF" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ufs.map((uf) => (
+                    <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </FormField>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Comissão automática
+              </p>
+              <p className="mt-1 text-lg font-bold text-primary">
+                R$ {valorComissaoPrevisto(form.cidade, form.uf).toFixed(2).replace(".", ",")}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Colniza: R$ 350,00 · Pará: R$ 300,00 · Demais cidades: R$ 275,00.
+              </p>
+            </div>
             <DialogFooter>
               <Button type="submit" disabled={saving}>
                 {saving ? "Salvando..." : editingId ? "Salvar alterações" : "Cadastrar"}

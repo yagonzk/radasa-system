@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   type Fechamento,
   type Motorista,
   type Local,
+  type Viagem,
   type ViagemFechamento,
 } from "@/lib/store";
 import { formatBRL } from "@/lib/exportUtils";
@@ -24,7 +25,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, MapPin } from "lucide-react";
+import { Plus, Trash2, MapPin, Route, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 interface FechamentoFormProps {
@@ -32,6 +33,7 @@ interface FechamentoFormProps {
   onClose: () => void;
   motoristas: Motorista[];
   locais: Local[];
+  viagensCadastradas: Viagem[];
   editingFechamento: Fechamento | null;
   onCreate: (
     motoristaId: string,
@@ -50,11 +52,39 @@ interface FechamentoFormProps {
   ) => Promise<unknown>;
 }
 
+
+function normalizeCidadeComissao(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s*[/,\-]\s*[A-Z]{2}\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function matchLocalByDestino(destino: string, locais: Local[]) {
+  const key = normalizeCidadeComissao(destino);
+  if (!key) return null;
+
+  const exact = locais.find((local) => normalizeCidadeComissao(local.cidade) === key);
+  if (exact) return exact;
+
+  // Fallback seguro para pequenas variações como "Cidade - Distrito" somente
+  // quando existe uma única correspondência possível.
+  const candidates = locais.filter((local) => {
+    const localKey = normalizeCidadeComissao(local.cidade);
+    return localKey.length >= 4 && (key.includes(localKey) || localKey.includes(key));
+  });
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
 export default function FechamentoForm({
   open,
   onClose,
   motoristas,
   locais,
+  viagensCadastradas,
   editingFechamento,
   onCreate,
   onUpdate,
@@ -64,6 +94,8 @@ export default function FechamentoForm({
   const [dataFim, setDataFim] = useState("");
   const [viagens, setViagens] = useState<ViagemFechamento[]>([]);
   const [saving, setSaving] = useState(false);
+  const [autoResumo, setAutoResumo] = useState("");
+  const [destinosNaoCadastrados, setDestinosNaoCadastrados] = useState<string[]>([]);
 
   const motoristasDisponiveis = motoristas.filter(
     (motorista) =>
@@ -82,8 +114,77 @@ export default function FechamentoForm({
       setDataInicio("");
       setDataFim("");
       setViagens([]);
+      setAutoResumo("");
+      setDestinosNaoCadastrados([]);
     }
   }, [editingFechamento, open]);
+
+  const viagensDoPeriodo = useMemo(() => {
+    if (editingFechamento || !motoristaId || !dataInicio || !dataFim) return [];
+    if (dataInicio > dataFim) return [];
+
+    return viagensCadastradas
+      .filter((viagem) =>
+        viagem.motoristaId === motoristaId &&
+        viagem.dataManifesto >= dataInicio &&
+        viagem.dataManifesto <= dataFim
+      )
+      .sort((a, b) =>
+        a.dataManifesto.localeCompare(b.dataManifesto) ||
+        String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? ""))
+      );
+  }, [dataFim, dataInicio, editingFechamento, motoristaId, viagensCadastradas]);
+
+  useEffect(() => {
+    if (editingFechamento) return;
+
+    if (!motoristaId || !dataInicio || !dataFim) {
+      setViagens([]);
+      setAutoResumo("");
+      setDestinosNaoCadastrados([]);
+      return;
+    }
+
+    if (dataInicio > dataFim) {
+      setViagens([]);
+      setAutoResumo("A data inicial deve ser anterior ou igual à data final.");
+      setDestinosNaoCadastrados([]);
+      return;
+    }
+
+    const grouped = new Map<string, number>();
+    const unmatched = new Set<string>();
+
+    for (const viagem of viagensDoPeriodo) {
+      const local = matchLocalByDestino(viagem.cidadeEntrega, locais);
+      if (!local) {
+        unmatched.add(viagem.cidadeEntrega || "Destino não informado");
+        continue;
+      }
+      grouped.set(local.id, (grouped.get(local.id) ?? 0) + 1);
+    }
+
+    const automaticas = Array.from(grouped.entries())
+      .map(([localId, quantidade]) => ({ localId, quantidade }))
+      .sort((a, b) => {
+        const cidadeA = locais.find((local) => local.id === a.localId)?.cidade ?? "";
+        const cidadeB = locais.find((local) => local.id === b.localId)?.cidade ?? "";
+        return cidadeA.localeCompare(cidadeB, "pt-BR");
+      });
+
+    setViagens(automaticas);
+    setDestinosNaoCadastrados(Array.from(unmatched).sort((a, b) => a.localeCompare(b, "pt-BR")));
+
+    const totalEncontradas = viagensDoPeriodo.length;
+    const totalVinculadas = automaticas.reduce((sum, item) => sum + item.quantidade, 0);
+    if (totalEncontradas === 0) {
+      setAutoResumo("Nenhuma viagem encontrada para este motorista no período selecionado.");
+    } else {
+      setAutoResumo(
+        `${totalVinculadas} de ${totalEncontradas} viagem(ns) carregada(s) automaticamente da aba Viagens.`
+      );
+    }
+  }, [dataFim, dataInicio, editingFechamento, locais, motoristaId, viagensDoPeriodo]);
 
   const addViagem = () => {
     if (locais.length === 0) {
@@ -193,6 +294,34 @@ export default function FechamentoForm({
               <DatePicker value={dataFim} onChange={setDataFim} placeholder="Selecione uma data" />
             </div>
           </div>
+
+          {!editingFechamento && motoristaId && dataInicio && dataFim && (
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <Route className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <div>
+                  <p className="text-sm font-semibold">Viagens carregadas automaticamente</p>
+                  <p className="text-xs text-muted-foreground">{autoResumo}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Regra: Colniza R$ 350,00 · cidades do Pará R$ 300,00 · demais cidades R$ 275,00.
+                  </p>
+                </div>
+              </div>
+
+              {destinosNaoCadastrados.length > 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold">Destino sem cadastro em Locais</p>
+                    <p className="text-xs">
+                      {destinosNaoCadastrados.join(", ")}. Cadastre esses destinos em Cadastros &gt; Locais
+                      para que entrem automaticamente no fechamento.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Viagens */}
           <div className="space-y-3">

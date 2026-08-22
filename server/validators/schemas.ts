@@ -118,7 +118,7 @@ export const estoqueMovimentacaoBody = z.object({
   createdAt: z.string().optional(),
 });
 export const localBody = z.object({
-  id: id.optional(), cidade: text(), valorComissao: money, createdAt: z.string().optional(),
+  id: id.optional(), cidade: text(), uf: z.string().trim().max(2).optional().nullable().or(z.literal("")), valorComissao: money.optional(), createdAt: z.string().optional(),
 });
 export const veiculoBody = z.object({
   id: id.optional(), placa: text(20), modelo: optionalText(255), subcategoria: z.enum(["CAMINHAO", "CARRO", "MOTO"]).optional().nullable(), motoristaId: id.optional().nullable().or(z.literal("")), quantidadePneus: z.coerce.number().int().min(4).max(16).default(10), quantidadeEstepes: z.coerce.number().int().min(0).max(3).default(1), createdAt: z.string().optional(),
