@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -21,7 +22,8 @@ import {
   WalletCards,
   Truck,
   CircleDollarSign,
-  ListFilter,
+  ChevronDown,
+  Filter,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -98,6 +100,46 @@ function pct(value: number) {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   })}%`;
+}
+
+
+function marginLevel(value: number) {
+  if (value >= 30) {
+    return {
+      label: "Alta",
+      textClass: "text-emerald-600 dark:text-emerald-400",
+      badgeClass:
+        "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+      cardClass:
+        "border-emerald-500/30 bg-emerald-500/5",
+      iconClass:
+        "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    };
+  }
+
+  if (value >= 15) {
+    return {
+      label: "Mediana",
+      textClass: "text-amber-600 dark:text-amber-400",
+      badgeClass:
+        "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      cardClass:
+        "border-amber-500/30 bg-amber-500/5",
+      iconClass:
+        "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    };
+  }
+
+  return {
+    label: "Ruim",
+    textClass: "text-red-600 dark:text-red-400",
+    badgeClass:
+      "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
+    cardClass:
+      "border-red-500/30 bg-red-500/5",
+    iconClass:
+      "bg-red-500/10 text-red-600 dark:text-red-400",
+  };
 }
 
 function unique(values: string[]) {
@@ -242,26 +284,35 @@ function MiniCard({
   value,
   detail,
   icon,
+  className = "",
+  valueClassName = "",
+  iconClassName = "bg-primary/10 text-primary",
 }: {
   title: string;
   value: string;
   detail: string;
   icon: React.ReactNode;
+  className?: string;
+  valueClassName?: string;
+  iconClassName?: string;
 }) {
   return (
-    <Card className="min-w-0">
+    <Card className={`min-w-0 overflow-visible ${className}`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               {title}
             </p>
-            <p className="mt-1 truncate text-xl font-bold tabular-nums" title={value}>
+            <p
+              className={`mt-1 whitespace-nowrap text-lg font-bold tabular-nums xl:text-xl ${valueClassName}`}
+              title={value}
+            >
               {value}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
           </div>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}>
             {icon}
           </div>
         </div>
@@ -425,6 +476,10 @@ export default function FiscalRentabilidade({
       0,
     );
     const diferenca = receberCliente - totalLebrinha;
+    const margem =
+      receberCliente > 0
+        ? (diferenca / receberCliente) * 100
+        : 0;
     const romaneiosCount = new Set(
       filtered.flatMap((item) => item.romaneios),
     ).size;
@@ -435,6 +490,7 @@ export default function FiscalRentabilidade({
       aReceberCliente,
       totalLebrinha,
       diferenca,
+      margem,
       romaneiosCount,
     };
   }, [filtered]);
@@ -473,6 +529,7 @@ export default function FiscalRentabilidade({
       ["A Receber", dashboard.aReceberCliente],
       ["Total Lebrinha", dashboard.totalLebrinha],
       ["Diferença Cliente - Lebrinha", dashboard.diferenca],
+      ["Margem (%)", dashboard.margem],
       ["Romaneios", dashboard.romaneiosCount],
     ];
     const wsResumo = XLSX.utils.aoa_to_sheet(resumoRows);
@@ -622,103 +679,7 @@ export default function FiscalRentabilidade({
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <div className="rounded-xl border bg-muted/20 p-3">
-            <div className="mb-3 flex items-center gap-2">
-              <ListFilter className="h-4 w-4 text-primary" />
-              <p className="text-sm font-semibold">Filtros</p>
-              {hasFilters && (
-                <Badge variant="outline">{filtered.length} resultado(s)</Badge>
-              )}
-            </div>
 
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
-              <div className="relative md:col-span-2 xl:col-span-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Pesquisar..."
-                  className="pl-9"
-                />
-              </div>
-
-              <Select value={clienteId} onValueChange={setClienteId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__todos__">Todos os clientes</SelectItem>
-                  {clientes.map(([id, name]) => (
-                    <SelectItem key={id} value={id}>{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={produtoId} onValueChange={setProdutoId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Produto" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__todos__">Todos os produtos</SelectItem>
-                  {produtos.map(([id, name]) => (
-                    <SelectItem key={id} value={id}>{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={placa} onValueChange={setPlaca}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Placa" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__todas__">Todas as placas</SelectItem>
-                  {placas.map((item) => (
-                    <SelectItem key={item} value={item}>{item}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={romaneio} onValueChange={setRomaneio}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Romaneio" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__todos__">Todos os romaneios</SelectItem>
-                  {romaneios.map((item) => (
-                    <SelectItem key={item} value={item}>{item}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={payment}
-                onValueChange={(value) => setPayment(value as PaymentFilter)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pagamento" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos os pagamentos</SelectItem>
-                  <SelectItem value="recebido">Com valor recebido</SelectItem>
-                  <SelectItem value="a-receber">Com valor a receber</SelectItem>
-                  <SelectItem value="quitado">Quitados</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {hasFilters && (
-              <div className="mt-3 flex justify-end">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={clearFilters}
-                >
-                  <X className="mr-2 h-4 w-4" />
-                  Limpar filtros
-                </Button>
-              </div>
-            )}
-          </div>
 
           {loading && !data ? (
             <div className="py-14 text-center text-sm text-muted-foreground">
@@ -726,55 +687,84 @@ export default function FiscalRentabilidade({
             </div>
           ) : data ? (
             <>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                <MiniCard
-                  title="Frete Cliente"
-                  value={formatBRL(dashboard.receberCliente)}
-                  detail="Receber c/ Cliente"
-                  icon={<ReceiptText className="h-4 w-4" />}
-                />
-                <MiniCard
-                  title="Recebido"
-                  value={formatBRL(dashboard.recebidoCliente)}
-                  detail="Já marcado como pago"
-                  icon={<WalletCards className="h-4 w-4" />}
-                />
-                <MiniCard
-                  title="A Receber"
-                  value={formatBRL(dashboard.aReceberCliente)}
-                  detail="Ainda pendente"
-                  icon={<WalletCards className="h-4 w-4" />}
-                />
-                <MiniCard
-                  title="Total Lebrinha"
-                  value={formatBRL(dashboard.totalLebrinha)}
-                  detail="Acertar + bonificação"
-                  icon={<Truck className="h-4 w-4" />}
-                />
-                <MiniCard
-                  title="Diferença"
-                  value={formatBRL(dashboard.diferenca)}
-                  detail="Cliente − Lebrinha"
-                  icon={<CircleDollarSign className="h-4 w-4" />}
-                />
-                <MiniCard
-                  title="Romaneios"
-                  value={String(dashboard.romaneiosCount)}
-                  detail={`${filtered.length} cliente/produto`}
-                  icon={<ReceiptText className="h-4 w-4" />}
-                />
-              </div>
+              {(() => {
+                const margem = marginLevel(dashboard.margem);
+
+                return (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+                    <MiniCard
+                      title="Frete Cliente"
+                      value={formatBRL(dashboard.receberCliente)}
+                      detail="Receber c/ Cliente"
+                      icon={<ReceiptText className="h-4 w-4" />}
+                    />
+                    <MiniCard
+                      title="Recebido"
+                      value={formatBRL(dashboard.recebidoCliente)}
+                      detail="Já marcado como pago"
+                      icon={<WalletCards className="h-4 w-4" />}
+                    />
+                    <MiniCard
+                      title="A Receber"
+                      value={formatBRL(dashboard.aReceberCliente)}
+                      detail="Ainda pendente"
+                      icon={<WalletCards className="h-4 w-4" />}
+                    />
+                    <MiniCard
+                      title="Total Lebrinha"
+                      value={formatBRL(dashboard.totalLebrinha)}
+                      detail="Acertar + bonificação"
+                      icon={<Truck className="h-4 w-4" />}
+                    />
+                    <MiniCard
+                      title="Diferença"
+                      value={formatBRL(dashboard.diferenca)}
+                      detail="Cliente − Lebrinha"
+                      icon={<CircleDollarSign className="h-4 w-4" />}
+                    />
+                    <MiniCard
+                      title="Margem"
+                      value={pct(dashboard.margem)}
+                      detail={`${margem.label} · alta ≥ 30% · mediana ≥ 15%`}
+                      icon={<CircleDollarSign className="h-4 w-4" />}
+                      className={margem.cardClass}
+                      valueClassName={margem.textClass}
+                      iconClassName={margem.iconClass}
+                    />
+                  </div>
+                );
+              })()}
 
               <Card className="overflow-hidden">
                 <CardHeader className="border-b py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <CardTitle className="text-sm">Resultado filtrado</CardTitle>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Somente os dados essenciais para comparar cliente e Lebrinha.
+                        Use os filtros diretamente nos títulos das colunas.
                       </p>
                     </div>
-                    <Badge variant="outline">{filtered.length} linha(s)</Badge>
+
+                    <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+                      <div className="relative w-full sm:w-72">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={search}
+                          onChange={(event) => setSearch(event.target.value)}
+                          placeholder="Pesquisar..."
+                          className="h-9 pl-9"
+                        />
+                      </div>
+
+                      {hasFilters && (
+                        <Button size="sm" variant="outline" onClick={clearFilters}>
+                          <X className="mr-2 h-4 w-4" />
+                          Limpar
+                        </Button>
+                      )}
+
+                      <Badge variant="outline">{filtered.length} linha(s)</Badge>
+                    </div>
                   </div>
                 </CardHeader>
 
@@ -783,8 +773,70 @@ export default function FiscalRentabilidade({
                     <table className="w-full min-w-[1160px] text-sm">
                       <thead className="border-b bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
                         <tr>
-                          <th className="px-3 py-3 text-left">Cliente</th>
-                          <th className="px-3 py-3 text-left">Produto</th>
+                          <th className="px-3 py-3 text-left">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={`flex items-center gap-1 font-semibold transition-colors hover:text-foreground ${
+                                    clienteId !== "__todos__" ? "text-primary" : ""
+                                  }`}
+                                >
+                                  Cliente
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent align="start" className="w-72 p-3 normal-case">
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  Filtrar cliente
+                                </p>
+                                <Select value={clienteId} onValueChange={setClienteId}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__todos__">Todos os clientes</SelectItem>
+                                    {clientes.map(([id, name]) => (
+                                      <SelectItem key={id} value={id}>{name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </PopoverContent>
+                            </Popover>
+                          </th>
+
+                          <th className="px-3 py-3 text-left">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={`flex items-center gap-1 font-semibold transition-colors hover:text-foreground ${
+                                    produtoId !== "__todos__" ? "text-primary" : ""
+                                  }`}
+                                >
+                                  Produto
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent align="start" className="w-72 p-3 normal-case">
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  Filtrar produto
+                                </p>
+                                <Select value={produtoId} onValueChange={setProdutoId}>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__todos__">Todos os produtos</SelectItem>
+                                    {produtos.map(([id, name]) => (
+                                      <SelectItem key={id} value={id}>{name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </PopoverContent>
+                            </Popover>
+                          </th>
+
                           <th className="px-3 py-3 text-right">Qtd.</th>
                           <th className="px-3 py-3 text-right">Frete unit.</th>
                           <th className="px-3 py-3 text-right">Frete cliente</th>
@@ -792,8 +844,94 @@ export default function FiscalRentabilidade({
                           <th className="px-3 py-3 text-right">Total Lebrinha</th>
                           <th className="px-3 py-3 text-right">Diferença</th>
                           <th className="px-3 py-3 text-right">Margem</th>
-                          <th className="px-3 py-3 text-center">Situação</th>
-                          <th className="px-3 py-3 text-center">Romaneios</th>
+
+                          <th className="px-3 py-3 text-center">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={`mx-auto flex items-center gap-1 font-semibold transition-colors hover:text-foreground ${
+                                    payment !== "todos" ? "text-primary" : ""
+                                  }`}
+                                >
+                                  Situação
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent align="end" className="w-64 p-3 normal-case">
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  Filtrar pagamento
+                                </p>
+                                <Select
+                                  value={payment}
+                                  onValueChange={(value) => setPayment(value as PaymentFilter)}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="todos">Todos os pagamentos</SelectItem>
+                                    <SelectItem value="recebido">Com valor recebido</SelectItem>
+                                    <SelectItem value="a-receber">Com valor a receber</SelectItem>
+                                    <SelectItem value="quitado">Quitados</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </PopoverContent>
+                            </Popover>
+                          </th>
+
+                          <th className="px-3 py-3 text-center">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={`mx-auto flex items-center gap-1 font-semibold transition-colors hover:text-foreground ${
+                                    romaneio !== "__todos__" || placa !== "__todas__"
+                                      ? "text-primary"
+                                      : ""
+                                  }`}
+                                >
+                                  Romaneios
+                                  <Filter className="h-3.5 w-3.5" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent align="end" className="w-80 space-y-3 p-3 normal-case">
+                                <div>
+                                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Romaneio
+                                  </p>
+                                  <Select value={romaneio} onValueChange={setRomaneio}>
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="__todos__">Todos os romaneios</SelectItem>
+                                      {romaneios.map((item) => (
+                                        <SelectItem key={item} value={item}>{item}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div>
+                                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Placa
+                                  </p>
+                                  <Select value={placa} onValueChange={setPlaca}>
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="__todas__">Todas as placas</SelectItem>
+                                      {placas.map((item) => (
+                                        <SelectItem key={item} value={item}>{item}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </th>
                         </tr>
                       </thead>
 
@@ -840,15 +978,18 @@ export default function FiscalRentabilidade({
                                 {formatBRL(item.diferencaClienteLebrinha)}
                               </td>
                               <td className="px-3 py-3 text-right">
-                                <Badge
-                                  variant={
-                                    item.diferencaClienteLebrinha < 0
-                                      ? "destructive"
-                                      : "secondary"
-                                  }
-                                >
-                                  {pct(item.percentualDiferenca)}
-                                </Badge>
+                                {(() => {
+                                  const margem = marginLevel(item.percentualDiferenca);
+                                  return (
+                                    <Badge
+                                      variant="outline"
+                                      className={margem.badgeClass}
+                                      title={`${margem.label}: ${pct(item.percentualDiferenca)}`}
+                                    >
+                                      {pct(item.percentualDiferenca)}
+                                    </Badge>
+                                  );
+                                })()}
                               </td>
                               <td className="px-3 py-3 text-center">
                                 {status === "quitado" ? (
@@ -887,9 +1028,10 @@ export default function FiscalRentabilidade({
               </Card>
 
               <div className="rounded-lg border border-dashed p-3 text-xs leading-relaxed text-muted-foreground">
-                Os valores desta aba vêm diretamente dos Romaneios. O filtro de período
-                continua sendo o filtro principal no topo da aba Fiscal; os filtros acima
-                refinam somente esta análise.
+                Os valores desta aba vêm diretamente dos Romaneios. O período continua
+                sendo definido no topo do Fiscal; Cliente, Produto, Situação, Romaneio e Placa
+                são filtrados diretamente nos cabeçalhos da tabela. Margem alta: ≥ 30%;
+                mediana: 15% a 29,9%; ruim: abaixo de 15%.
               </div>
             </>
           ) : null}
