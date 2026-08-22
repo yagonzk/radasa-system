@@ -252,16 +252,17 @@ export default function FechamentoForm({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-[1180px] max-h-[calc(100vh-2rem)] overflow-x-hidden overflow-y-auto p-5 sm:p-6">
         <DialogHeader>
           <DialogTitle>
             {editingFechamento ? "Editar Fechamento" : "Novo Fechamento"}
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr_1fr] lg:items-end">
           {/* Motorista selection */}
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label className="text-sm font-medium">Motorista</Label>
             <Select value={motoristaId} onValueChange={setMotoristaId}>
               <SelectTrigger>
@@ -284,12 +285,11 @@ export default function FechamentoForm({
           </div>
 
           {/* Date range */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
+            <div className="min-w-0 space-y-1.5">
               <Label className="text-sm font-medium">Data Início</Label>
               <DatePicker value={dataInicio} onChange={setDataInicio} placeholder="Selecione uma data" />
             </div>
-            <div className="space-y-1.5">
+            <div className="min-w-0 space-y-1.5">
               <Label className="text-sm font-medium">Data Fim</Label>
               <DatePicker value={dataFim} onChange={setDataFim} placeholder="Selecione uma data" />
             </div>
@@ -297,7 +297,7 @@ export default function FechamentoForm({
 
           {!editingFechamento && motoristaId && dataInicio && dataFim && (
             <div className="space-y-2">
-              <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+              <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
                 <Route className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <div>
                   <p className="text-sm font-semibold">Viagens carregadas automaticamente</p>
@@ -346,7 +346,7 @@ export default function FechamentoForm({
             )}
 
             {viagens.length > 0 && (
-              <div className="space-y-2">
+              <div className="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
                 {viagens.map((viagem, index) => {
                   const local = locais.find((l) => l.id === viagem.localId);
                   const subtotal = local
@@ -355,12 +355,12 @@ export default function FechamentoForm({
                   return (
                     <div
                       key={index}
-                      className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3"
+                      className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-muted/30 p-2"
                     >
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400">
                         <MapPin className="h-4 w-4" />
                       </div>
-                      <div className="flex-1">
+                      <div className="min-w-0 flex-1">
                         <Select
                           value={viagem.localId}
                           onValueChange={(val) =>
@@ -379,7 +379,7 @@ export default function FechamentoForm({
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="w-20">
+                      <div className="w-16 shrink-0">
                         <Input
                           type="number"
                           min={1}
@@ -393,7 +393,7 @@ export default function FechamentoForm({
                           placeholder="Qtd"
                         />
                       </div>
-                      <div className="w-24 text-right text-sm font-medium text-foreground">
+                      <div className="w-[86px] shrink-0 text-right text-sm font-medium text-foreground">
                         {formatBRL(subtotal)}
                       </div>
                       <button
@@ -411,7 +411,7 @@ export default function FechamentoForm({
           </div>
 
           {/* Total */}
-          <div className="flex items-center justify-between rounded-lg bg-primary/5 p-4">
+          <div className="flex items-center justify-between rounded-lg bg-primary/5 px-4 py-3">
             <span className="text-sm font-semibold text-muted-foreground">
               Valor Total da Comissão
             </span>

@@ -1,0 +1,20 @@
+RADASA SYSTEM - ATUALIZACAO DO MODAL DE FECHAMENTO
+
+1. Entre na pasta do projeto:
+cd C:\Users\yago\Downloads\Radasa-System-Cloudflare-v1.4
+
+2. Instale/garanta as dependencias:
+pnpm install
+
+3. Valide o TypeScript:
+pnpm run check
+
+4. Envie para o GitHub:
+git add .
+git commit -m "fix: adapta modal de fechamento ao tamanho da tela"
+git push origin main
+
+5. Publique no Cloudflare:
+pnpm run deploy
+
+OBS.: Esta atualizacao e apenas de interface. Nao ha nova migration do banco de dados.
