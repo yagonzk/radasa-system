@@ -22,9 +22,7 @@ const navGroups = [
       { label: "Romaneios", href: "/romaneios", icon: <ClipboardList className="h-4 w-4" />, matchPaths: ["/romaneios", "/manifestos"] },
       { label: "Viagens", href: "/viagens", icon: <Truck className="h-4 w-4" />, matchPaths: ["/viagens"] },
       { label: "Abastecimentos", href: "/abastecimentos", icon: <Fuel className="h-4 w-4" />, matchPaths: ["/abastecimentos"] },
-      { label: "Pedágios", href: "/pedagios", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/pedagios"] },
-      { label: "Fiscal", href: "/fiscal", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/fiscal"] },
-      { label: "CIOT", href: "/ciot/gerar", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/ciot"] },
+      { label: "Rotas", href: "/pedagios", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/pedagios"] },
     ],
   },
   {
@@ -32,6 +30,14 @@ const navGroups = [
     icon: <WalletCards className="h-[18px] w-[18px]" />,
     items: [
       { label: "Comissões", href: "/fechamentos", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/fechamentos"] },
+      { label: "Comercial", href: "/fiscal", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/fiscal"] },
+    ],
+  },
+  {
+    label: "Fiscal",
+    icon: <FileBadge2 className="h-[18px] w-[18px]" />,
+    items: [
+      { label: "CIOT", href: "/ciot/gerar", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/ciot"] },
     ],
   },
   {
@@ -162,7 +168,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                         </Link>
                       );
                     })}
-                    {group.label === "Operação" && location.startsWith("/ciot") && (
+                    {group.label === "Fiscal" && location.startsWith("/ciot") && (
                       <div className="ml-3 space-y-1 border-l border-sidebar-border pl-2">
                         <Link href="/ciot/gerar" className="block rounded px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-sidebar-accent">Gerar CIOTs</Link>
                         <Link href="/ciot/gerados" className="block rounded px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-sidebar-accent">CIOTs gerados</Link>

@@ -1,0 +1,17 @@
+RADASA SYSTEM - Atualização de organização do menu
+
+Não há nova migration nesta atualização.
+
+1. Instalar/atualizar dependências:
+pnpm install
+
+2. Validar o projeto:
+pnpm run check
+
+3. Commit e envio ao GitHub:
+git add .
+git commit -m "feat: reorganiza Fiscal, Comercial e Rotas"
+git push origin main
+
+4. Publicar:
+pnpm run deploy

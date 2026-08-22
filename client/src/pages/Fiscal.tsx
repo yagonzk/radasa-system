@@ -293,7 +293,7 @@ export default function Fiscal() {
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-display text-2xl font-bold text-foreground">Fiscal</h1>
+              <h1 className="font-display text-2xl font-bold text-foreground">Comercial</h1>
               <Badge variant="outline">Faturamento x despesas</Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -455,7 +455,7 @@ export default function Fiscal() {
 
             <Card className="border-dashed">
               <CardContent className="p-4 text-xs leading-relaxed text-muted-foreground">
-                <strong className="text-foreground">Critérios do Fiscal:</strong> faturamento vem dos produtos dos Romaneios classificados como Receber c/ Cliente, Acertar c/ Lebrinha ou Bonificação Lebrinha. Vasilhames ficam fora do faturamento. Abastecimento usa o valor total das NFs. Almoxarifado considera entradas, pneus consideram compras/recapagens/consertos e pedágios usam a base de Viagens. <strong className="text-foreground">Diárias e Chapas são apuradas separadamente, cada uma pelo seu próprio campo em cada viagem.</strong> O valor de abastecimento da base de Viagens não é somado novamente para evitar duplicidade.
+                <strong className="text-foreground">Critérios do Comercial:</strong> faturamento vem dos produtos dos Romaneios classificados como Receber c/ Cliente, Acertar c/ Lebrinha ou Bonificação Lebrinha. Vasilhames ficam fora do faturamento. Abastecimento usa o valor total das NFs. Almoxarifado considera entradas, pneus consideram compras/recapagens/consertos e pedágios usam a base de Viagens. <strong className="text-foreground">Diárias e Chapas são apuradas separadamente, cada uma pelo seu próprio campo em cada viagem.</strong> O valor de abastecimento da base de Viagens não é somado novamente para evitar duplicidade.
               </CardContent>
             </Card>
               </>
