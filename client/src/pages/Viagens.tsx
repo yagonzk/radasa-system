@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -22,9 +23,84 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, Edit3, Eye, FileText, LoaderCircle } from "lucide-react";
+import { Check, ChevronDown, Plus, Trash2, Edit3, Eye, FileText, LoaderCircle, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
+
+
+type ViagemFilterKey =
+  | "data"
+  | "placa"
+  | "motorista"
+  | "destino"
+  | "km"
+  | "frete"
+  | "custos"
+  | "custoKm"
+  | "lucroBruto";
+
+interface ViagemColumnFilters {
+  dataInicio: string;
+  dataFim: string;
+  placa: string;
+  motorista: string;
+  destino: string;
+  km: string;
+  frete: string;
+  custos: string;
+  custoKm: string;
+  lucroBruto: string;
+}
+
+const emptyViagemColumnFilters: ViagemColumnFilters = {
+  dataInicio: "",
+  dataFim: "",
+  placa: "",
+  motorista: "",
+  destino: "",
+  km: "",
+  frete: "",
+  custos: "",
+  custoKm: "",
+  lucroBruto: "",
+};
+
+const viagemColumns: Array<{
+  key: ViagemFilterKey;
+  label: string;
+  align?: "center" | "right";
+  date?: boolean;
+}> = [
+  { key: "data", label: "Data manifesto", date: true },
+  { key: "placa", label: "Placa" },
+  { key: "motorista", label: "Motorista" },
+  { key: "destino", label: "Destino" },
+  { key: "km", label: "KM", align: "center" },
+  { key: "frete", label: "Frete", align: "right" },
+  { key: "custos", label: "Custos", align: "right" },
+  { key: "custoKm", label: "Custo/KM", align: "right" },
+  { key: "lucroBruto", label: "Lucro Bruto", align: "right" },
+];
+
+function viagemTotalCusto(viagem: Viagem) {
+  return viagem.valorPedagio + viagem.valorDiaria + viagem.valorAbastecimento + viagem.valorChapa;
+}
+
+function viagemCustoPorKm(viagem: Viagem) {
+  const total = viagemTotalCusto(viagem);
+  return viagem.distanciaKm > 0 ? total / viagem.distanciaKm : 0;
+}
+
+function viagemLucroBruto(viagem: Viagem) {
+  return viagem.valorFrete - viagemTotalCusto(viagem);
+}
+
+function formatKm(value: number) {
+  return Number(value || 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
 
 type LerManifestoViagemResponse = {
   parserVersion: string;
@@ -105,10 +181,10 @@ export default function Viagens() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingViagem, setEditingViagem] = useState<Viagem | null>(null);
   const [viewingViagem, setViewingViagem] = useState<Viagem | null>(null);
-  const [filterMotorista, setFilterMotorista] = useState("");
-  const [filterPlaca, setFilterPlaca] = useState("");
-  const [filterDataInicio, setFilterDataInicio] = useState("");
-  const [filterDataFim, setFilterDataFim] = useState("");
+  const [search, setSearch] = useState("");
+  const [columnFilters, setColumnFilters] = useState<ViagemColumnFilters>(emptyViagemColumnFilters);
+  const [activeColumnFilter, setActiveColumnFilter] = useState<ViagemFilterKey | null>(null);
+  const [columnFilterSearch, setColumnFilterSearch] = useState("");
   const { items: veiculos } = useVeiculos();
 
   // Form state
@@ -143,19 +219,90 @@ export default function Viagens() {
     [motoristas, editingViagem]
   );
 
-  const filteredViagens = useMemo(() => {
-    return viagens.filter((v) => {
-      if (filterMotorista && v.motoristaId !== filterMotorista) return false;
-      if (filterPlaca && v.placa !== filterPlaca) return false;
-      if (filterDataInicio && v.dataManifesto < filterDataInicio) return false;
-      if (filterDataFim && v.dataManifesto > filterDataFim) return false;
-      return true;
-    });
-  }, [viagens, filterMotorista, filterPlaca, filterDataInicio, filterDataFim]);
+  const motoristaById = useMemo(
+    () => new Map(motoristas.map((motorista) => [motorista.id, motorista])),
+    [motoristas],
+  );
 
-  const totalCustos = filteredViagens.reduce((sum: number, v: Viagem) => {
-    return sum + (v.valorPedagio + v.valorDiaria + v.valorAbastecimento + v.valorChapa);
-  }, 0);
+  const filteredViagens = useMemo(() => {
+    const query = normalizeLookup(search);
+
+    return [...viagens]
+      .filter((v) => {
+        const motoristaNome = motoristaById.get(v.motoristaId)?.nome || "Sem motorista";
+        const totalCusto = viagemTotalCusto(v);
+        const custoPorKm = viagemCustoPorKm(v);
+        const lucroBruto = viagemLucroBruto(v);
+
+        if (query) {
+          const searchable = normalizeLookup([
+            v.dataManifesto,
+            formatDate(v.dataManifesto),
+            v.placa,
+            motoristaNome,
+            v.cidadeEntrega,
+            formatKm(v.distanciaKm),
+            formatBRL(v.valorFrete),
+            formatBRL(totalCusto),
+            formatBRL(custoPorKm),
+            formatBRL(lucroBruto),
+          ].join(" "));
+          if (!searchable.includes(query)) return false;
+        }
+
+        if (columnFilters.dataInicio && v.dataManifesto < columnFilters.dataInicio) return false;
+        if (columnFilters.dataFim && v.dataManifesto > columnFilters.dataFim) return false;
+        if (columnFilters.placa && v.placa !== columnFilters.placa) return false;
+        if (columnFilters.motorista && motoristaNome !== columnFilters.motorista) return false;
+        if (columnFilters.destino && v.cidadeEntrega !== columnFilters.destino) return false;
+        if (columnFilters.km && formatKm(v.distanciaKm) !== columnFilters.km) return false;
+        if (columnFilters.frete && formatBRL(v.valorFrete) !== columnFilters.frete) return false;
+        if (columnFilters.custos && formatBRL(totalCusto) !== columnFilters.custos) return false;
+        if (columnFilters.custoKm && formatBRL(custoPorKm) !== columnFilters.custoKm) return false;
+        if (columnFilters.lucroBruto && formatBRL(lucroBruto) !== columnFilters.lucroBruto) return false;
+
+        return true;
+      })
+      .sort((a, b) =>
+        b.dataManifesto.localeCompare(a.dataManifesto) ||
+        String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")),
+      );
+  }, [columnFilters, motoristaById, search, viagens]);
+
+  const totalCustos = filteredViagens.reduce(
+    (sum: number, v: Viagem) => sum + viagemTotalCusto(v),
+    0,
+  );
+
+  const columnFilterOptions = (key: ViagemFilterKey) => {
+    let values: string[] = [];
+
+    if (key === "placa") values = viagens.map((item) => item.placa || "Sem placa");
+    if (key === "motorista") values = viagens.map((item) => motoristaById.get(item.motoristaId)?.nome || "Sem motorista");
+    if (key === "destino") values = viagens.map((item) => item.cidadeEntrega || "Sem destino");
+    if (key === "km") values = viagens.map((item) => formatKm(item.distanciaKm));
+    if (key === "frete") values = viagens.map((item) => formatBRL(item.valorFrete));
+    if (key === "custos") values = viagens.map((item) => formatBRL(viagemTotalCusto(item)));
+    if (key === "custoKm") values = viagens.map((item) => formatBRL(viagemCustoPorKm(item)));
+    if (key === "lucroBruto") values = viagens.map((item) => formatBRL(viagemLucroBruto(item)));
+
+    return Array.from(new Set(values))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+  };
+
+  const hasColumnFilters = Boolean(
+    columnFilters.dataInicio ||
+    columnFilters.dataFim ||
+    columnFilters.placa ||
+    columnFilters.motorista ||
+    columnFilters.destino ||
+    columnFilters.km ||
+    columnFilters.frete ||
+    columnFilters.custos ||
+    columnFilters.custoKm ||
+    columnFilters.lucroBruto
+  );
 
   const linkedMotoristaForVehicle = (vehicle: Veiculo | null | undefined) => {
     if (!vehicle?.motoristaId) return "";
@@ -348,13 +495,6 @@ export default function Viagens() {
     }
   };
 
-  const handleClearFilters = () => {
-    setFilterMotorista("");
-    setFilterPlaca("");
-    setFilterDataInicio("");
-    setFilterDataFim("");
-  };
-
   return (
     <Layout>
       <div className="mx-auto max-w-6xl">
@@ -378,79 +518,27 @@ export default function Viagens() {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="mb-6 rounded-xl border border-border bg-card p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Motorista
-                </Label>
-                <Select value={filterMotorista} onValueChange={setFilterMotorista}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Todos os motoristas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {motoristas.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Placa
-                </Label>
-                <Select value={filterPlaca} onValueChange={setFilterPlaca}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Todas as placas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {veiculos.map((v) => (
-                      <SelectItem key={v.id} value={v.placa}>
-                        {v.placa}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  De
-                </Label>
-                <DatePicker
-                  value={filterDataInicio}
-                  onChange={setFilterDataInicio}
-                  className="w-44"
-                  placeholder="Selecione uma data"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Até
-                </Label>
-                <DatePicker
-                  value={filterDataFim}
-                  defaultMonth={filterDataInicio}
-                  onChange={setFilterDataFim}
-                  className="w-44"
-                  placeholder="Selecione uma data"
-                />
-              </div>
-              {(filterMotorista || filterDataInicio || filterDataFim) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearFilters}
-                  className="h-9"
-                >
-                  Limpar filtros
-                </Button>
-              )}
-            </div>
+        {/* Pesquisa + filtros por coluna, no mesmo padrão da aba Romaneios */}
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <div className="relative w-full max-w-xl">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Pesquisar data, placa, motorista, destino ou valores..."
+              className="pl-9"
+            />
           </div>
+          {hasColumnFilters && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setColumnFilters(emptyViagemColumnFilters)}
+            >
+              <X className="mr-2 h-4 w-4" />
+              Limpar filtros
+            </Button>
+          )}
         </div>
 
         {/* Summary cards */}
@@ -490,35 +578,136 @@ export default function Viagens() {
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                    Manifesto
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                    Placa
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                    Motorista
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                    Destino
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-muted-foreground">
-                    KM
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
-                    Frete
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
-                    Custos
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
-                    Custo/KM
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
-                    Lucro Bruto
-                  </th>
+              <thead className="bg-muted/30 text-xs uppercase text-muted-foreground">
+                <tr className="border-b border-border">
+                  {viagemColumns.map((column) => {
+                    const valueKey = column.key as Exclude<ViagemFilterKey, "data">;
+                    const active = column.date
+                      ? Boolean(columnFilters.dataInicio || columnFilters.dataFim)
+                      : Boolean(columnFilters[valueKey]);
+                    const options = columnFilterOptions(column.key).filter((option) =>
+                      normalizeLookup(option).includes(normalizeLookup(columnFilterSearch)),
+                    );
+                    const justify = column.align === "right"
+                      ? "justify-end text-right"
+                      : column.align === "center"
+                        ? "justify-center text-center"
+                        : "justify-start text-left";
+
+                    return (
+                      <th key={column.key} className="px-4 py-3 font-semibold">
+                        <Popover
+                          open={activeColumnFilter === column.key}
+                          onOpenChange={(open) => {
+                            setActiveColumnFilter(open ? column.key : null);
+                            setColumnFilterSearch("");
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className={`flex w-full items-center gap-1 rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary ${justify} ${active ? "text-primary" : "text-muted-foreground"}`}
+                              title={`Filtrar por ${column.label}`}
+                            >
+                              <span>{column.label}</span>
+                              <ChevronDown className="h-4 w-4 shrink-0" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            align={column.align === "right" ? "end" : "start"}
+                            className="w-80 p-0"
+                          >
+                            {column.date ? (
+                              <div className="space-y-3 p-3">
+                                <div className="space-y-1">
+                                  <Label className="text-xs">De</Label>
+                                  <DatePicker
+                                    value={columnFilters.dataInicio}
+                                    onChange={(value) =>
+                                      setColumnFilters((current) => ({ ...current, dataInicio: value }))
+                                    }
+                                    placeholder="Data inicial"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Até</Label>
+                                  <DatePicker
+                                    value={columnFilters.dataFim}
+                                    defaultMonth={columnFilters.dataInicio}
+                                    onChange={(value) =>
+                                      setColumnFilters((current) => ({ ...current, dataFim: value }))
+                                    }
+                                    placeholder="Data final"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="border-b p-3">
+                                  <Input
+                                    value={columnFilterSearch}
+                                    onChange={(event) => setColumnFilterSearch(event.target.value)}
+                                    placeholder={`Pesquisar ${column.label.toLocaleLowerCase("pt-BR")}...`}
+                                    autoFocus
+                                  />
+                                </div>
+                                <div className="max-h-60 overflow-y-auto p-2">
+                                  {options.length === 0 ? (
+                                    <p className="py-4 text-center text-xs text-muted-foreground">
+                                      Nenhuma opção encontrada.
+                                    </p>
+                                  ) : (
+                                    options.map((option) => (
+                                      <button
+                                        type="button"
+                                        key={option}
+                                        onClick={() => {
+                                          setColumnFilters((current) => ({
+                                            ...current,
+                                            [valueKey]: option,
+                                          }));
+                                          setActiveColumnFilter(null);
+                                        }}
+                                        className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${columnFilters[valueKey] === option ? "bg-primary/10 text-primary" : ""}`}
+                                      >
+                                        <span className="truncate">{option}</span>
+                                        {columnFilters[valueKey] === option && (
+                                          <Check className="h-4 w-4" />
+                                        )}
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+                              </>
+                            )}
+                            <div className="flex gap-2 border-t p-3">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1"
+                                onClick={() =>
+                                  setColumnFilters((current) =>
+                                    column.date
+                                      ? { ...current, dataInicio: "", dataFim: "" }
+                                      : { ...current, [valueKey]: "" },
+                                  )
+                                }
+                              >
+                                Limpar
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => setActiveColumnFilter(null)}
+                              >
+                                OK
+                              </Button>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </th>
+                    );
+                  })}
                   <th className="px-4 py-3 text-center font-semibold text-muted-foreground">
                     Ações
                   </th>
@@ -531,8 +720,9 @@ export default function Viagens() {
                       colSpan={10}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
-                      Nenhuma viagem encontrada. Clique em "Registrar viagem"
-                      para começar.
+                      {search || hasColumnFilters
+                        ? "Nenhuma viagem encontrada com os filtros atuais."
+                        : 'Nenhuma viagem encontrada. Clique em "Registrar viagem" para começar.'}
                     </td>
                   </tr>
                 ) : (
@@ -540,13 +730,9 @@ export default function Viagens() {
                     const motorista = motoristas.find(
                       (m) => m.id === v.motoristaId
                     );
-                    const totalCusto =
-                      v.valorPedagio +
-                      v.valorDiaria +
-                      v.valorAbastecimento +
-                      v.valorChapa;
-                    const custoPorKm = v.distanciaKm > 0 ? totalCusto / v.distanciaKm : 0;
-                    const lucroBruto = v.valorFrete - totalCusto;
+                    const totalCusto = viagemTotalCusto(v);
+                    const custoPorKm = viagemCustoPorKm(v);
+                    const lucroBruto = viagemLucroBruto(v);
 
                     return (
                       <tr
@@ -566,7 +752,7 @@ export default function Viagens() {
                           {v.cidadeEntrega}
                         </td>
                         <td className="px-4 py-3 text-center text-card-foreground">
-                          {v.distanciaKm}
+                          {formatKm(v.distanciaKm)}
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-green-600 dark:text-green-400">
                           {formatBRL(v.valorFrete)}
