@@ -1,59 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { api } from "@/lib/api";
-import { formatBRL, formatDate } from "@/lib/exportUtils";
+import { formatBRL } from "@/lib/exportUtils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   FileSpreadsheet,
   RefreshCcw,
   Search,
-  Truck,
-  Users,
-  Package,
   ReceiptText,
   WalletCards,
+  Truck,
+  CircleDollarSign,
+  ListFilter,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
-
-type GrupoRentabilidade = {
-  key: string;
-  clienteId: string;
-  clienteNome: string;
-  clienteCodigo: string;
-  produtoId: string;
-  produtoNome: string;
-  produtoCodigo: string;
-
-  quantidadeCliente: number;
-  valorUnitarioCliente: number;
-  receberCliente: number;
-  recebidoCliente: number;
-  aReceberCliente: number;
-
-  quantidadeAcertarLebrinha: number;
-  valorUnitarioAcertarLebrinha: number;
-  acertarLebrinha: number;
-
-  quantidadeBonificacaoLebrinha: number;
-  valorUnitarioBonificacao: number;
-  bonificacaoLebrinha: number;
-
-  quantidadeLebrinha: number;
-  valorUnitarioLebrinha: number;
-  totalLebrinha: number;
-
-  diferencaUnitario: number;
-  diferencaClienteLebrinha: number;
-  percentualDiferenca: number;
-
-  romaneios: string[];
-  notasFiscais: string[];
-  placas: string[];
-  linhas: number;
-};
 
 type LinhaRomaneioFiscal = {
   id: string;
@@ -77,24 +48,43 @@ type LinhaRomaneioFiscal = {
   pagoCliente: boolean | null;
 };
 
+type GrupoRentabilidade = {
+  key: string;
+  clienteId: string;
+  clienteNome: string;
+  clienteCodigo: string;
+  produtoId: string;
+  produtoNome: string;
+  produtoCodigo: string;
+
+  quantidadeCliente: number;
+  valorUnitarioCliente: number;
+  receberCliente: number;
+  recebidoCliente: number;
+  aReceberCliente: number;
+
+  quantidadeLebrinha: number;
+  valorUnitarioLebrinha: number;
+  acertarLebrinha: number;
+  bonificacaoLebrinha: number;
+  totalLebrinha: number;
+
+  diferencaUnitario: number;
+  diferencaClienteLebrinha: number;
+  percentualDiferenca: number;
+
+  romaneios: string[];
+  placas: string[];
+};
+
 type RentabilidadeData = {
   periodo: { from: string | null; to: string | null };
-  resumo: {
-    receberCliente: number;
-    recebidoCliente: number;
-    aReceberCliente: number;
-    acertarLebrinha: number;
-    bonificacaoLebrinha: number;
-    totalLebrinha: number;
-    diferencaClienteLebrinha: number;
-    romaneios: number;
-    clientes: number;
-    produtos: number;
-    linhas: number;
-  };
-  agrupado: GrupoRentabilidade[];
+  resumo: Record<string, number>;
+  agrupado: unknown[];
   linhas: LinhaRomaneioFiscal[];
 };
+
+type PaymentFilter = "todos" | "recebido" | "a-receber" | "quitado";
 
 function qty(value: number) {
   return Number(value || 0).toLocaleString("pt-BR", {
@@ -110,7 +100,144 @@ function pct(value: number) {
   })}%`;
 }
 
-function MetricCard({
+function unique(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b, "pt-BR", { numeric: true }),
+  );
+}
+
+function buildGroups(lines: LinhaRomaneioFiscal[]) {
+  const groups = new Map<string, GrupoRentabilidade & {
+    quantidadeAcertar: number;
+    quantidadeBonificacao: number;
+  }>();
+
+  for (const row of lines) {
+    const key = `${row.clienteId}:${row.produtoId}`;
+    const current = groups.get(key) ?? {
+      key,
+      clienteId: row.clienteId,
+      clienteNome: row.clienteNome,
+      clienteCodigo: row.clienteCodigo,
+      produtoId: row.produtoId,
+      produtoNome: row.produtoNome,
+      produtoCodigo: row.produtoCodigo,
+
+      quantidadeCliente: 0,
+      valorUnitarioCliente: 0,
+      receberCliente: 0,
+      recebidoCliente: 0,
+      aReceberCliente: 0,
+
+      quantidadeLebrinha: 0,
+      valorUnitarioLebrinha: 0,
+      acertarLebrinha: 0,
+      bonificacaoLebrinha: 0,
+      totalLebrinha: 0,
+
+      diferencaUnitario: 0,
+      diferencaClienteLebrinha: 0,
+      percentualDiferenca: 0,
+
+      romaneios: [],
+      placas: [],
+
+      quantidadeAcertar: 0,
+      quantidadeBonificacao: 0,
+    };
+
+    if (row.tipoDb === "RECEBER_CLIENTE") {
+      current.quantidadeCliente += Number(row.quantidade || 0);
+      current.receberCliente += Number(row.valorTotal || 0);
+
+      if (row.pagoCliente === true) {
+        current.recebidoCliente += Number(row.valorTotal || 0);
+      } else {
+        current.aReceberCliente += Number(row.valorTotal || 0);
+      }
+    }
+
+    if (row.tipoDb === "ACERTAR_LEBRINHA") {
+      current.quantidadeAcertar += Number(row.quantidade || 0);
+      current.acertarLebrinha += Number(row.valorTotal || 0);
+    }
+
+    if (row.tipoDb === "BONIFICACAO_LEBRINHA") {
+      current.quantidadeBonificacao += Number(row.quantidade || 0);
+      current.bonificacaoLebrinha += Number(row.valorTotal || 0);
+    }
+
+    if (row.romaneio && !current.romaneios.includes(row.romaneio)) {
+      current.romaneios.push(row.romaneio);
+    }
+    if (row.placa && !current.placas.includes(row.placa)) {
+      current.placas.push(row.placa);
+    }
+
+    groups.set(key, current);
+  }
+
+  return Array.from(groups.values())
+    .map((group) => {
+      const quantidadeLebrinha =
+        group.quantidadeAcertar + group.quantidadeBonificacao;
+      const totalLebrinha =
+        group.acertarLebrinha + group.bonificacaoLebrinha;
+
+      const valorUnitarioCliente =
+        group.quantidadeCliente > 0
+          ? group.receberCliente / group.quantidadeCliente
+          : 0;
+
+      const valorUnitarioLebrinha =
+        quantidadeLebrinha > 0
+          ? totalLebrinha / quantidadeLebrinha
+          : 0;
+
+      const diferencaClienteLebrinha =
+        group.receberCliente - totalLebrinha;
+
+      return {
+        key: group.key,
+        clienteId: group.clienteId,
+        clienteNome: group.clienteNome,
+        clienteCodigo: group.clienteCodigo,
+        produtoId: group.produtoId,
+        produtoNome: group.produtoNome,
+        produtoCodigo: group.produtoCodigo,
+
+        quantidadeCliente: group.quantidadeCliente,
+        valorUnitarioCliente,
+        receberCliente: group.receberCliente,
+        recebidoCliente: group.recebidoCliente,
+        aReceberCliente: group.aReceberCliente,
+
+        quantidadeLebrinha,
+        valorUnitarioLebrinha,
+        acertarLebrinha: group.acertarLebrinha,
+        bonificacaoLebrinha: group.bonificacaoLebrinha,
+        totalLebrinha,
+
+        diferencaUnitario:
+          valorUnitarioCliente - valorUnitarioLebrinha,
+        diferencaClienteLebrinha,
+        percentualDiferenca:
+          group.receberCliente > 0
+            ? (diferencaClienteLebrinha / group.receberCliente) * 100
+            : 0,
+
+        romaneios: group.romaneios,
+        placas: group.placas,
+      };
+    })
+    .sort((a, b) =>
+      b.receberCliente - a.receberCliente ||
+      a.clienteNome.localeCompare(b.clienteNome, "pt-BR") ||
+      a.produtoNome.localeCompare(b.produtoNome, "pt-BR"),
+    );
+}
+
+function MiniCard({
   title,
   value,
   detail,
@@ -122,21 +249,32 @@ function MetricCard({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {title}
-          </p>
-          <p className="mt-2 truncate text-xl font-bold tabular-nums" title={value}>
-            {value}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    <Card className="min-w-0">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {title}
+            </p>
+            <p className="mt-1 truncate text-xl font-bold tabular-nums" title={value}>
+              {value}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+          </div>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            {icon}
+          </div>
         </div>
-        <div className="rounded-lg border bg-muted/30 p-2 text-primary">{icon}</div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
+}
+
+function paymentStatus(item: GrupoRentabilidade) {
+  if (item.receberCliente <= 0) return "sem-cobranca";
+  if (item.aReceberCliente <= 0) return "quitado";
+  if (item.recebidoCliente > 0) return "parcial";
+  return "a-receber";
 }
 
 export default function FiscalRentabilidade({
@@ -148,7 +286,13 @@ export default function FiscalRentabilidade({
 }) {
   const [data, setData] = useState<RentabilidadeData | null>(null);
   const [loading, setLoading] = useState(true);
+
   const [search, setSearch] = useState("");
+  const [clienteId, setClienteId] = useState("__todos__");
+  const [produtoId, setProdutoId] = useState("__todos__");
+  const [placa, setPlaca] = useState("__todas__");
+  const [romaneio, setRomaneio] = useState("__todos__");
+  const [payment, setPayment] = useState<PaymentFilter>("todos");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -175,70 +319,184 @@ export default function FiscalRentabilidade({
     void load();
   }, [load]);
 
-  const filtered = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase("pt-BR");
-    if (!query) return data?.agrupado ?? [];
-
-    return (data?.agrupado ?? []).filter((item) =>
-      [
-        item.clienteNome,
-        item.clienteCodigo,
-        item.produtoNome,
-        item.produtoCodigo,
-        ...item.romaneios,
-        ...item.notasFiscais,
-        ...item.placas,
-      ]
-        .join(" ")
-        .toLocaleLowerCase("pt-BR")
-        .includes(query),
+  const clientes = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of data?.linhas ?? []) {
+      if (row.clienteId) map.set(row.clienteId, row.clienteNome);
+    }
+    return Array.from(map.entries()).sort((a, b) =>
+      a[1].localeCompare(b[1], "pt-BR"),
     );
-  }, [data, search]);
+  }, [data]);
 
-  const exportAutomatico = () => {
+  const produtos = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of data?.linhas ?? []) {
+      if (row.produtoId) map.set(row.produtoId, row.produtoNome);
+    }
+    return Array.from(map.entries()).sort((a, b) =>
+      a[1].localeCompare(b[1], "pt-BR"),
+    );
+  }, [data]);
+
+  const placas = useMemo(
+    () => unique((data?.linhas ?? []).map((row) => row.placa)),
+    [data],
+  );
+
+  const romaneios = useMemo(
+    () => unique((data?.linhas ?? []).flatMap((row) =>
+      String(row.romaneio || "")
+        .split(",")
+        .map((value) => value.trim()),
+    )),
+    [data],
+  );
+
+  const structuralLines = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase("pt-BR");
+
+    return (data?.linhas ?? []).filter((row) => {
+      if (clienteId !== "__todos__" && row.clienteId !== clienteId) return false;
+      if (produtoId !== "__todos__" && row.produtoId !== produtoId) return false;
+      if (placa !== "__todas__" && row.placa !== placa) return false;
+
+      if (romaneio !== "__todos__") {
+        const rowRomaneios = String(row.romaneio || "")
+          .split(",")
+          .map((value) => value.trim());
+        if (!rowRomaneios.includes(romaneio)) return false;
+      }
+
+      if (query) {
+        const searchable = [
+          row.clienteNome,
+          row.clienteCodigo,
+          row.produtoNome,
+          row.produtoCodigo,
+          row.romaneio,
+          row.notaFiscal,
+          row.placa,
+        ]
+          .join(" ")
+          .toLocaleLowerCase("pt-BR");
+
+        if (!searchable.includes(query)) return false;
+      }
+
+      return true;
+    });
+  }, [clienteId, data, placa, produtoId, romaneio, search]);
+
+  const grouped = useMemo(
+    () => buildGroups(structuralLines),
+    [structuralLines],
+  );
+
+  const filtered = useMemo(() => {
+    if (payment === "todos") return grouped;
+
+    return grouped.filter((item) => {
+      const status = paymentStatus(item);
+
+      if (payment === "quitado") return status === "quitado";
+      if (payment === "a-receber") return item.aReceberCliente > 0;
+      if (payment === "recebido") return item.recebidoCliente > 0;
+
+      return true;
+    });
+  }, [grouped, payment]);
+
+  const dashboard = useMemo(() => {
+    const receberCliente = filtered.reduce(
+      (sum, item) => sum + item.receberCliente,
+      0,
+    );
+    const recebidoCliente = filtered.reduce(
+      (sum, item) => sum + item.recebidoCliente,
+      0,
+    );
+    const aReceberCliente = filtered.reduce(
+      (sum, item) => sum + item.aReceberCliente,
+      0,
+    );
+    const totalLebrinha = filtered.reduce(
+      (sum, item) => sum + item.totalLebrinha,
+      0,
+    );
+    const diferenca = receberCliente - totalLebrinha;
+    const romaneiosCount = new Set(
+      filtered.flatMap((item) => item.romaneios),
+    ).size;
+
+    return {
+      receberCliente,
+      recebidoCliente,
+      aReceberCliente,
+      totalLebrinha,
+      diferenca,
+      romaneiosCount,
+    };
+  }, [filtered]);
+
+  const hasFilters =
+    Boolean(search) ||
+    clienteId !== "__todos__" ||
+    produtoId !== "__todos__" ||
+    placa !== "__todas__" ||
+    romaneio !== "__todos__" ||
+    payment !== "todos";
+
+  const clearFilters = () => {
+    setSearch("");
+    setClienteId("__todos__");
+    setProdutoId("__todos__");
+    setPlaca("__todas__");
+    setRomaneio("__todos__");
+    setPayment("todos");
+  };
+
+  const exportFiltered = () => {
     if (!data) return;
+
+    const filteredKeys = new Set(filtered.map((item) => item.key));
+    const exportLines = structuralLines.filter((row) =>
+      filteredKeys.has(`${row.clienteId}:${row.produtoId}`),
+    );
 
     const workbook = XLSX.utils.book_new();
 
     const resumoRows = [
       ["Indicador", "Valor"],
-      ["Receber c/ Cliente", data.resumo.receberCliente],
-      ["Recebido dos clientes", data.resumo.recebidoCliente],
-      ["A receber dos clientes", data.resumo.aReceberCliente],
-      ["Acertar c/ Lebrinha", data.resumo.acertarLebrinha],
-      ["Bonificação Lebrinha", data.resumo.bonificacaoLebrinha],
-      ["Total Lebrinha", data.resumo.totalLebrinha],
-      ["Diferença Cliente - Lebrinha", data.resumo.diferencaClienteLebrinha],
-      ["Romaneios", data.resumo.romaneios],
-      ["Clientes", data.resumo.clientes],
-      ["Produtos", data.resumo.produtos],
+      ["Frete Cliente", dashboard.receberCliente],
+      ["Recebido", dashboard.recebidoCliente],
+      ["A Receber", dashboard.aReceberCliente],
+      ["Total Lebrinha", dashboard.totalLebrinha],
+      ["Diferença Cliente - Lebrinha", dashboard.diferenca],
+      ["Romaneios", dashboard.romaneiosCount],
     ];
     const wsResumo = XLSX.utils.aoa_to_sheet(resumoRows);
-    wsResumo["!cols"] = [{ wch: 34 }, { wch: 20 }];
-    XLSX.utils.book_append_sheet(workbook, wsResumo, "Resumo automático");
+    wsResumo["!cols"] = [{ wch: 32 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(workbook, wsResumo, "Resumo filtrado");
 
-    const gruposRows = [
+    const groupsRows = [
       [
         "Cliente",
         "Produto",
         "Qtd. Cliente",
-        "Valor unit. Cliente",
-        "Receber Cliente",
-        "Recebido Cliente",
-        "A Receber Cliente",
+        "Frete unit. Cliente",
+        "Frete Cliente",
+        "Recebido",
+        "A Receber",
         "Qtd. Lebrinha",
-        "Valor unit. Lebrinha",
-        "Acertar Lebrinha",
-        "Bonificação",
+        "Unit. Lebrinha",
         "Total Lebrinha",
-        "Diferença unit.",
-        "Diferença total",
-        "% diferença",
+        "Diferença",
+        "Margem %",
         "Romaneios",
-        "NF",
         "Placas",
       ],
-      ...data.agrupado.map((item) => [
+      ...filtered.map((item) => [
         item.clienteNome,
         item.produtoNome,
         item.quantidadeCliente,
@@ -248,34 +506,28 @@ export default function FiscalRentabilidade({
         item.aReceberCliente,
         item.quantidadeLebrinha,
         item.valorUnitarioLebrinha,
-        item.acertarLebrinha,
-        item.bonificacaoLebrinha,
         item.totalLebrinha,
-        item.diferencaUnitario,
         item.diferencaClienteLebrinha,
         item.percentualDiferenca,
         item.romaneios.join(", "),
-        item.notasFiscais.join(", "),
         item.placas.join(", "),
       ]),
     ];
-    const wsGrupos = XLSX.utils.aoa_to_sheet(gruposRows);
-    wsGrupos["!cols"] = [
+    const wsGroups = XLSX.utils.aoa_to_sheet(groupsRows);
+    wsGroups["!cols"] = [
       { wch: 30 },
       { wch: 30 },
-      ...Array.from({ length: 13 }, () => ({ wch: 20 })),
-      { wch: 25 },
-      { wch: 25 },
+      ...Array.from({ length: 10 }, () => ({ wch: 20 })),
+      { wch: 26 },
       { wch: 20 },
     ];
-    XLSX.utils.book_append_sheet(workbook, wsGrupos, "Cliente x Produto");
+    XLSX.utils.book_append_sheet(workbook, wsGroups, "Cliente x Produto");
 
-    const linhasRows = [
+    const lineRows = [
       [
         "Data",
         "Romaneio",
         "NF",
-        "Série",
         "Placa",
         "Cliente",
         "Produto",
@@ -283,33 +535,31 @@ export default function FiscalRentabilidade({
         "Valor unitário",
         "Valor total",
         "Cobrança",
-        "Pago cliente",
+        "Pago",
       ],
-      ...data.linhas.map((item) => [
-        item.dataManifesto,
-        item.romaneio,
-        item.notaFiscal,
-        item.serieNf,
-        item.placa,
-        item.clienteNome,
-        item.produtoNome,
-        item.quantidade,
-        item.valorUnitario,
-        item.valorTotal,
-        item.tipo,
-        item.tipoDb === "RECEBER_CLIENTE"
-          ? item.pagoCliente === true
+      ...exportLines.map((row) => [
+        row.dataManifesto,
+        row.romaneio,
+        row.notaFiscal,
+        row.placa,
+        row.clienteNome,
+        row.produtoNome,
+        row.quantidade,
+        row.valorUnitario,
+        row.valorTotal,
+        row.tipo,
+        row.tipoDb === "RECEBER_CLIENTE"
+          ? row.pagoCliente === true
             ? "Sim"
             : "Não"
           : "",
       ]),
     ];
-    const wsLinhas = XLSX.utils.aoa_to_sheet(linhasRows);
-    wsLinhas["!cols"] = [
+    const wsLines = XLSX.utils.aoa_to_sheet(lineRows);
+    wsLines["!cols"] = [
       { wch: 14 },
+      { wch: 20 },
       { wch: 18 },
-      { wch: 16 },
-      { wch: 10 },
       { wch: 14 },
       { wch: 30 },
       { wch: 30 },
@@ -317,34 +567,32 @@ export default function FiscalRentabilidade({
       { wch: 18 },
       { wch: 18 },
       { wch: 26 },
-      { wch: 15 },
+      { wch: 12 },
     ];
-    XLSX.utils.book_append_sheet(workbook, wsLinhas, "Linhas dos Romaneios");
+    XLSX.utils.book_append_sheet(workbook, wsLines, "Dados filtrados");
 
     XLSX.writeFile(
       workbook,
-      `fiscal-romaneios-${from || "inicio"}-${to || "atual"}.xlsx`,
+      `fiscal-romaneios-filtrado-${from || "inicio"}-${to || "atual"}.xlsx`,
       { compression: true },
     );
-    toast.success("Análise automática dos Romaneios exportada.");
+
+    toast.success("Dados filtrados exportados.");
   };
 
   return (
     <div className="space-y-4">
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b bg-muted/20">
+      <Card>
+        <CardHeader className="pb-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-base">
-                  Cliente × Produto × Frete — automático dos Romaneios
-                </CardTitle>
-                <Badge variant="secondary">100% automático</Badge>
+                <CardTitle className="text-base">Análise dos Romaneios</CardTitle>
+                <Badge variant="secondary">Automático</Badge>
               </div>
-              <p className="mt-1 max-w-4xl text-xs leading-relaxed text-muted-foreground">
-                Não existe cadastro paralelo de preço nesta análise. Cliente, produto,
-                quantidade, valor unitário, valor total, cobrança, pagamento, NF,
-                romaneio e placa são lidos diretamente da aba Romaneios.
+              <p className="mt-1 text-xs text-muted-foreground">
+                Filtre o que deseja analisar. A mini dashboard e a tabela abaixo
+                são recalculadas imediatamente com os dados filtrados.
               </p>
             </div>
 
@@ -364,292 +612,287 @@ export default function FiscalRentabilidade({
                 size="sm"
                 variant="outline"
                 disabled={!data || loading}
-                onClick={exportAutomatico}
+                onClick={exportFiltered}
               >
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
-                Exportar XLSX
+                Exportar filtrado
               </Button>
             </div>
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-4 p-4">
-          {loading && !data ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              Lendo os Romaneios...
+        <CardContent className="space-y-4">
+          <div className="rounded-xl border bg-muted/20 p-3">
+            <div className="mb-3 flex items-center gap-2">
+              <ListFilter className="h-4 w-4 text-primary" />
+              <p className="text-sm font-semibold">Filtros</p>
+              {hasFilters && (
+                <Badge variant="outline">{filtered.length} resultado(s)</Badge>
+              )}
             </div>
-          ) : data ? (
-            <>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard
-                  title="Receber c/ Cliente"
-                  value={formatBRL(data.resumo.receberCliente)}
-                  detail="Somado diretamente dos itens Receber c/ Cliente"
-                  icon={<ReceiptText className="h-5 w-5" />}
-                />
-                <MetricCard
-                  title="Recebido"
-                  value={formatBRL(data.resumo.recebidoCliente)}
-                  detail="Itens marcados como pagos nos Romaneios"
-                  icon={<WalletCards className="h-5 w-5" />}
-                />
-                <MetricCard
-                  title="A receber"
-                  value={formatBRL(data.resumo.aReceberCliente)}
-                  detail="Itens ainda não marcados como pagos"
-                  icon={<WalletCards className="h-5 w-5" />}
-                />
-                <MetricCard
-                  title="Total Lebrinha"
-                  value={formatBRL(data.resumo.totalLebrinha)}
-                  detail={`${formatBRL(data.resumo.acertarLebrinha)} a acertar + ${formatBRL(data.resumo.bonificacaoLebrinha)} bonificação`}
-                  icon={<Truck className="h-5 w-5" />}
-                />
-                <MetricCard
-                  title="Diferença Cliente - Lebrinha"
-                  value={formatBRL(data.resumo.diferencaClienteLebrinha)}
-                  detail="Comparação direta entre as cobranças dos Romaneios"
-                  icon={<WalletCards className="h-5 w-5" />}
-                />
-                <MetricCard
-                  title="Romaneios"
-                  value={String(data.resumo.romaneios)}
-                  detail={`${data.resumo.linhas} linha(s) de produto analisadas`}
-                  icon={<ReceiptText className="h-5 w-5" />}
-                />
-                <MetricCard
-                  title="Clientes"
-                  value={String(data.resumo.clientes)}
-                  detail="Clientes presentes no período"
-                  icon={<Users className="h-5 w-5" />}
-                />
-                <MetricCard
-                  title="Produtos"
-                  value={String(data.resumo.produtos)}
-                  detail="Produtos presentes no período"
-                  icon={<Package className="h-5 w-5" />}
-                />
-              </div>
 
-              <div className="relative max-w-xl">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+              <div className="relative md:col-span-2 xl:col-span-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Pesquisar cliente, produto, romaneio, NF ou placa..."
+                  placeholder="Pesquisar..."
                   className="pl-9"
                 />
               </div>
 
-              <div className="overflow-x-auto rounded-xl border">
-                <table className="w-full min-w-[1780px] text-sm">
-                  <thead className="border-b bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-3 text-left">Cliente</th>
-                      <th className="px-3 py-3 text-left">Produto</th>
-                      <th className="px-3 py-3 text-right">Qtd. Cliente</th>
-                      <th className="px-3 py-3 text-right">Unit. Cliente</th>
-                      <th className="px-3 py-3 text-right">Frete Cliente</th>
-                      <th className="px-3 py-3 text-right">Recebido</th>
-                      <th className="px-3 py-3 text-right">A Receber</th>
-                      <th className="px-3 py-3 text-right">Qtd. Lebrinha</th>
-                      <th className="px-3 py-3 text-right">Unit. Lebrinha</th>
-                      <th className="px-3 py-3 text-right">Acertar Lebrinha</th>
-                      <th className="px-3 py-3 text-right">Bonificação</th>
-                      <th className="px-3 py-3 text-right">Total Lebrinha</th>
-                      <th className="px-3 py-3 text-right">Dif. Unit.</th>
-                      <th className="px-3 py-3 text-right">Dif. Total</th>
-                      <th className="px-3 py-3 text-right">Margem</th>
-                      <th className="px-3 py-3 text-center">Romaneios</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((item) => (
-                      <tr key={item.key} className="border-b last:border-b-0">
-                        <td className="px-3 py-3">
-                          <p className="font-semibold">{item.clienteNome}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.clienteCodigo || "—"}
-                          </p>
-                        </td>
-                        <td className="px-3 py-3">
-                          <p className="font-medium">{item.produtoNome}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.produtoCodigo || "—"}
-                          </p>
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          {qty(item.quantidadeCliente)}
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          {formatBRL(item.valorUnitarioCliente)}
-                        </td>
-                        <td className="px-3 py-3 text-right font-semibold tabular-nums">
-                          {formatBRL(item.receberCliente)}
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
-                          {formatBRL(item.recebidoCliente)}
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums text-amber-600 dark:text-amber-400">
-                          {formatBRL(item.aReceberCliente)}
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          {qty(item.quantidadeLebrinha)}
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          {formatBRL(item.valorUnitarioLebrinha)}
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          {formatBRL(item.acertarLebrinha)}
-                        </td>
-                        <td className="px-3 py-3 text-right tabular-nums">
-                          {formatBRL(item.bonificacaoLebrinha)}
-                        </td>
-                        <td className="px-3 py-3 text-right font-semibold tabular-nums">
-                          {formatBRL(item.totalLebrinha)}
-                        </td>
-                        <td
-                          className={`px-3 py-3 text-right tabular-nums ${
-                            item.diferencaUnitario < 0 ? "text-destructive" : "text-primary"
-                          }`}
-                        >
-                          {formatBRL(item.diferencaUnitario)}
-                        </td>
-                        <td
-                          className={`px-3 py-3 text-right font-bold tabular-nums ${
-                            item.diferencaClienteLebrinha < 0
-                              ? "text-destructive"
-                              : "text-primary"
-                          }`}
-                        >
-                          {formatBRL(item.diferencaClienteLebrinha)}
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <Badge
-                            variant={
-                              item.diferencaClienteLebrinha < 0
-                                ? "destructive"
-                                : "secondary"
-                            }
-                          >
-                            {pct(item.percentualDiferenca)}
-                          </Badge>
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <Badge variant="outline">{item.romaneios.length}</Badge>
-                        </td>
-                      </tr>
-                    ))}
+              <Select value={clienteId} onValueChange={setClienteId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__todos__">Todos os clientes</SelectItem>
+                  {clientes.map(([id, name]) => (
+                    <SelectItem key={id} value={id}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-                    {filtered.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={16}
-                          className="px-4 py-12 text-center text-muted-foreground"
-                        >
-                          Nenhum dado de Romaneio encontrado para os filtros atuais.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              <Select value={produtoId} onValueChange={setProdutoId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Produto" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__todos__">Todos os produtos</SelectItem>
+                  {produtos.map(([id, name]) => (
+                    <SelectItem key={id} value={id}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={placa} onValueChange={setPlaca}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Placa" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__todas__">Todas as placas</SelectItem>
+                  {placas.map((item) => (
+                    <SelectItem key={item} value={item}>{item}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={romaneio} onValueChange={setRomaneio}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Romaneio" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__todos__">Todos os romaneios</SelectItem>
+                  {romaneios.map((item) => (
+                    <SelectItem key={item} value={item}>{item}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={payment}
+                onValueChange={(value) => setPayment(value as PaymentFilter)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Pagamento" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os pagamentos</SelectItem>
+                  <SelectItem value="recebido">Com valor recebido</SelectItem>
+                  <SelectItem value="a-receber">Com valor a receber</SelectItem>
+                  <SelectItem value="quitado">Quitados</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {hasFilters && (
+              <div className="mt-3 flex justify-end">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={clearFilters}
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Limpar filtros
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {loading && !data ? (
+            <div className="py-14 text-center text-sm text-muted-foreground">
+              Lendo os Romaneios...
+            </div>
+          ) : data ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                <MiniCard
+                  title="Frete Cliente"
+                  value={formatBRL(dashboard.receberCliente)}
+                  detail="Receber c/ Cliente"
+                  icon={<ReceiptText className="h-4 w-4" />}
+                />
+                <MiniCard
+                  title="Recebido"
+                  value={formatBRL(dashboard.recebidoCliente)}
+                  detail="Já marcado como pago"
+                  icon={<WalletCards className="h-4 w-4" />}
+                />
+                <MiniCard
+                  title="A Receber"
+                  value={formatBRL(dashboard.aReceberCliente)}
+                  detail="Ainda pendente"
+                  icon={<WalletCards className="h-4 w-4" />}
+                />
+                <MiniCard
+                  title="Total Lebrinha"
+                  value={formatBRL(dashboard.totalLebrinha)}
+                  detail="Acertar + bonificação"
+                  icon={<Truck className="h-4 w-4" />}
+                />
+                <MiniCard
+                  title="Diferença"
+                  value={formatBRL(dashboard.diferenca)}
+                  detail="Cliente − Lebrinha"
+                  icon={<CircleDollarSign className="h-4 w-4" />}
+                />
+                <MiniCard
+                  title="Romaneios"
+                  value={String(dashboard.romaneiosCount)}
+                  detail={`${filtered.length} cliente/produto`}
+                  icon={<ReceiptText className="h-4 w-4" />}
+                />
               </div>
 
+              <Card className="overflow-hidden">
+                <CardHeader className="border-b py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <CardTitle className="text-sm">Resultado filtrado</CardTitle>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Somente os dados essenciais para comparar cliente e Lebrinha.
+                      </p>
+                    </div>
+                    <Badge variant="outline">{filtered.length} linha(s)</Badge>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[1160px] text-sm">
+                      <thead className="border-b bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-3 text-left">Cliente</th>
+                          <th className="px-3 py-3 text-left">Produto</th>
+                          <th className="px-3 py-3 text-right">Qtd.</th>
+                          <th className="px-3 py-3 text-right">Frete unit.</th>
+                          <th className="px-3 py-3 text-right">Frete cliente</th>
+                          <th className="px-3 py-3 text-right">Unit. Lebrinha</th>
+                          <th className="px-3 py-3 text-right">Total Lebrinha</th>
+                          <th className="px-3 py-3 text-right">Diferença</th>
+                          <th className="px-3 py-3 text-right">Margem</th>
+                          <th className="px-3 py-3 text-center">Situação</th>
+                          <th className="px-3 py-3 text-center">Romaneios</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {filtered.map((item) => {
+                          const status = paymentStatus(item);
+
+                          return (
+                            <tr key={item.key} className="border-b last:border-b-0">
+                              <td className="px-3 py-3">
+                                <p className="font-semibold">{item.clienteNome}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {item.clienteCodigo || "—"}
+                                </p>
+                              </td>
+                              <td className="px-3 py-3">
+                                <p className="font-medium">{item.produtoNome}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {item.produtoCodigo || "—"}
+                                </p>
+                              </td>
+                              <td className="px-3 py-3 text-right tabular-nums">
+                                {qty(item.quantidadeCliente)}
+                              </td>
+                              <td className="px-3 py-3 text-right tabular-nums">
+                                {formatBRL(item.valorUnitarioCliente)}
+                              </td>
+                              <td className="px-3 py-3 text-right font-semibold tabular-nums">
+                                {formatBRL(item.receberCliente)}
+                              </td>
+                              <td className="px-3 py-3 text-right tabular-nums">
+                                {formatBRL(item.valorUnitarioLebrinha)}
+                              </td>
+                              <td className="px-3 py-3 text-right font-semibold tabular-nums">
+                                {formatBRL(item.totalLebrinha)}
+                              </td>
+                              <td
+                                className={`px-3 py-3 text-right font-bold tabular-nums ${
+                                  item.diferencaClienteLebrinha < 0
+                                    ? "text-destructive"
+                                    : "text-primary"
+                                }`}
+                              >
+                                {formatBRL(item.diferencaClienteLebrinha)}
+                              </td>
+                              <td className="px-3 py-3 text-right">
+                                <Badge
+                                  variant={
+                                    item.diferencaClienteLebrinha < 0
+                                      ? "destructive"
+                                      : "secondary"
+                                  }
+                                >
+                                  {pct(item.percentualDiferenca)}
+                                </Badge>
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                {status === "quitado" ? (
+                                  <Badge variant="secondary">Quitado</Badge>
+                                ) : status === "parcial" ? (
+                                  <Badge variant="outline">Parcial</Badge>
+                                ) : status === "a-receber" ? (
+                                  <Badge variant="outline" className="text-amber-600">
+                                    A receber
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline">Sem cobrança</Badge>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                <Badge variant="outline">{item.romaneios.length}</Badge>
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                        {filtered.length === 0 && (
+                          <tr>
+                            <td
+                              colSpan={11}
+                              className="px-4 py-12 text-center text-muted-foreground"
+                            >
+                              Nenhum resultado para os filtros selecionados.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+
               <div className="rounded-lg border border-dashed p-3 text-xs leading-relaxed text-muted-foreground">
-                <strong className="text-foreground">Como esta tabela é calculada:</strong>{" "}
-                “Receber c/ Cliente” usa as próprias colunas Quantidade, Valor unitário e
-                Valor total dos Romaneios. “Lebrinha” usa os itens classificados como
-                Acertar c/ Lebrinha e Bonificação - Lebrinha. A diferença é calculada
-                automaticamente entre os dois lados, sem cadastro manual de preço.
+                Os valores desta aba vêm diretamente dos Romaneios. O filtro de período
+                continua sendo o filtro principal no topo da aba Fiscal; os filtros acima
+                refinam somente esta análise.
               </div>
             </>
           ) : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Conferência linha a linha dos Romaneios
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Aqui aparece a origem exata dos números acima, sem transformação manual.
-          </p>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1320px] text-sm">
-              <thead className="border-y bg-muted/30 text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-3 text-left">Data</th>
-                  <th className="px-3 py-3 text-left">Romaneio</th>
-                  <th className="px-3 py-3 text-left">NF/Série</th>
-                  <th className="px-3 py-3 text-left">Placa</th>
-                  <th className="px-3 py-3 text-left">Cliente</th>
-                  <th className="px-3 py-3 text-left">Produto</th>
-                  <th className="px-3 py-3 text-right">Quantidade</th>
-                  <th className="px-3 py-3 text-right">Valor unitário</th>
-                  <th className="px-3 py-3 text-right">Valor total</th>
-                  <th className="px-3 py-3 text-left">Cobrança</th>
-                  <th className="px-3 py-3 text-center">Pago</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.linhas ?? []).map((item) => (
-                  <tr key={item.id} className="border-b last:border-b-0">
-                    <td className="whitespace-nowrap px-3 py-3">
-                      {formatDate(item.dataManifesto)}
-                    </td>
-                    <td className="px-3 py-3 font-medium">
-                      {item.romaneio || "—"}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-3">
-                      {item.notaFiscal || "—"}/{item.serieNf || "—"}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-3">
-                      {item.placa || "—"}
-                    </td>
-                    <td className="px-3 py-3">{item.clienteNome}</td>
-                    <td className="px-3 py-3">{item.produtoNome}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">
-                      {qty(item.quantidade)}
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums">
-                      {formatBRL(item.valorUnitario)}
-                    </td>
-                    <td className="px-3 py-3 text-right font-semibold tabular-nums">
-                      {formatBRL(item.valorTotal)}
-                    </td>
-                    <td className="px-3 py-3">
-                      <Badge variant="outline">{item.tipo}</Badge>
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      {item.tipoDb === "RECEBER_CLIENTE" ? (
-                        item.pagoCliente === true ? (
-                          <Badge variant="secondary">Sim</Badge>
-                        ) : (
-                          <Badge variant="outline">Não</Badge>
-                        )
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-
-                {(data?.linhas.length ?? 0) === 0 && (
-                  <tr>
-                    <td
-                      colSpan={11}
-                      className="px-4 py-12 text-center text-muted-foreground"
-                    >
-                      Nenhuma linha de Romaneio encontrada no período.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
         </CardContent>
       </Card>
     </div>

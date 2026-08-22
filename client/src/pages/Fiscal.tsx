@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -327,8 +328,15 @@ export default function Fiscal() {
           </CardContent>
         </Card>
 
-        {loading && !data ? (
-          <div className="flex min-h-[320px] items-center justify-center rounded-xl border bg-card">
+        <Tabs defaultValue="visao-geral" className="space-y-4">
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 sm:w-fit">
+            <TabsTrigger value="visao-geral">Visão geral</TabsTrigger>
+            <TabsTrigger value="analise-romaneios">Análise Romaneios</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="visao-geral" className="mt-0 space-y-4">
+            {loading && !data ? (
+              <div className="flex min-h-[320px] items-center justify-center rounded-xl border bg-card">
             <LoaderCircle className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : data ? (
@@ -394,7 +402,6 @@ export default function Fiscal() {
               </Card>
             </div>
 
-            <FiscalRentabilidade from={from} to={to} />
 
             <Card>
               <CardHeader>
@@ -451,8 +458,14 @@ export default function Fiscal() {
                 <strong className="text-foreground">Critérios do Fiscal:</strong> faturamento vem dos produtos dos Romaneios classificados como Receber c/ Cliente, Acertar c/ Lebrinha ou Bonificação Lebrinha. Vasilhames ficam fora do faturamento. Abastecimento usa o valor total das NFs. Almoxarifado considera entradas, pneus consideram compras/recapagens/consertos e pedágios usam a base de Viagens. <strong className="text-foreground">Diárias e Chapas são apuradas separadamente, cada uma pelo seu próprio campo em cada viagem.</strong> O valor de abastecimento da base de Viagens não é somado novamente para evitar duplicidade.
               </CardContent>
             </Card>
-          </>
-        ) : null}
+              </>
+            ) : null}
+          </TabsContent>
+
+          <TabsContent value="analise-romaneios" className="mt-0">
+            <FiscalRentabilidade from={from} to={to} />
+          </TabsContent>
+        </Tabs>
       </div>
     </Layout>
   );
