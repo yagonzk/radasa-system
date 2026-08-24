@@ -1,12 +1,26 @@
 import { prisma } from "../lib/prisma.js";
-import { created, number } from "../utils/serialize.js";
+import { created, number, dateOnly } from "../utils/serialize.js";
+import { parseDateOnly } from "../utils/date.js";
 import { AppError } from "../utils/app-error.js";
 
 const serialize = (item: any) => ({
   ...item,
   salarioBase: number(item.salarioBase),
+  dataNascimento: item.dataNascimento ? dateOnly(item.dataNascimento) : null,
+  dataAdmissao: item.dataAdmissao ? dateOnly(item.dataAdmissao) : null,
+  cnhValidade: item.cnhValidade ? dateOnly(item.cnhValidade) : null,
+  primeiraHabilitacao: item.primeiraHabilitacao ? dateOnly(item.primeiraHabilitacao) : null,
+  moppValidade: item.moppValidade ? dateOnly(item.moppValidade) : null,
+  toxicologicoValidade: item.toxicologicoValidade ? dateOnly(item.toxicologicoValidade) : null,
   createdAt: created(item.createdAt),
 });
+const normalizeDates = (data: any) => {
+  const out = { ...data };
+  for (const key of ["dataNascimento","dataAdmissao","cnhValidade","primeiraHabilitacao","moppValidade","toxicologicoValidade"]) {
+    if (key in out) out[key] = out[key] ? parseDateOnly(out[key]) : null;
+  }
+  return out;
+};
 
 export const motoristasService = {
   async list() {
@@ -20,7 +34,8 @@ export const motoristasService = {
   },
 
   async create(data: any) {
-    const { createdAt, status = "ATIVO", ...rest } = data;
+    const { createdAt, status = "ATIVO", ...raw } = data;
+    const rest = normalizeDates(raw);
     const item = await prisma.motorista.create({
       data: {
         ...rest,
@@ -32,7 +47,8 @@ export const motoristasService = {
   },
 
   async update(id: string, data: any) {
-    const { createdAt, ...rest } = data;
+    const { createdAt, ...raw } = data;
+    const rest = normalizeDates(raw);
     const item = await prisma.motorista.update({ where: { id }, data: rest });
     return serialize(item);
   },

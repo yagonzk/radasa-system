@@ -26,6 +26,14 @@ const navGroups = [
     ],
   },
   {
+    label: "Frota",
+    icon: <Truck className="h-[18px] w-[18px]" />,
+    items: [
+      { label: "Manutenção", href: "/manutencao", icon: <Truck className="h-4 w-4" />, matchPaths: ["/manutencao"] },
+      { label: "Pneus", href: "/pneus", icon: <Truck className="h-4 w-4" />, matchPaths: ["/pneus"] },
+    ],
+  },
+  {
     label: "Financeiro",
     icon: <WalletCards className="h-[18px] w-[18px]" />,
     items: [

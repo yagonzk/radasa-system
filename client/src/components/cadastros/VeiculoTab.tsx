@@ -1,282 +1,49 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { useMotoristas, useVeiculos, type SubcategoriaVeiculo, type Veiculo } from "@/lib/store";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import DataTable from "./DataTable";
-import { Plus, Truck } from "lucide-react";
-import { toast } from "sonner";
-
-interface FormState {
-  placa: string;
-  modelo: string;
-  subcategoria: SubcategoriaVeiculo | "";
-  motoristaId: string;
-}
-
-const emptyForm: FormState = { placa: "", modelo: "", subcategoria: "", motoristaId: "" };
-
-const subcategoriaLabels: Record<SubcategoriaVeiculo, string> = {
-  CAMINHAO: "Caminhão",
-  CARRO: "Carro",
-  MOTO: "Moto",
-};
-
-function normalizePlate(value: unknown) {
-  return String(value ?? "")
-    .toUpperCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Z0-9]/g, "")
-    .slice(0, 7);
-}
-
-function formatPlate(value: unknown) {
-  const normalized = normalizePlate(value);
-  if (!normalized) return "";
-  if (normalized.length <= 3) return normalized;
-  return `${normalized.slice(0, 3)}-${normalized.slice(3)}`;
-}
-
-export default function VeiculoTab() {
-  const { items, create, update, remove } = useVeiculos();
-  const { items: motoristas } = useMotoristas();
-  const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [query, setQuery] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const motoristaById = useMemo(
-    () => new Map(motoristas.map((motorista) => [motorista.id, motorista])),
-    [motoristas],
-  );
-
-  const motoristasDisponiveis = useMemo(
-    () => motoristas.filter((motorista) => motorista.status === "ATIVO" || motorista.id === form.motoristaId),
-    [motoristas, form.motoristaId],
-  );
-
-  const filteredItems = useMemo(() => {
-    const normalizedQuery = normalizeSearch(query).trim();
-    if (!normalizedQuery) return items;
-    return items.filter((item) => {
-      const motorista = item.motoristaId ? motoristaById.get(item.motoristaId) : null;
-      return normalizeSearch([
-        item.placa,
-        item.modelo,
-        item.subcategoria ? subcategoriaLabels[item.subcategoria] : "Sem categoria",
-        motorista?.nome ?? "Sem motorista",
-      ].join(" ")).includes(normalizedQuery);
-    });
-  }, [items, query, motoristaById]);
-
-  const handleOpenCreate = () => {
-    setForm(emptyForm);
-    setEditingId(null);
-    setOpen(true);
-  };
-
-  const handleOpenEdit = (item: Veiculo) => {
-    setForm({ placa: formatPlate(item.placa), modelo: item.modelo || "", subcategoria: item.subcategoria || "", motoristaId: item.motoristaId || "" });
-    setEditingId(item.id);
-    setOpen(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (saving) return;
-    const placaFormatada = formatPlate(form.placa);
-    if (!placaFormatada) {
-      toast.error("Preencha a placa.");
-      return;
-    }
-    if (normalizePlate(placaFormatada).length !== 7) {
-      toast.error("A placa deve ter 7 caracteres no formato ABC-1234.");
-      return;
-    }
-
-    if (!form.subcategoria) {
-      toast.error("Selecione a subcategoria do veículo.");
-      return;
-    }
-
-    if (!form.motoristaId) {
-      toast.error("Selecione o motorista vinculado à placa.");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      if (editingId) {
-        await update(editingId, { placa: placaFormatada, modelo: form.modelo, subcategoria: form.subcategoria, motoristaId: form.motoristaId });
-        toast.success("Veículo atualizado com sucesso!");
-      } else {
-        await create({ placa: placaFormatada, modelo: form.modelo, subcategoria: form.subcategoria, motoristaId: form.motoristaId });
-        toast.success("Veículo cadastrado com sucesso!");
-      }
-      setOpen(false);
-    } catch (error: any) {
-      console.error("Falha ao salvar veículo.", error);
-      toast.error(error?.response?.data?.message ?? "Não foi possível salvar o veículo.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const columns: { key: string; label: string; render?: (item: Veiculo) => ReactNode }[] = [
-    {
-      key: "placa",
-      label: "Placa",
-      render: (item: Veiculo) => (
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
-            <Truck className="h-4 w-4" />
-          </div>
-          <span className="font-mono font-bold">{formatPlate(item.placa)}</span>
-        </div>
-      ),
-    },
-    {
-      key: "subcategoria",
-      label: "Subcategoria",
-      render: (item: Veiculo) => (
-        <span className="font-medium">{item.subcategoria ? subcategoriaLabels[item.subcategoria] : "Sem categoria"}</span>
-      ),
-    },
-    {
-      key: "modelo",
-      label: "Modelo",
-      render: (item: Veiculo) => (
-        <span className="text-muted-foreground">{item.modelo || "—"}</span>
-      ),
-    },
-    {
-      key: "motoristaId",
-      label: "Motorista vinculado",
-      render: (item: Veiculo) => {
-        const motorista = item.motoristaId ? motoristaById.get(item.motoristaId) : null;
-        return (
-          <span className={motorista ? "font-medium" : "text-amber-600 dark:text-amber-400"}>
-            {motorista?.nome || "Não vinculado"}
-          </span>
-        );
-      },
-    },
-  ];
-
-  return (
-    <div>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex w-full flex-col gap-3 sm:max-w-xl">
-          <p className="text-sm text-muted-foreground">{items.length} veículo(s) cadastrado(s)</p>
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por placa, modelo, subcategoria ou motorista..." />
-        </div>
-        <Button onClick={handleOpenCreate} size="sm">
-          <Plus className="mr-1.5 h-4 w-4" />
-          Novo Veículo
-        </Button>
-      </div>
-
-      <DataTable
-        columns={columns}
-        data={filteredItems}
-        onEdit={handleOpenEdit}
-        onDelete={(item) => remove(item.id)}
-        emptyMessage="Nenhum veículo encontrado para a pesquisa informada."
-      />
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingId ? "Editar Veículo" : "Novo Veículo"}
-            </DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <FormField label="Placa">
-              <Input
-                value={form.placa}
-                onChange={(e) => setForm({ ...form, placa: formatPlate(e.target.value) })}
-                placeholder="Ex: ABC-1234"
-                maxLength={8}
-              />
-            </FormField>
-            <FormField label="Subcategoria do veículo">
-              <Select
-                value={form.subcategoria}
-                onValueChange={(value) => setForm({ ...form, subcategoria: value as SubcategoriaVeiculo })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione Caminhão, Carro ou Moto" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="CAMINHAO">Caminhão</SelectItem>
-                  <SelectItem value="CARRO">Carro</SelectItem>
-                  <SelectItem value="MOTO">Moto</SelectItem>
-                </SelectContent>
-              </Select>
-            </FormField>
-            <FormField label="Motorista vinculado">
-              <Select
-                value={form.motoristaId}
-                onValueChange={(value) => setForm({ ...form, motoristaId: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o motorista desta placa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {motoristasDisponiveis.map((motorista) => (
-                    <SelectItem key={motorista.id} value={motorista.id}>
-                      {motorista.nome}
-                      {motorista.status === "DEMITIDO" ? " (Demitido)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Ao ler um romaneio na aba Viagens, a placa usará automaticamente este motorista.
-              </p>
-            </FormField>
-            <FormField label="Modelo (opcional)">
-              <Input
-                value={form.modelo}
-                onChange={(e) => setForm({ ...form, modelo: e.target.value })}
-                placeholder="Ex: Volvo FH 540"
-              />
-            </FormField>
-            <DialogFooter>
-              <Button type="submit" disabled={saving}>
-                {saving ? "Salvando..." : editingId ? "Salvar alterações" : "Cadastrar"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function normalizeSearch(value: unknown) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("pt-BR");
-}
-
-function FormField({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-medium">{label}</Label>
-      {children}
-    </div>
-  );
-}
+import {useMemo,useState,type ReactNode}from"react";
+import{useMotoristas,useVeiculos,type SubcategoriaVeiculo,type Veiculo}from"@/lib/store";
+import{Button}from"@/components/ui/button";import{Input}from"@/components/ui/input";import{Label}from"@/components/ui/label";
+import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from"@/components/ui/select";
+import{Dialog,DialogContent,DialogHeader,DialogTitle,DialogFooter}from"@/components/ui/dialog";
+import{Card,CardContent}from"@/components/ui/card";import DataTable from"./DataTable";import{Plus,Truck,AlertTriangle,CalendarClock,FileCheck2}from"lucide-react";import{toast}from"sonner";
+interface FormState{placa:string;modelo:string;marca:string;renavam:string;chassi:string;anoFabricacao:string;anoModelo:string;cor:string;combustivel:string;proprietario:string;subcategoria:SubcategoriaVeiculo|"";motoristaId:string;crlvValidade:string;ipvaVencimento:string;ipvaPago:boolean;licenciamentoVencimento:string;seguroValidade:string;rntrc:string;observacoes:string}
+const emptyForm:FormState={placa:"",modelo:"",marca:"",renavam:"",chassi:"",anoFabricacao:"",anoModelo:"",cor:"",combustivel:"",proprietario:"",subcategoria:"",motoristaId:"",crlvValidade:"",ipvaVencimento:"",ipvaPago:false,licenciamentoVencimento:"",seguroValidade:"",rntrc:"",observacoes:""};
+const labels:Record<SubcategoriaVeiculo,string>={CAMINHAO:"Caminhão",CARRO:"Carro",MOTO:"Moto"};
+const days=(date?:string|null)=>{if(!date)return null;const a=new Date(`${date}T00:00:00`),b=new Date();b.setHours(0,0,0,0);return Math.ceil((a.getTime()-b.getTime())/86400000)};
+const status=(date?:string|null)=>{const d=days(date);return d===null?"SEM_DATA":d<0?"VENCIDO":d<=30?"ATENCAO":"OK"};
+const dateLabel=(v?:string|null)=>v?v.split("-").reverse().join("/"):"—";
+function normalizePlate(v:unknown){return String(v??"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9]/g,"").slice(0,7)}
+function formatPlate(v:unknown){const n=normalizePlate(v);return n.length<=3?n:`${n.slice(0,3)}-${n.slice(3)}`}
+export default function VeiculoTab(){const{items,create,update,remove}=useVeiculos();const{items:motoristas}=useMotoristas();const[open,setOpen]=useState(false);const[editingId,setEditingId]=useState<string|null>(null);const[form,setForm]=useState<FormState>(emptyForm);const[query,setQuery]=useState("");const[saving,setSaving]=useState(false);
+ const motoristaById=useMemo(()=>new Map(motoristas.map(x=>[x.id,x])),[motoristas]);const motoristasDisponiveis=useMemo(()=>motoristas.filter(x=>x.status==="ATIVO"||x.id===form.motoristaId),[motoristas,form.motoristaId]);
+ const alertas=useMemo(()=>items.flatMap(v=>[
+  {v,tipo:"CRLV",data:v.crlvValidade,status:status(v.crlvValidade)},
+  {v,tipo:"IPVA",data:v.ipvaVencimento,status:v.ipvaPago?"OK":status(v.ipvaVencimento)},
+  {v,tipo:"Licenciamento",data:v.licenciamentoVencimento,status:status(v.licenciamentoVencimento)},
+  {v,tipo:"Seguro",data:v.seguroValidade,status:status(v.seguroValidade)}
+ ]).filter(a=>a.status==="VENCIDO"||a.status==="ATENCAO").sort((a,b)=>(days(a.data)??99999)-(days(b.data)??99999)),[items]);
+ const filtered=useMemo(()=>{const q=norm(query);if(!q)return items;return items.filter(x=>{const mot=x.motoristaId?motoristaById.get(x.motoristaId):null;return norm([x.placa,x.modelo,x.marca,x.renavam,x.chassi,x.proprietario,x.rntrc,mot?.nome].join(" ")).includes(q)})},[items,query,motoristaById]);
+ const edit=(x:Veiculo)=>{setForm({placa:formatPlate(x.placa),modelo:x.modelo||"",marca:x.marca||"",renavam:x.renavam||"",chassi:x.chassi||"",anoFabricacao:x.anoFabricacao?String(x.anoFabricacao):"",anoModelo:x.anoModelo?String(x.anoModelo):"",cor:x.cor||"",combustivel:x.combustivel||"",proprietario:x.proprietario||"",subcategoria:x.subcategoria||"",motoristaId:x.motoristaId||"",crlvValidade:x.crlvValidade||"",ipvaVencimento:x.ipvaVencimento||"",ipvaPago:!!x.ipvaPago,licenciamentoVencimento:x.licenciamentoVencimento||"",seguroValidade:x.seguroValidade||"",rntrc:x.rntrc||"",observacoes:x.observacoes||""});setEditingId(x.id);setOpen(true)};
+ const save=async(e:React.FormEvent)=>{e.preventDefault();if(saving)return;const placa=formatPlate(form.placa);if(normalizePlate(placa).length!==7)return toast.error("Informe uma placa válida.");if(!form.subcategoria)return toast.error("Selecione a subcategoria.");if(!form.motoristaId)return toast.error("Selecione o motorista.");const payload={...form,placa,anoFabricacao:form.anoFabricacao?Number(form.anoFabricacao):null,anoModelo:form.anoModelo?Number(form.anoModelo):null,subcategoria:form.subcategoria,motoristaId:form.motoristaId,ipvaPago:form.ipvaPago};setSaving(true);try{if(editingId)await update(editingId,payload);else await create(payload);setOpen(false);toast.success("Veículo salvo com sucesso!")}catch(e:any){toast.error(e.response?.data?.message||"Erro ao salvar veículo.")}finally{setSaving(false)}};
+ const columns:any[]=[
+  {key:"placa",label:"Veículo",render:(x:Veiculo)=><div><div className="flex items-center gap-2 font-mono font-bold"><Truck className="h-4 w-4"/>{formatPlate(x.placa)}</div><div className="text-xs text-muted-foreground">{[x.marca,x.modelo].filter(Boolean).join(" ")||"Modelo não informado"}</div></div>},
+  {key:"renavam",label:"RENAVAM",render:(x:Veiculo)=><span>{x.renavam||"—"}</span>},
+  {key:"crlv",label:"CRLV",render:(x:Veiculo)=><Validity date={x.crlvValidade}/>},
+  {key:"ipva",label:"IPVA",render:(x:Veiculo)=><div><span className={x.ipvaPago?"text-green-600":"text-muted-foreground"}>{x.ipvaPago?"Pago":"Pendente"}</span><div className="text-xs">{dateLabel(x.ipvaVencimento)}</div></div>},
+  {key:"motorista",label:"Motorista",render:(x:Veiculo)=><span>{x.motoristaId?motoristaById.get(x.motoristaId)?.nome||"—":"—"}</span>}
+ ];
+ return <div className="space-y-4">
+  <div className="grid gap-3 sm:grid-cols-3"><Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">Veículos cadastrados</div><div className="mt-1 text-2xl font-bold">{items.length}</div></CardContent></Card><Card><CardContent className="p-4"><div className="flex justify-between text-xs text-muted-foreground"><span>Documentos vencidos</span><AlertTriangle className="h-4 w-4"/></div><div className="mt-1 text-2xl font-bold">{alertas.filter(a=>a.status==="VENCIDO").length}</div></CardContent></Card><Card><CardContent className="p-4"><div className="flex justify-between text-xs text-muted-foreground"><span>Vencem em 30 dias</span><CalendarClock className="h-4 w-4"/></div><div className="mt-1 text-2xl font-bold">{alertas.filter(a=>a.status==="ATENCAO").length}</div></CardContent></Card></div>
+  {alertas.length>0&&<div className="rounded-xl border p-4"><div className="mb-3 flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4"/>Alertas da frota</div><div className="grid gap-2 md:grid-cols-2">{alertas.slice(0,8).map((a,i)=><div key={`${a.v.id}-${a.tipo}-${i}`} className="rounded-lg border p-3 text-sm"><div className="font-medium">{formatPlate(a.v.placa)} · {a.tipo}</div><div className={a.status==="VENCIDO"?"text-red-600":"text-amber-600"}>{a.status==="VENCIDO"?"Vencido":"Próximo do vencimento"} · {dateLabel(a.data)}</div></div>)}</div></div>}
+  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div className="w-full sm:max-w-xl"><p className="mb-2 text-sm text-muted-foreground">{items.length} veículo(s) cadastrado(s)</p><Input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Placa, RENAVAM, chassi, modelo, motorista..."/></div><Button onClick={()=>{setForm(emptyForm);setEditingId(null);setOpen(true)}}><Plus className="mr-1 h-4 w-4"/>Novo Veículo</Button></div>
+  <DataTable columns={columns} data={filtered} onEdit={edit} onDelete={x=>remove(x.id)} emptyMessage="Nenhum veículo encontrado."/>
+  <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto"><DialogHeader><DialogTitle>{editingId?"Editar Veículo":"Novo Veículo"}</DialogTitle></DialogHeader><form onSubmit={save} className="space-y-5">
+   <Section title="Identificação"><div className="grid gap-3 md:grid-cols-4"><Field label="Placa"><Input value={form.placa} onChange={e=>setForm({...form,placa:formatPlate(e.target.value)})}/></Field><Field label="RENAVAM"><Input value={form.renavam} onChange={e=>setForm({...form,renavam:e.target.value})}/></Field><Field label="Chassi"><Input value={form.chassi} onChange={e=>setForm({...form,chassi:e.target.value.toUpperCase()})}/></Field><Field label="RNTRC / ANTT"><Input value={form.rntrc} onChange={e=>setForm({...form,rntrc:e.target.value})}/></Field><Field label="Marca"><Input value={form.marca} onChange={e=>setForm({...form,marca:e.target.value})}/></Field><Field label="Modelo"><Input value={form.modelo} onChange={e=>setForm({...form,modelo:e.target.value})}/></Field><Field label="Ano fabricação"><Input type="number" value={form.anoFabricacao} onChange={e=>setForm({...form,anoFabricacao:e.target.value})}/></Field><Field label="Ano modelo"><Input type="number" value={form.anoModelo} onChange={e=>setForm({...form,anoModelo:e.target.value})}/></Field><Field label="Cor"><Input value={form.cor} onChange={e=>setForm({...form,cor:e.target.value})}/></Field><Field label="Combustível"><Input value={form.combustivel} onChange={e=>setForm({...form,combustivel:e.target.value})}/></Field><Field label="Proprietário"><Input value={form.proprietario} onChange={e=>setForm({...form,proprietario:e.target.value})}/></Field></div></Section>
+   <Section title="Operação"><div className="grid gap-3 md:grid-cols-2"><Field label="Subcategoria"><Select value={form.subcategoria} onValueChange={v=>setForm({...form,subcategoria:v as SubcategoriaVeiculo})}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent><SelectItem value="CAMINHAO">Caminhão</SelectItem><SelectItem value="CARRO">Carro</SelectItem><SelectItem value="MOTO">Moto</SelectItem></SelectContent></Select></Field><Field label="Motorista vinculado"><Select value={form.motoristaId} onValueChange={v=>setForm({...form,motoristaId:v})}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent>{motoristasDisponiveis.map(m=><SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>)}</SelectContent></Select></Field></div></Section>
+   <Section title="Documentos, impostos e seguros"><div className="grid gap-3 md:grid-cols-3"><Field label="Validade CRLV"><Input type="date" value={form.crlvValidade} onChange={e=>setForm({...form,crlvValidade:e.target.value})}/></Field><Field label="Vencimento IPVA"><Input type="date" value={form.ipvaVencimento} onChange={e=>setForm({...form,ipvaVencimento:e.target.value})}/></Field><Field label="IPVA pago"><label className="mt-2 flex h-10 items-center gap-2 rounded-md border px-3"><input type="checkbox" checked={form.ipvaPago} onChange={e=>setForm({...form,ipvaPago:e.target.checked})}/>Sim, quitado</label></Field><Field label="Licenciamento"><Input type="date" value={form.licenciamentoVencimento} onChange={e=>setForm({...form,licenciamentoVencimento:e.target.value})}/></Field><Field label="Validade seguro"><Input type="date" value={form.seguroValidade} onChange={e=>setForm({...form,seguroValidade:e.target.value})}/></Field></div></Section>
+   <Section title="Observações"><Field label="Observações do veículo"><Input value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})}/></Field></Section>
+   <DialogFooter><Button type="submit" disabled={saving}>{saving?"Salvando...":"Salvar"}</Button></DialogFooter>
+  </form></DialogContent></Dialog>
+ </div>}
+function Validity({date}:{date?:string|null}){const s=status(date);return <span className={s==="VENCIDO"?"text-red-600":s==="ATENCAO"?"text-amber-600":"text-muted-foreground"}>{dateLabel(date)}</span>}
+function Section({title,children}:{title:string;children:ReactNode}){return <div><div className="mb-2 flex items-center gap-2 text-sm font-semibold"><FileCheck2 className="h-4 w-4"/>{title}</div>{children}</div>}
+function Field({label,children}:{label:string;children:ReactNode}){return <div className="space-y-1"><Label>{label}</Label>{children}</div>}
+function norm(v:unknown){return String(v??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase()}

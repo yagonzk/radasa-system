@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getResourceCollection, invalidateResourceCache, peekResourceCollection } from "./api";
 
 export type StatusMotorista = "ATIVO" | "DEMITIDO";
-export interface Motorista { id: string; nome: string; cpf: string; salarioBase: number; status: StatusMotorista; createdAt: string; }
+export interface Motorista {
+  id: string; nome: string; cpf: string; rg?: string; dataNascimento?: string | null; telefone?: string; email?: string;
+  endereco?: string; cidade?: string; uf?: string; cep?: string; salarioBase: number; dataAdmissao?: string | null;
+  cnhNumero?: string; cnhRegistro?: string; cnhCategoria?: string; cnhValidade?: string | null; primeiraHabilitacao?: string | null;
+  moppValidade?: string | null; toxicologicoValidade?: string | null; observacoes?: string; status: StatusMotorista; createdAt: string;
+}
 export interface Chapa { id: string; nome: string; telefone: string; cpf: string; cidade: string; chavePix: string; valorFixo: number; createdAt: string; }
 export interface Cliente { id: string; nomeFantasia: string; razaoSocial: string; codigoInterno: string; cnpj: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
 export type StatusDemanda = "BACKLOG" | "A_FAZER" | "EM_ANDAMENTO" | "AGUARDANDO" | "CONCLUIDA";
@@ -46,7 +51,13 @@ export interface Local { id: string; cidade: string; uf?: string | null; valorCo
 export interface ViagemFechamento { localId: string; quantidade: number; }
 export interface Fechamento { id: string; motoristaId: string; dataInicio: string; dataFim: string; viagens: ViagemFechamento[]; valorTotal: number; createdAt: string; }
 export type SubcategoriaVeiculo = "CAMINHAO" | "CARRO" | "MOTO";
-export interface Veiculo { id: string; placa: string; modelo?: string; subcategoria?: SubcategoriaVeiculo | null; motoristaId?: string | null; quantidadePneus?: number; quantidadeEstepes?: number; createdAt: string; }
+export interface Veiculo {
+  id: string; placa: string; modelo?: string; marca?: string; renavam?: string; chassi?: string; anoFabricacao?: number | null;
+  anoModelo?: number | null; cor?: string; combustivel?: string; proprietario?: string; subcategoria?: SubcategoriaVeiculo | null;
+  motoristaId?: string | null; quantidadePneus?: number; quantidadeEstepes?: number; crlvValidade?: string | null;
+  ipvaVencimento?: string | null; ipvaPago?: boolean; licenciamentoVencimento?: string | null; seguroValidade?: string | null;
+  rntrc?: string; observacoes?: string; createdAt: string;
+}
 export interface Viagem { id: string; placa: string; motoristaId: string; clienteId?: string | null; valorFrete: number; dataManifesto: string; cidadeEntrega: string; rotas: string[]; distanciaKm: number; valorPedagio: number; valorDiaria: number; valorAbastecimento: number; valorChapa: number; createdAt: string; }
 export type TipoManifesto = "Bonificação - Lebrinha" | "Acertar c/ Lebrinha" | "Receber c/ Cliente" | "Vasilhame";
 export interface ManifestoProduto { id?: string; produtoId: string; clienteId?: string | null; romaneio?: string; notaFiscal?: string; serieNf?: string; instrucaoCobranca?: string; quantidade: number; valorUnitario: number; valorTotal: number; tipoManifesto?: TipoManifesto; pagoCliente?: boolean | null; }

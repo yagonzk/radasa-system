@@ -65,6 +65,9 @@ type AnaliseViagem = {
   id: string; codigo: string; placa: string; cliente: string; destino: string; data: string;
   receita: number; despesa: number; resultado: number; margem: number; distanciaKm: number; custoKm: number; lucroKm: number;
 };
+type Fluxo = { saldoRealizado:number;aReceber:number;aPagar:number;vencidoReceber:number;vencidoPagar:number;receber7:number;pagar7:number;projecao7:number;receber30:number;pagar30:number;projecao30:number };
+type Baixa={id:string;lancamentoId:string;valor:number;data:string;formaPagamento:string;observacoes:string};
+
 type Analise = {
   resumo: { receita: number; despesa: number; resultado: number; margem: number; viagens: number };
   porVeiculo: AnaliseRow[]; porCliente: AnaliseRow[]; porViagem: AnaliseViagem[];
@@ -200,6 +203,9 @@ export default function Financeiro() {
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [centros, setCentros] = useState<Centro[]>([]);
   const [analise, setAnalise] = useState<Analise | null>(null);
+  const [fluxo, setFluxo] = useState<Fluxo | null>(null);
+  const [baixaItem, setBaixaItem] = useState<Lancamento | null>(null);
+  const [baixaValor, setBaixaValor] = useState("");
   const [ranking, setRanking] = useState<"VEICULO" | "CLIENTE" | "VIAGEM">("VEICULO");
   const [novoCentro, setNovoCentro] = useState("");
   const [open, setOpen] = useState(false);
@@ -209,18 +215,20 @@ export default function Financeiro() {
 
   const load = async () => {
     try {
-      const [a, b, c, d] = await Promise.all([
+      const [a, b, c, d, e] = await Promise.all([
         api.get("/financeiro"),
         api.get("/financeiro/resumo/dre", {
           params: { from: from || undefined, to: to || undefined },
         }),
         api.get("/centros-custo"),
         api.get("/financeiro/analise/rentabilidade", { params: { from: from || undefined, to: to || undefined } }),
+        api.get("/financeiro/fluxo-caixa"),
       ]);
       setItems(a.data);
       setResumo(b.data);
       setCentros(c.data);
       setAnalise(d.data);
+      setFluxo(e.data);
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Erro ao carregar financeiro");
     }
@@ -309,11 +317,16 @@ export default function Financeiro() {
   };
 
   const quitar = async (item: Lancamento) => {
-    await api.put(`/financeiro/${item.id}`, {
-      status: item.tipo === "RECEITA" ? "RECEBIDO" : "PAGO",
-      dataPagamento: today(),
-    });
-    await load();
+    setBaixaItem(item);
+    setBaixaValor(String(item.valor));
+  };
+  const confirmarBaixa = async () => {
+    if (!baixaItem || Number(baixaValor) <= 0) return;
+    try {
+      await api.post(`/financeiro/${baixaItem.id}/baixas`, { valor: Number(baixaValor), data: today(), formaPagamento: baixaItem.formaPagamento || "" });
+      toast.success("Pagamento/recebimento registrado.");
+      setBaixaItem(null); setBaixaValor(""); await load();
+    } catch(e:any){ toast.error(e.response?.data?.message || "Não foi possível registrar a baixa."); }
   };
 
   const cards = [
@@ -434,6 +447,19 @@ export default function Financeiro() {
                 </>
               );
             })()}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Fluxo de Caixa e Previsão</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Saldo realizado</div><div className="mt-1 text-lg font-bold">{money(fluxo?.saldoRealizado||0)}</div></div>
+              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Vencido a receber</div><div className="mt-1 text-lg font-bold">{money(fluxo?.vencidoReceber||0)}</div></div>
+              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Vencido a pagar</div><div className="mt-1 text-lg font-bold">{money(fluxo?.vencidoPagar||0)}</div></div>
+              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Projeção 7 dias</div><div className="mt-1 text-lg font-bold">{money(fluxo?.projecao7||0)}</div><div className="text-xs text-muted-foreground">+{money(fluxo?.receber7||0)} / -{money(fluxo?.pagar7||0)}</div></div>
+              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Projeção 30 dias</div><div className="mt-1 text-lg font-bold">{money(fluxo?.projecao30||0)}</div><div className="text-xs text-muted-foreground">+{money(fluxo?.receber30||0)} / -{money(fluxo?.pagar30||0)}</div></div>
+            </div>
           </CardContent>
         </Card>
 
@@ -583,6 +609,18 @@ export default function Financeiro() {
             </CardContent>
           </Card>
         </div>
+
+        <Dialog open={!!baixaItem} onOpenChange={(o) => !o && setBaixaItem(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Registrar {baixaItem?.tipo === "RECEITA" ? "recebimento" : "pagamento"}</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div className="rounded-lg border p-3 text-sm"><div className="font-medium">{baixaItem?.descricao}</div><div className="text-muted-foreground">Valor da conta: {money(baixaItem?.valor || 0)}</div></div>
+              <label className="text-sm">Valor desta baixa<Input className="mt-1" type="number" step="0.01" value={baixaValor} onChange={(e)=>setBaixaValor(e.target.value)} /></label>
+              <p className="text-xs text-muted-foreground">Você pode informar um valor menor para registrar um pagamento ou recebimento parcial.</p>
+            </div>
+            <div className="flex justify-end gap-2"><Button variant="outline" onClick={()=>setBaixaItem(null)}>Cancelar</Button><Button onClick={confirmarBaixa}>Registrar baixa</Button></div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent className="max-w-2xl">

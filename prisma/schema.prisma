@@ -138,19 +138,38 @@ model PasswordResetToken {
 }
 
 model Motorista {
-  id          String          @id @default(cuid())
-  nome        String
-  cpf         String
-  salarioBase Decimal         @db.Decimal(14, 2)
-  status      StatusMotorista @default(ATIVO)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  viagens     Viagem[]
-  fechamentos Fechamento[]
-  ciots       Ciot[]
-  veiculos    Veiculo[]
+  id                       String          @id @default(cuid())
+  nome                     String
+  cpf                      String
+  rg                       String          @default("")
+  dataNascimento           DateTime?       @db.Date
+  telefone                 String          @default("")
+  email                    String          @default("")
+  endereco                 String          @default("")
+  cidade                   String          @default("")
+  uf                       String          @default("")
+  cep                      String          @default("")
+  salarioBase              Decimal         @db.Decimal(14, 2)
+  dataAdmissao             DateTime?       @db.Date
+  cnhNumero                String          @default("")
+  cnhRegistro              String          @default("")
+  cnhCategoria             String          @default("")
+  cnhValidade              DateTime?       @db.Date
+  primeiraHabilitacao      DateTime?       @db.Date
+  moppValidade             DateTime?       @db.Date
+  toxicologicoValidade     DateTime?       @db.Date
+  observacoes              String          @default("") @db.Text
+  status                   StatusMotorista @default(ATIVO)
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+  viagens                  Viagem[]
+  fechamentos              Fechamento[]
+  ciots                    Ciot[]
+  veiculos                 Veiculo[]
 
   @@index([nome])
+  @@index([cpf])
+  @@index([cnhValidade])
   @@map("motoristas")
 }
 
@@ -273,10 +292,25 @@ model Veiculo {
   id                     String           @id @default(cuid())
   placa                  String
   modelo                 String?
+  marca                  String           @default("")
+  renavam                String           @default("")
+  chassi                 String           @default("")
+  anoFabricacao          Int?
+  anoModelo              Int?
+  cor                    String           @default("")
+  combustivel            String           @default("")
+  proprietario           String           @default("")
   subcategoria           SubcategoriaVeiculo?
   motoristaId            String?
   quantidadePneus        Int              @default(10)
   quantidadeEstepes      Int              @default(1)
+  crlvValidade           DateTime?        @db.Date
+  ipvaVencimento         DateTime?        @db.Date
+  ipvaPago               Boolean          @default(false)
+  licenciamentoVencimento DateTime?       @db.Date
+  seguroValidade         DateTime?        @db.Date
+  rntrc                  String           @default("")
+  observacoes            String           @default("") @db.Text
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   abastecimentos         Abastecimento[]
@@ -288,8 +322,11 @@ model Veiculo {
   motorista              Motorista?       @relation(fields: [motoristaId], references: [id], onDelete: SetNull)
 
   @@index([placa])
+  @@index([renavam])
   @@index([subcategoria])
   @@index([motoristaId])
+  @@index([crlvValidade])
+  @@index([ipvaVencimento])
   @@map("veiculos")
 }
 
@@ -957,4 +994,77 @@ model LancamentoFinanceiro {
   @@index([viagemId])
   @@index([centroCustoId])
   @@map("lancamentos_financeiros")
+}
+
+
+model BaixaFinanceira {
+  id           String   @id @default(cuid())
+  lancamentoId String
+  valor        Decimal  @db.Decimal(14, 2)
+  data         DateTime @db.Date
+  formaPagamento String @default("")
+  observacoes  String   @default("") @db.Text
+  comprovanteNome String?
+  comprovanteUrl  String? @db.Text
+  createdAt    DateTime @default(now())
+  @@index([lancamentoId])
+  @@index([data])
+  @@map("baixas_financeiras")
+}
+
+model PlanoManutencao {
+  id              String   @id @default(cuid())
+  veiculoId       String
+  nome            String
+  categoria       String   @default("PREVENTIVA")
+  intervaloKm     Decimal? @db.Decimal(14, 2)
+  intervaloDias   Int?
+  ultimoKm        Decimal? @db.Decimal(14, 2)
+  ultimaData      DateTime? @db.Date
+  proximoKm       Decimal? @db.Decimal(14, 2)
+  proximaData     DateTime? @db.Date
+  ativo            Boolean @default(true)
+  observacoes      String  @default("") @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  @@index([veiculoId])
+  @@index([ativo])
+  @@map("planos_manutencao")
+}
+
+model OrdemServico {
+  id              String   @id @default(cuid())
+  numero          String   @unique
+  veiculoId       String
+  tipo            String   @default("PREVENTIVA")
+  status          String   @default("ABERTA")
+  descricao       String   @db.Text
+  fornecedor      String   @default("")
+  kmAbertura      Decimal? @db.Decimal(14, 2)
+  dataAbertura    DateTime @db.Date
+  dataConclusao   DateTime? @db.Date
+  valorPecas      Decimal  @default(0) @db.Decimal(14, 2)
+  valorMaoObra    Decimal  @default(0) @db.Decimal(14, 2)
+  valorOutros     Decimal  @default(0) @db.Decimal(14, 2)
+  observacoes     String   @default("") @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@index([veiculoId])
+  @@index([status])
+  @@index([dataAbertura])
+  @@map("ordens_servico")
+}
+
+model DocumentoFrota {
+  id          String   @id @default(cuid())
+  veiculoId   String
+  tipo        String
+  numero      String   @default("")
+  validade    DateTime? @db.Date
+  observacoes String   @default("") @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([veiculoId])
+  @@index([validade])
+  @@map("documentos_frota")
 }

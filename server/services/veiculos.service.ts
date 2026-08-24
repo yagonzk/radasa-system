@@ -1,8 +1,23 @@
 import { prisma } from "../lib/prisma.js";
-import { created } from "../utils/serialize.js";
+import { created, dateOnly } from "../utils/serialize.js";
+import { parseDateOnly } from "../utils/date.js";
 import { AppError } from "../utils/app-error.js";
 
-const serialize = (item: any) => ({ ...item, createdAt: created(item.createdAt) });
+const serialize = (item: any) => ({
+  ...item,
+  crlvValidade: item.crlvValidade ? dateOnly(item.crlvValidade) : null,
+  ipvaVencimento: item.ipvaVencimento ? dateOnly(item.ipvaVencimento) : null,
+  licenciamentoVencimento: item.licenciamentoVencimento ? dateOnly(item.licenciamentoVencimento) : null,
+  seguroValidade: item.seguroValidade ? dateOnly(item.seguroValidade) : null,
+  createdAt: created(item.createdAt),
+});
+const normalizeVehicleDates = (data: any) => {
+  const out = { ...data };
+  for (const key of ["crlvValidade","ipvaVencimento","licenciamentoVencimento","seguroValidade"]) {
+    if (key in out) out[key] = out[key] ? parseDateOnly(out[key]) : null;
+  }
+  return out;
+};
 
 function normalizePlate(value: unknown) {
   return String(value ?? "")
@@ -87,7 +102,8 @@ export const veiculosService = {
   },
 
   async create(data: any) {
-    const { createdAt, ...rest } = data;
+    const { createdAt, ...raw } = data;
+    const rest = normalizeVehicleDates(raw);
     const motoristaId = await validateMotoristaId(rest.motoristaId);
     const item = await prisma.veiculo.create({
       data: {
@@ -111,7 +127,8 @@ export const veiculosService = {
     });
     if (!current) throw new AppError(404, "Veiculo não encontrado.");
 
-    const { createdAt, ...rest } = data;
+    const { createdAt, ...raw } = data;
+    const rest = normalizeVehicleDates(raw);
     const motoristaId = rest.motoristaId !== undefined
       ? await validateMotoristaId(rest.motoristaId)
       : undefined;
