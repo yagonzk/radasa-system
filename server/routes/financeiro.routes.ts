@@ -5,6 +5,7 @@ import { bodySchema, idParamsSchema, partialBodySchema, lancamentoFinanceiroBody
 import { financeiroController } from "../controllers/financeiro.controller.js";
 export const financeiroRoutes = Router();
 financeiroRoutes.get("/resumo/dre", asyncHandler(financeiroController.resumo));
+financeiroRoutes.get("/analise/rentabilidade", asyncHandler(financeiroController.analise));
 financeiroRoutes.get("/", asyncHandler(financeiroController.list));
 financeiroRoutes.get("/:id", validate(idParamsSchema), asyncHandler(financeiroController.get));
 financeiroRoutes.post("/", validate(bodySchema(lancamentoFinanceiroBody)), asyncHandler(financeiroController.create));

@@ -1,5 +1,6 @@
 import Layout from "@/components/Layout";
 import { api } from "@/lib/api";
+import { useClientes, useVeiculos, useViagens } from "@/lib/store";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,11 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   ListChecks,
+  Truck,
+  Users,
+  Route,
+  Trophy,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -34,6 +40,9 @@ type Lancamento = {
   fornecedor: string;
   formaPagamento: string;
   observacoes: string;
+  clienteId?: string | null;
+  veiculoId?: string | null;
+  viagemId?: string | null;
 };
 
 type Resumo = {
@@ -47,6 +56,19 @@ type Resumo = {
 };
 
 type Centro = { id: string; nome: string; tipo: string; ativo: boolean };
+
+type AnaliseRow = {
+  id: string; nome: string; receita: number; despesa: number; resultado: number; margem: number;
+  viagens: number; distanciaKm: number; custoKm: number; lucroKm: number;
+};
+type AnaliseViagem = {
+  id: string; codigo: string; placa: string; cliente: string; destino: string; data: string;
+  receita: number; despesa: number; resultado: number; margem: number; distanciaKm: number; custoKm: number; lucroKm: number;
+};
+type Analise = {
+  resumo: { receita: number; despesa: number; resultado: number; margem: number; viagens: number };
+  porVeiculo: AnaliseRow[]; porCliente: AnaliseRow[]; porViagem: AnaliseViagem[];
+};
 
 type LancamentoForm = {
   tipo: "RECEITA" | "DESPESA";
@@ -62,6 +84,9 @@ type LancamentoForm = {
   formaPagamento: string;
   observacoes: string;
   centroCustoId: string;
+  clienteId: string;
+  veiculoId: string;
+  viagemId: string;
 };
 
 const money = (v: number) =>
@@ -80,6 +105,9 @@ const empty = {
   fornecedor: "",
   formaPagamento: "",
   observacoes: "",
+  clienteId: "",
+  veiculoId: "",
+  viagemId: "",
 };
 
 const formatDate = (value?: string | null) => {
@@ -165,9 +193,14 @@ function FinancialTable({
 }
 
 export default function Financeiro() {
+  const { items: clientes } = useClientes();
+  const { items: veiculos } = useVeiculos();
+  const { items: viagens } = useViagens();
   const [items, setItems] = useState<Lancamento[]>([]);
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [centros, setCentros] = useState<Centro[]>([]);
+  const [analise, setAnalise] = useState<Analise | null>(null);
+  const [ranking, setRanking] = useState<"VEICULO" | "CLIENTE" | "VIAGEM">("VEICULO");
   const [novoCentro, setNovoCentro] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<LancamentoForm>({ ...empty, centroCustoId: "" });
@@ -176,16 +209,18 @@ export default function Financeiro() {
 
   const load = async () => {
     try {
-      const [a, b, c] = await Promise.all([
+      const [a, b, c, d] = await Promise.all([
         api.get("/financeiro"),
         api.get("/financeiro/resumo/dre", {
           params: { from: from || undefined, to: to || undefined },
         }),
         api.get("/centros-custo"),
+        api.get("/financeiro/analise/rentabilidade", { params: { from: from || undefined, to: to || undefined } }),
       ]);
       setItems(a.data);
       setResumo(b.data);
       setCentros(c.data);
+      setAnalise(d.data);
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Erro ao carregar financeiro");
     }
@@ -212,6 +247,27 @@ export default function Financeiro() {
     [filtered],
   );
   const movimentacoes = useMemo(() => filtered.slice(0, 12), [filtered]);
+
+  const viagemLabel = (viagem: (typeof viagens)[number]) => {
+    const motoristaDestino = viagem.cidadeEntrega ? ` · ${viagem.cidadeEntrega}` : "";
+    return `${formatDate(viagem.dataManifesto)} · ${viagem.placa}${motoristaDestino}`;
+  };
+
+  const handleViagemChange = (viagemId: string) => {
+    const viagem = viagens.find((item) => item.id === viagemId);
+    if (!viagem) {
+      setForm({ ...form, viagemId: "" });
+      return;
+    }
+    const veiculo = veiculos.find((item) => item.placa.replace(/[^A-Z0-9]/gi, "").toUpperCase() === viagem.placa.replace(/[^A-Z0-9]/gi, "").toUpperCase());
+    setForm({
+      ...form,
+      viagemId,
+      veiculoId: veiculo?.id ?? form.veiculoId,
+      clienteId: viagem.clienteId ?? form.clienteId,
+      dataCompetencia: viagem.dataManifesto || form.dataCompetencia,
+    });
+  };
 
   const save = async () => {
     if (!form.descricao.trim() || !Number(form.valor)) {
@@ -315,6 +371,71 @@ export default function Financeiro() {
             </Card>
           ))}
         </div>
+
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Análise Gerencial de Rentabilidade</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">Compare o resultado da operação por caminhão, cliente ou viagem.</p>
+              </div>
+              <div className="flex rounded-lg border p-1">
+                {([
+                  ["VEICULO", "Caminhões", Truck],
+                  ["CLIENTE", "Clientes", Users],
+                  ["VIAGEM", "Viagens", Route],
+                ] as const).map(([key, label, Icon]) => (
+                  <Button key={key} size="sm" variant={ranking === key ? "default" : "ghost"} onClick={() => setRanking(key)}>
+                    <Icon className="mr-1.5 h-4 w-4" />{label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const rows = ranking === "VEICULO" ? (analise?.porVeiculo || []) : ranking === "CLIENTE" ? (analise?.porCliente || []) : (analise?.porViagem || []).map(v => ({...v, nome: `${v.placa} · ${v.destino}` , viagens: 1}));
+              if (!rows.length) return <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Sem dados de rentabilidade para o período selecionado.</div>;
+              const melhor = rows[0];
+              const pior = [...rows].sort((a,b) => a.resultado-b.resultado)[0];
+              return (
+                <>
+                  <div className="mb-4 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border p-3">
+                      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><Trophy className="h-4 w-4" /> Melhor resultado</div>
+                      <div className="mt-1 truncate font-semibold">{melhor.nome}</div>
+                      <div className="text-lg font-bold">{money(melhor.resultado)}</div>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><AlertTriangle className="h-4 w-4" /> Menor resultado</div>
+                      <div className="mt-1 truncate font-semibold">{pior.nome}</div>
+                      <div className="text-lg font-bold">{money(pior.resultado)}</div>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[900px] text-sm">
+                      <thead><tr className="border-b text-left text-muted-foreground">
+                        <th className="pb-2 font-medium">{ranking === "VEICULO" ? "Caminhão" : ranking === "CLIENTE" ? "Cliente" : "Viagem / destino"}</th>
+                        <th className="pb-2 text-right font-medium">Receita</th><th className="pb-2 text-right font-medium">Custos</th>
+                        <th className="pb-2 text-right font-medium">Resultado</th><th className="pb-2 text-right font-medium">Margem</th>
+                        <th className="pb-2 text-right font-medium">Custo/km</th><th className="pb-2 text-right font-medium">Lucro/km</th>
+                      </tr></thead>
+                      <tbody>{rows.slice(0, 12).map((row:any) => (
+                        <tr key={row.id} className="border-b last:border-0">
+                          <td className="py-3"><div className="font-medium">{row.nome}</div><div className="text-xs text-muted-foreground">{row.viagens} viagem(ns)</div></td>
+                          <td className="py-3 text-right">{money(row.receita)}</td><td className="py-3 text-right">{money(row.despesa)}</td>
+                          <td className="py-3 text-right font-semibold">{money(row.resultado)}</td><td className="py-3 text-right">{row.margem.toFixed(1)}%</td>
+                          <td className="py-3 text-right">{money(row.custoKm)}</td><td className="py-3 text-right">{money(row.lucroKm)}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </>
+              );
+            })()}
+          </CardContent>
+        </Card>
 
         <div className="grid min-w-0 gap-4 xl:grid-cols-2">
           <FinancialTable
@@ -511,6 +632,45 @@ export default function Financeiro() {
               <label className="text-sm">
                 Subcategoria
                 <Input className="mt-1" value={form.subcategoria} onChange={(e) => setForm({ ...form, subcategoria: e.target.value })} />
+              </label>
+              <label className="text-sm sm:col-span-2">
+                Viagem vinculada
+                <select
+                  className="mt-1 h-10 w-full rounded-md border bg-background px-3"
+                  value={form.viagemId}
+                  onChange={(e) => handleViagemChange(e.target.value)}
+                >
+                  <option value="">Sem viagem vinculada</option>
+                  {viagens.map((viagem) => (
+                    <option key={viagem.id} value={viagem.id}>{viagemLabel(viagem)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm">
+                Veículo
+                <select
+                  className="mt-1 h-10 w-full rounded-md border bg-background px-3"
+                  value={form.veiculoId}
+                  onChange={(e) => setForm({ ...form, veiculoId: e.target.value })}
+                >
+                  <option value="">Sem veículo vinculado</option>
+                  {veiculos.map((veiculo) => (
+                    <option key={veiculo.id} value={veiculo.id}>{veiculo.placa}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm">
+                Cliente
+                <select
+                  className="mt-1 h-10 w-full rounded-md border bg-background px-3"
+                  value={form.clienteId}
+                  onChange={(e) => setForm({ ...form, clienteId: e.target.value })}
+                >
+                  <option value="">Sem cliente vinculado</option>
+                  {clientes.map((cliente) => (
+                    <option key={cliente.id} value={cliente.id}>{cliente.nomeFantasia || cliente.razaoSocial}</option>
+                  ))}
+                </select>
               </label>
               <label className="text-sm sm:col-span-2">
                 Centro de custo

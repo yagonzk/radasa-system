@@ -124,7 +124,7 @@ export const veiculoBody = z.object({
   id: id.optional(), placa: text(20), modelo: optionalText(255), subcategoria: z.enum(["CAMINHAO", "CARRO", "MOTO"]).optional().nullable(), motoristaId: id.optional().nullable().or(z.literal("")), quantidadePneus: z.coerce.number().int().min(4).max(16).default(10), quantidadeEstepes: z.coerce.number().int().min(0).max(3).default(1), createdAt: z.string().optional(),
 });
 export const viagemBody = z.object({
-  id: id.optional(), placa: text(20), motoristaId: id, valorFrete: money, dataManifesto: dateOnly, cidadeEntrega: text(), rotas: z.array(text()).default([]), distanciaKm: money, valorPedagio: money, valorDiaria: money, valorAbastecimento: money, valorChapa: money, createdAt: z.string().optional(),
+  id: id.optional(), placa: text(20), motoristaId: id, clienteId: id.optional().nullable().or(z.literal("")), valorFrete: money, dataManifesto: dateOnly, cidadeEntrega: text(), rotas: z.array(text()).default([]), distanciaKm: money, valorPedagio: money, valorDiaria: money, valorAbastecimento: money, valorChapa: money, createdAt: z.string().optional(),
 });
 export const fechamentoBody = z.object({
   id: id.optional(), motoristaId: id, dataInicio: dateOnly, dataFim: dateOnly,

@@ -3,6 +3,7 @@ import { crudRoutes } from "./crud.routes.js";
 import { viagensController } from "../controllers/viagens.controller.js";
 import { viagemBody } from "../validators/schemas.js";
 import { interpretarManifestoViagem } from "../services/viagens-manifesto.service.js";
+import { asyncHandler } from "../utils/async-handler.js";
 
 export const viagensRoutes = Router();
 
@@ -19,5 +20,7 @@ viagensRoutes.post("/ler-manifesto", async (req, res, next) => {
     next(error);
   }
 });
+
+viagensRoutes.get("/:id/rentabilidade", asyncHandler(viagensController.rentabilidade));
 
 viagensRoutes.use(crudRoutes(viagensController, viagemBody));

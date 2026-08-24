@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
-import { useViagens, useMotoristas, useVeiculos, type Motorista, type Veiculo, type Viagem } from "@/lib/store";
+import { useViagens, useMotoristas, useVeiculos, useClientes, type Motorista, type Veiculo, type Viagem } from "@/lib/store";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 import { api } from "@/lib/api";
 import { extrairTextoPdf, type PdfTextProgress } from "@/lib/pdfText";
@@ -83,7 +83,7 @@ const viagemColumns: Array<{
 ];
 
 function viagemTotalCusto(viagem: Viagem) {
-  return viagem.valorPedagio + viagem.valorDiaria + viagem.valorChapa;
+  return viagem.valorAbastecimento + viagem.valorPedagio + viagem.valorDiaria + viagem.valorChapa;
 }
 
 function viagemCustoPorKm(viagem: Viagem) {
@@ -125,6 +125,23 @@ type ManifestoVinculado = {
   chaveAcesso: string;
   camposPreenchidos: string[];
   observacoes: string[];
+};
+
+type RentabilidadeViagem = {
+  viagemId: string;
+  clienteId?: string | null;
+  receitaFrete: number;
+  receitasAdicionais: number;
+  receitaTotal: number;
+  despesasBase: number;
+  despesasFinanceiras: number;
+  custoTotal: number;
+  lucro: number;
+  margem: number;
+  custoKm: number;
+  lucroKm: number;
+  custosBase: { categoria: string; valor: number }[];
+  lancamentos: { id: string; tipo: "RECEITA" | "DESPESA"; descricao: string; categoria: string; valor: number; status: string; dataCompetencia: string }[];
 };
 
 function normalizeLookup(value: string) {
@@ -186,6 +203,7 @@ export default function Viagens() {
   const [activeColumnFilter, setActiveColumnFilter] = useState<ViagemFilterKey | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState("");
   const { items: veiculos } = useVeiculos();
+  const { items: clientes } = useClientes();
 
   // Form state
   const [placa, setPlaca] = useState("");
@@ -193,6 +211,7 @@ export default function Viagens() {
   const [valorFrete, setValorFrete] = useState("");
   const [dataManifesto, setDataManifesto] = useState("");
   const [cidadeEntrega, setCidadeEntrega] = useState("");
+  const [clienteId, setClienteId] = useState("");
   const [rotas, setRotas] = useState<string[]>([]);
   const [novaRota, setNovaRota] = useState("");
   const [distanciaKm, setDistanciaKm] = useState("");
@@ -204,6 +223,8 @@ export default function Viagens() {
   const [readingManifesto, setReadingManifesto] = useState(false);
   const [readingManifestoLabel, setReadingManifestoLabel] = useState("");
   const [manifestoVinculado, setManifestoVinculado] = useState<ManifestoVinculado | null>(null);
+  const [rentabilidade, setRentabilidade] = useState<RentabilidadeViagem | null>(null);
+  const [loadingRentabilidade, setLoadingRentabilidade] = useState(false);
 
   const motoristasAtivos = useMemo(
     () => motoristas.filter((motorista) => motorista.status === "ATIVO"),
@@ -224,6 +245,28 @@ export default function Viagens() {
     () => new Map(motoristas.map((motorista) => [motorista.id, motorista])),
     [motoristas],
   );
+
+  const clienteById = useMemo(
+    () => new Map(clientes.map((cliente) => [cliente.id, cliente])),
+    [clientes],
+  );
+
+  useEffect(() => {
+    if (!viewingViagem) {
+      setRentabilidade(null);
+      return;
+    }
+    let active = true;
+    setLoadingRentabilidade(true);
+    api.get<RentabilidadeViagem>(`/viagens/${viewingViagem.id}/rentabilidade`)
+      .then((response) => { if (active) setRentabilidade(response.data); })
+      .catch((error) => {
+        console.error("Falha ao carregar rentabilidade da viagem.", error);
+        if (active) setRentabilidade(null);
+      })
+      .finally(() => { if (active) setLoadingRentabilidade(false); });
+    return () => { active = false; };
+  }, [viewingViagem?.id]);
 
   const filteredViagens = useMemo(() => {
     const query = normalizeLookup(search);
@@ -341,6 +384,7 @@ export default function Viagens() {
     setValorFrete(String(v.valorFrete));
     setDataManifesto(v.dataManifesto);
     setCidadeEntrega(v.cidadeEntrega);
+    setClienteId(v.clienteId ?? "");
     setRotas(v.rotas ?? []);
     setNovaRota("");
     setDistanciaKm(String(v.distanciaKm));
@@ -356,6 +400,7 @@ export default function Viagens() {
     setValorFrete("");
     setDataManifesto("");
     setCidadeEntrega("");
+    setClienteId("");
     setRotas([]);
     setNovaRota("");
     setDistanciaKm("");
@@ -456,6 +501,7 @@ export default function Viagens() {
       valorFrete: parseFloat(valorFrete) || 0,
       dataManifesto,
       cidadeEntrega,
+      clienteId: clienteId || null,
       rotas,
       distanciaKm: parseFloat(distanciaKm) || 0,
       valorPedagio: parseFloat(valorPedagio) || 0,
@@ -895,6 +941,23 @@ export default function Viagens() {
               />
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Cliente da Viagem</Label>
+              <Select value={clienteId || "SEM_CLIENTE"} onValueChange={(value) => setClienteId(value === "SEM_CLIENTE" ? "" : value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SEM_CLIENTE">Sem cliente vinculado</SelectItem>
+                  {clientes.map((cliente) => (
+                    <SelectItem key={cliente.id} value={cliente.id}>
+                      {cliente.nomeFantasia || cliente.razaoSocial}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <Label className="text-sm font-medium">Rotas</Label>
@@ -1092,12 +1155,14 @@ export default function Viagens() {
 
           {viewingViagem && (() => {
             const motorista = motoristas.find((m) => m.id === viewingViagem.motoristaId);
-            const totalCusto =
-              viewingViagem.valorPedagio +
-              viewingViagem.valorDiaria +
-              viewingViagem.valorChapa;
-            const custoPorKm = viewingViagem.distanciaKm > 0 ? totalCusto / viewingViagem.distanciaKm : 0;
-            const lucroBruto = viewingViagem.valorFrete - totalCusto;
+            const totalCustoBase = viagemTotalCusto(viewingViagem);
+            const totalCusto = rentabilidade?.custoTotal ?? totalCustoBase;
+            const receitaTotal = rentabilidade?.receitaTotal ?? viewingViagem.valorFrete;
+            const custoPorKm = rentabilidade?.custoKm ?? (viewingViagem.distanciaKm > 0 ? totalCusto / viewingViagem.distanciaKm : 0);
+            const lucroBruto = rentabilidade?.lucro ?? (receitaTotal - totalCusto);
+            const margem = rentabilidade?.margem ?? (receitaTotal > 0 ? (lucroBruto / receitaTotal) * 100 : 0);
+            const lucroKm = rentabilidade?.lucroKm ?? (viewingViagem.distanciaKm > 0 ? lucroBruto / viewingViagem.distanciaKm : 0);
+            const cliente = viewingViagem.clienteId ? clienteById.get(viewingViagem.clienteId) : null;
 
             return (
               <div className="space-y-4">
@@ -1121,6 +1186,11 @@ export default function Viagens() {
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Destino</p>
                     <p className="mt-1 text-sm font-medium">{viewingViagem.cidadeEntrega}</p>
                   </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cliente</p>
+                  <p className="mt-1 text-sm font-medium">{cliente?.nomeFantasia || cliente?.razaoSocial || "—"}</p>
                 </div>
 
                 {(viewingViagem.rotas ?? []).length > 0 && (
@@ -1152,6 +1222,10 @@ export default function Viagens() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Despesas</p>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
+                      <span>Combustível</span>
+                      <span className="font-medium">{formatBRL(viewingViagem.valorAbastecimento)}</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span>Pedágio</span>
                       <span className="font-medium">{formatBRL(viewingViagem.valorPedagio)}</span>
                     </div>
@@ -1166,8 +1240,34 @@ export default function Viagens() {
                   </div>
                 </div>
 
+                {(loadingRentabilidade || (rentabilidade?.lancamentos.length ?? 0) > 0) && (
+                  <div className="border-t border-border pt-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Lançamentos financeiros vinculados</p>
+                      {loadingRentabilidade && <span className="text-xs text-muted-foreground">Carregando...</span>}
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      {rentabilidade?.lancamentos.map((item) => (
+                        <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">{item.descricao}</div>
+                            <div className="text-xs text-muted-foreground">{item.categoria}</div>
+                          </div>
+                          <span className={`shrink-0 font-semibold ${item.tipo === "RECEITA" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                            {item.tipo === "RECEITA" ? "+" : "-"}{formatBRL(item.valor)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2 rounded-lg border border-border bg-card p-4">
                   <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-muted-foreground">Receita total</span>
+                    <span className="font-display text-lg font-bold text-green-600 dark:text-green-400">{formatBRL(receitaTotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-border pt-2">
                     <span className="text-sm font-semibold text-muted-foreground">Custo Total</span>
                     <span className="font-display text-lg font-bold text-primary">{formatBRL(totalCusto)}</span>
                   </div>
@@ -1180,6 +1280,16 @@ export default function Viagens() {
                   }`}>
                     <span className="text-sm font-semibold">Lucro Bruto</span>
                     <span className="font-display text-lg font-bold">{formatBRL(lucroBruto)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
+                    <div>
+                      <span className="text-xs text-muted-foreground">Margem</span>
+                      <div className="font-semibold">{margem.toFixed(1)}%</div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs text-muted-foreground">Lucro/KM</span>
+                      <div className="font-semibold">{formatBRL(lucroKm)}</div>
+                    </div>
                   </div>
                 </div>
               </div>

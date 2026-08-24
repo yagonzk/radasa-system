@@ -297,6 +297,7 @@ model Viagem {
   id                 String    @id @default(cuid())
   placa              String
   motoristaId        String
+  clienteId          String?
   valorFrete         Decimal   @db.Decimal(14, 2)
   dataManifesto      DateTime  @db.Date
   cidadeEntrega      String
@@ -311,6 +312,7 @@ model Viagem {
   motorista          Motorista @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
 
   @@index([motoristaId])
+  @@index([clienteId])
   @@index([placa])
   @@index([dataManifesto])
   @@map("viagens")
