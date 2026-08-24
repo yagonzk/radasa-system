@@ -25,6 +25,7 @@ import AprovacaoContas from "./pages/AprovacaoContas";
 import Fiscal from "./pages/Fiscal";
 import Financeiro from "./pages/Financeiro";
 import Manutencao from "./pages/Manutencao";
+import Alertas from "./pages/Alertas";
 import CiotGerar from "./pages/CiotGerar";
 import CiotGerados from "./pages/CiotGerados";
 import CiotConfiguracao from "./pages/CiotConfiguracao";
@@ -43,6 +44,7 @@ function Router() {
       <Route path="/fiscal" component={Fiscal} />
       <Route path="/financeiro" component={Financeiro} />
       <Route path="/manutencao" component={Manutencao} />
+      <Route path="/alertas" component={Alertas} />
       <Route path="/manifestos" component={Romaneios} />
       <Route path="/fechamentos" component={Fechamentos} />
       <Route path="/abastecimentos" component={Abastecimentos} />

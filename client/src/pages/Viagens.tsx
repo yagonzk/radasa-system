@@ -140,6 +140,7 @@ type RentabilidadeViagem = {
   margem: number;
   custoKm: number;
   lucroKm: number;
+  distanciaPlanejada?: number; distanciaReal?: number; combustivelReal?: number;
   custosBase: { categoria: string; valor: number }[];
   lancamentos: { id: string; tipo: "RECEITA" | "DESPESA"; descricao: string; categoria: string; valor: number; status: string; dataCompetencia: string }[];
 };
@@ -210,7 +211,15 @@ export default function Viagens() {
   const [motoristaId, setMotoristaId] = useState("");
   const [valorFrete, setValorFrete] = useState("");
   const [dataManifesto, setDataManifesto] = useState("");
+  const [cidadeOrigem, setCidadeOrigem] = useState("");
   const [cidadeEntrega, setCidadeEntrega] = useState("");
+  const [statusViagem, setStatusViagem] = useState<Viagem["status"]>("PLANEJADA");
+  const [dataSaida, setDataSaida] = useState("");
+  const [previsaoChegada, setPrevisaoChegada] = useState("");
+  const [dataChegada, setDataChegada] = useState("");
+  const [kmSaida, setKmSaida] = useState("");
+  const [kmChegada, setKmChegada] = useState("");
+  const [observacoes, setObservacoes] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [rotas, setRotas] = useState<string[]>([]);
   const [novaRota, setNovaRota] = useState("");
@@ -383,7 +392,15 @@ export default function Viagens() {
     setMotoristaId(v.motoristaId);
     setValorFrete(String(v.valorFrete));
     setDataManifesto(v.dataManifesto);
+    setCidadeOrigem(v.cidadeOrigem ?? "");
     setCidadeEntrega(v.cidadeEntrega);
+    setStatusViagem(v.status ?? "PLANEJADA");
+    setDataSaida(v.dataSaida ? v.dataSaida.slice(0,16) : "");
+    setPrevisaoChegada(v.previsaoChegada ? v.previsaoChegada.slice(0,16) : "");
+    setDataChegada(v.dataChegada ? v.dataChegada.slice(0,16) : "");
+    setKmSaida(v.kmSaida == null ? "" : String(v.kmSaida));
+    setKmChegada(v.kmChegada == null ? "" : String(v.kmChegada));
+    setObservacoes(v.observacoes ?? "");
     setClienteId(v.clienteId ?? "");
     setRotas(v.rotas ?? []);
     setNovaRota("");
@@ -399,7 +416,15 @@ export default function Viagens() {
     setMotoristaId("");
     setValorFrete("");
     setDataManifesto("");
+    setCidadeOrigem("");
     setCidadeEntrega("");
+    setStatusViagem("PLANEJADA");
+    setDataSaida("");
+    setPrevisaoChegada("");
+    setDataChegada("");
+    setKmSaida("");
+    setKmChegada("");
+    setObservacoes("");
     setClienteId("");
     setRotas([]);
     setNovaRota("");
@@ -434,6 +459,7 @@ export default function Viagens() {
       if (matchedMotoristaId) setMotoristaId(matchedMotoristaId);
       if (parsed.valorFrete > 0) setValorFrete(String(parsed.valorFrete));
       if (parsed.dataManifesto) setDataManifesto(parsed.dataManifesto);
+      if (parsed.origemCidade) setCidadeOrigem(`${parsed.origemCidade}${parsed.origemUf ? `/${parsed.origemUf}` : ""}`);
       if (destination) setCidadeEntrega(destination);
       if (distance > 0) setDistanciaKm(String(distance));
       setValorPedagio("");
@@ -500,7 +526,15 @@ export default function Viagens() {
       motoristaId,
       valorFrete: parseFloat(valorFrete) || 0,
       dataManifesto,
+      cidadeOrigem,
       cidadeEntrega,
+      status: statusViagem ?? "PLANEJADA",
+      dataSaida: dataSaida || null,
+      previsaoChegada: previsaoChegada || null,
+      dataChegada: dataChegada || null,
+      kmSaida: kmSaida ? parseFloat(kmSaida) : null,
+      kmChegada: kmChegada ? parseFloat(kmChegada) : null,
+      observacoes,
       clienteId: clienteId || null,
       rotas,
       distanciaKm: parseFloat(distanciaKm) || 0,
@@ -622,6 +656,13 @@ export default function Viagens() {
                 : "—"}
             </p>
           </div>
+        </div>
+
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[ ["Planejadas", "PLANEJADA"], ["Carregando", "CARREGANDO"], ["Em trânsito", "EM_TRANSITO"], ["Entregues/Finalizadas", "FINAL"] ].map(([label, key]) => {
+            const count = key === "FINAL" ? viagens.filter(v => v.status === "ENTREGUE" || v.status === "FINALIZADA").length : viagens.filter(v => (v.status ?? "PLANEJADA") === key).length;
+            return <div key={key} className="rounded-xl border bg-card p-3"><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 text-xl font-bold">{count}</div></div>;
+          })}
         </div>
 
         {/* Viagens table */}
@@ -931,6 +972,17 @@ export default function Viagens() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Cidade de Origem</Label>
+                <Input value={cidadeOrigem} onChange={(e) => setCidadeOrigem(e.target.value)} placeholder="Ex.: Ipiranga do Norte, MT" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Status da Viagem</Label>
+                <Select value={statusViagem ?? "PLANEJADA"} onValueChange={(v) => setStatusViagem(v as Viagem["status"])}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="PLANEJADA">Planejada</SelectItem><SelectItem value="CARREGANDO">Carregando</SelectItem><SelectItem value="EM_TRANSITO">Em trânsito</SelectItem><SelectItem value="ENTREGUE">Entregue</SelectItem><SelectItem value="FINALIZADA">Finalizada</SelectItem><SelectItem value="CANCELADA">Cancelada</SelectItem></SelectContent></Select>
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Cidade de Entrega</Label>
               <Input
@@ -1024,6 +1076,11 @@ export default function Viagens() {
               )}
             </div>
 
+            <div className="rounded-lg border p-3">
+              <p className="mb-3 text-sm font-semibold">Timeline operacional</p>
+              <div className="grid gap-3 sm:grid-cols-3"><div><Label>Saída</Label><Input type="datetime-local" value={dataSaida} onChange={e=>setDataSaida(e.target.value)}/></div><div><Label>Previsão de chegada</Label><Input type="datetime-local" value={previsaoChegada} onChange={e=>setPrevisaoChegada(e.target.value)}/></div><div><Label>Chegada real</Label><Input type="datetime-local" value={dataChegada} onChange={e=>setDataChegada(e.target.value)}/></div><div><Label>KM saída</Label><Input type="number" value={kmSaida} onChange={e=>setKmSaida(e.target.value)}/></div><div><Label>KM chegada</Label><Input type="number" value={kmChegada} onChange={e=>setKmChegada(e.target.value)}/></div></div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Distância (KM)</Label>
@@ -1069,6 +1126,8 @@ export default function Viagens() {
                 />
               </div>
             </div>
+
+            <div className="space-y-1.5"><Label>Observações da viagem</Label><Input value={observacoes} onChange={e=>setObservacoes(e.target.value)} placeholder="Ocorrências, instruções, observações..."/></div>
 
             {/* Total calculation */}
             <div className="space-y-2 rounded-lg border border-border bg-card p-4">
@@ -1166,6 +1225,7 @@ export default function Viagens() {
 
             return (
               <div className="space-y-4">
+                <div className="flex items-center justify-between rounded-lg border p-3"><div><div className="text-xs text-muted-foreground">Código da viagem</div><div className="font-semibold">{viewingViagem.codigo || "Sem código"}</div></div><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{viewingViagem.status || "PLANEJADA"}</span></div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Manifesto</p>
@@ -1193,6 +1253,9 @@ export default function Viagens() {
                   <p className="mt-1 text-sm font-medium">{cliente?.nomeFantasia || cliente?.razaoSocial || "—"}</p>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Origem</p><p className="mt-1 text-sm font-medium">{viewingViagem.cidadeOrigem || "—"}</p></div><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">ETA</p><p className="mt-1 text-sm font-medium">{viewingViagem.previsaoChegada ? new Date(viewingViagem.previsaoChegada).toLocaleString("pt-BR") : "—"}</p></div></div>
+                {(viewingViagem.dataSaida || viewingViagem.dataChegada) && <div className="rounded-lg border p-3"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Timeline</p><div className="grid grid-cols-2 gap-3 text-sm"><div>Saída: <strong>{viewingViagem.dataSaida ? new Date(viewingViagem.dataSaida).toLocaleString("pt-BR") : "—"}</strong></div><div>Chegada: <strong>{viewingViagem.dataChegada ? new Date(viewingViagem.dataChegada).toLocaleString("pt-BR") : "—"}</strong></div><div>KM saída: <strong>{viewingViagem.kmSaida ?? "—"}</strong></div><div>KM chegada: <strong>{viewingViagem.kmChegada ?? "—"}</strong></div></div></div>}
+
                 {(viewingViagem.rotas ?? []).length > 0 && (
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Rotas</p>
@@ -1210,7 +1273,7 @@ export default function Viagens() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Distância (KM)</p>
-                    <p className="mt-1 text-sm font-medium">{viewingViagem.distanciaKm}</p>
+                    <p className="mt-1 text-sm font-medium">{rentabilidade?.distanciaReal ? `${rentabilidade.distanciaReal.toLocaleString("pt-BR")} real / ${viewingViagem.distanciaKm.toLocaleString("pt-BR")} prevista` : viewingViagem.distanciaKm}</p>
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Frete (Receita)</p>

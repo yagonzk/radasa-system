@@ -257,6 +257,7 @@ model EstoqueProduto {
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
   movimentacoes  EstoqueMovimentacao[]
+  ordensServicoItens OrdemServicoItem[]
 
   @@index([nome])
   @@index([codigoInterno])
@@ -300,6 +301,7 @@ model Veiculo {
   cor                    String           @default("")
   combustivel            String           @default("")
   proprietario           String           @default("")
+  situacaoOperacional    String           @default("DISPONIVEL")
   subcategoria           SubcategoriaVeiculo?
   motoristaId            String?
   quantidadePneus        Int              @default(10)
@@ -307,8 +309,11 @@ model Veiculo {
   crlvValidade           DateTime?        @db.Date
   ipvaVencimento         DateTime?        @db.Date
   ipvaPago               Boolean          @default(false)
+  ipvaValor              Decimal          @default(0) @db.Decimal(14, 2)
   licenciamentoVencimento DateTime?       @db.Date
+  licenciamentoValor     Decimal          @default(0) @db.Decimal(14, 2)
   seguroValidade         DateTime?        @db.Date
+  seguroValor            Decimal          @default(0) @db.Decimal(14, 2)
   rntrc                  String           @default("")
   observacoes            String           @default("") @db.Text
   createdAt              DateTime         @default(now())
@@ -332,18 +337,27 @@ model Veiculo {
 
 model Viagem {
   id                 String    @id @default(cuid())
+  codigo             String?   @unique
+  status             String    @default("PLANEJADA")
   placa              String
   motoristaId        String
   clienteId          String?
   valorFrete         Decimal   @db.Decimal(14, 2)
   dataManifesto      DateTime  @db.Date
+  cidadeOrigem       String    @default("")
   cidadeEntrega      String
   rotas              String[]  @default([])
   distanciaKm        Decimal   @db.Decimal(14, 2)
+  kmSaida            Decimal?  @db.Decimal(14, 1)
+  kmChegada          Decimal?  @db.Decimal(14, 1)
+  dataSaida          DateTime?
+  previsaoChegada    DateTime?
+  dataChegada        DateTime?
   valorPedagio       Decimal   @db.Decimal(14, 2)
   valorDiaria        Decimal   @db.Decimal(14, 2)
   valorAbastecimento Decimal   @db.Decimal(14, 2)
   valorChapa         Decimal   @db.Decimal(14, 2)
+  observacoes        String    @default("") @db.Text
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   motorista          Motorista @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
@@ -351,6 +365,7 @@ model Viagem {
   @@index([motoristaId])
   @@index([clienteId])
   @@index([placa])
+  @@index([status])
   @@index([dataManifesto])
   @@map("viagens")
 }
@@ -984,6 +999,10 @@ model LancamentoFinanceiro {
   centroCustoId   String?
   formaPagamento  String    @default("")
   observacoes     String    @default("") @db.Text
+  numeroDocumento String    @default("")
+  parcelaNumero   Int       @default(1)
+  parcelaTotal    Int       @default(1)
+  grupoParcelamento String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   @@index([tipo])
@@ -993,6 +1012,7 @@ model LancamentoFinanceiro {
   @@index([veiculoId])
   @@index([viagemId])
   @@index([centroCustoId])
+  @@index([grupoParcelamento])
   @@map("lancamentos_financeiros")
 }
 
@@ -1049,10 +1069,26 @@ model OrdemServico {
   observacoes     String   @default("") @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  itens           OrdemServicoItem[]
   @@index([veiculoId])
   @@index([status])
   @@index([dataAbertura])
   @@map("ordens_servico")
+}
+
+model OrdemServicoItem {
+  id             String   @id @default(cuid())
+  ordemServicoId String
+  produtoId      String
+  quantidade     Decimal  @db.Decimal(14,3)
+  valorUnitario  Decimal  @default(0) @db.Decimal(14,2)
+  valorTotal     Decimal  @default(0) @db.Decimal(14,2)
+  createdAt      DateTime @default(now())
+  ordemServico   OrdemServico @relation(fields: [ordemServicoId], references: [id], onDelete: Cascade)
+  produto        EstoqueProduto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  @@index([ordemServicoId])
+  @@index([produtoId])
+  @@map("ordem_servico_itens")
 }
 
 model DocumentoFrota {

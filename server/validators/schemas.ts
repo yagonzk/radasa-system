@@ -153,6 +153,7 @@ export const veiculoBody = z.object({
   cor: z.string().trim().max(60).optional().default(""),
   combustivel: z.string().trim().max(80).optional().default(""),
   proprietario: z.string().trim().max(255).optional().default(""),
+  situacaoOperacional: z.enum(["DISPONIVEL","EM_VIAGEM","MANUTENCAO","INATIVO"]).optional().default("DISPONIVEL"),
   subcategoria: z.enum(["CAMINHAO", "CARRO", "MOTO"]).optional().nullable(),
   motoristaId: id.optional().nullable().or(z.literal("")),
   quantidadePneus: z.coerce.number().int().min(4).max(16).default(10),
@@ -160,14 +161,23 @@ export const veiculoBody = z.object({
   crlvValidade: dateOnly.optional().nullable().or(z.literal("")),
   ipvaVencimento: dateOnly.optional().nullable().or(z.literal("")),
   ipvaPago: z.coerce.boolean().optional().default(false),
+  ipvaValor: money.optional().default(0),
   licenciamentoVencimento: dateOnly.optional().nullable().or(z.literal("")),
+  licenciamentoValor: money.optional().default(0),
   seguroValidade: dateOnly.optional().nullable().or(z.literal("")),
+  seguroValor: money.optional().default(0),
   rntrc: z.string().trim().max(40).optional().default(""),
   observacoes: z.string().trim().max(5000).optional().default(""),
   createdAt: z.string().optional(),
 });
 export const viagemBody = z.object({
-  id: id.optional(), placa: text(20), motoristaId: id, clienteId: id.optional().nullable().or(z.literal("")), valorFrete: money, dataManifesto: dateOnly, cidadeEntrega: text(), rotas: z.array(text()).default([]), distanciaKm: money, valorPedagio: money, valorDiaria: money, valorAbastecimento: money, valorChapa: money, createdAt: z.string().optional(),
+  id: id.optional(), codigo: z.string().trim().max(30).optional().nullable(),
+  status: z.enum(["PLANEJADA","CARREGANDO","EM_TRANSITO","ENTREGUE","FINALIZADA","CANCELADA"]).optional().default("PLANEJADA"),
+  placa: text(20), motoristaId: id, clienteId: id.optional().nullable().or(z.literal("")), valorFrete: money,
+  dataManifesto: dateOnly, cidadeOrigem: z.string().trim().max(160).optional().default(""), cidadeEntrega: text(), rotas: z.array(text()).default([]),
+  distanciaKm: money, kmSaida: z.coerce.number().finite().min(0).optional().nullable(), kmChegada: z.coerce.number().finite().min(0).optional().nullable(),
+  dataSaida: z.string().optional().nullable().or(z.literal("")), previsaoChegada: z.string().optional().nullable().or(z.literal("")), dataChegada: z.string().optional().nullable().or(z.literal("")),
+  valorPedagio: money, valorDiaria: money, valorAbastecimento: money, valorChapa: money, observacoes: z.string().trim().max(5000).optional().default(""), createdAt: z.string().optional(),
 });
 export const fechamentoBody = z.object({
   id: id.optional(), motoristaId: id, dataInicio: dateOnly, dataFim: dateOnly,
@@ -473,6 +483,6 @@ export const demandaBody = z.object({
 });
 
 export const lancamentoFinanceiroBody = z.object({
-  id: id.optional(), tipo: z.enum(["RECEITA", "DESPESA"]), descricao: text(255), categoria: text(120), subcategoria: z.string().trim().max(120).optional().default(""), valor: money, dataCompetencia: dateOnly, dataVencimento: dateOnly.optional().nullable().or(z.literal("")), dataPagamento: dateOnly.optional().nullable().or(z.literal("")), status: z.enum(["PENDENTE", "PAGO", "RECEBIDO", "VENCIDO", "CANCELADO"]).default("PENDENTE"), clienteId: id.optional().nullable().or(z.literal("")), fornecedor: z.string().trim().max(255).optional().default(""), veiculoId: id.optional().nullable().or(z.literal("")), viagemId: id.optional().nullable().or(z.literal("")), centroCustoId: id.optional().nullable().or(z.literal("")), formaPagamento: z.string().trim().max(120).optional().default(""), observacoes: z.string().trim().max(4000).optional().default(""), createdAt: z.string().optional(),
+  id: id.optional(), tipo: z.enum(["RECEITA", "DESPESA"]), descricao: text(255), categoria: text(120), subcategoria: z.string().trim().max(120).optional().default(""), valor: money, dataCompetencia: dateOnly, dataVencimento: dateOnly.optional().nullable().or(z.literal("")), dataPagamento: dateOnly.optional().nullable().or(z.literal("")), status: z.enum(["PENDENTE", "PAGO", "RECEBIDO", "VENCIDO", "CANCELADO"]).default("PENDENTE"), clienteId: id.optional().nullable().or(z.literal("")), fornecedor: z.string().trim().max(255).optional().default(""), veiculoId: id.optional().nullable().or(z.literal("")), viagemId: id.optional().nullable().or(z.literal("")), centroCustoId: id.optional().nullable().or(z.literal("")), formaPagamento: z.string().trim().max(120).optional().default(""), observacoes: z.string().trim().max(4000).optional().default(""), numeroDocumento: z.string().trim().max(120).optional().default(""), parcelaNumero: z.coerce.number().int().min(1).optional().default(1), parcelaTotal: z.coerce.number().int().min(1).optional().default(1), grupoParcelamento: z.string().trim().max(80).optional().nullable().or(z.literal("")), createdAt: z.string().optional(),
 });
 export const centroCustoBody = z.object({ id: id.optional(), nome: text(160), tipo: z.enum(["VEICULO", "VIAGEM", "CLIENTE", "MOTORISTA", "ADMINISTRATIVO", "OUTRO"]).default("ADMINISTRATIVO"), ativo: z.coerce.boolean().default(true), createdAt: z.string().optional() });

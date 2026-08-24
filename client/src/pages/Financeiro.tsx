@@ -18,6 +18,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   ListChecks,
+  History,
   Truck,
   Users,
   Route,
@@ -43,6 +44,8 @@ type Lancamento = {
   clienteId?: string | null;
   veiculoId?: string | null;
   viagemId?: string | null;
+  numeroDocumento?: string; parcelaNumero?: number; parcelaTotal?: number; grupoParcelamento?: string | null;
+  valorBaixado?: number; saldoRestante?: number;
 };
 
 type Resumo = {
@@ -71,6 +74,7 @@ type Baixa={id:string;lancamentoId:string;valor:number;data:string;formaPagament
 type Analise = {
   resumo: { receita: number; despesa: number; resultado: number; margem: number; viagens: number };
   porVeiculo: AnaliseRow[]; porCliente: AnaliseRow[]; porViagem: AnaliseViagem[];
+  custosPorVeiculo?: {id:string;placa:string;total:number;categorias:{categoria:string;valor:number}[]}[];
 };
 
 type LancamentoForm = {
@@ -134,12 +138,14 @@ function FinancialTable({
   emptyText,
   onQuit,
   onRemove,
+  onHistory,
 }: {
   title: string;
   items: Lancamento[];
   emptyText: string;
   onQuit: (item: Lancamento) => void;
   onRemove: (id: string) => void;
+  onHistory: (item: Lancamento) => void;
 }) {
   return (
     <Card className="min-w-0">
@@ -174,13 +180,14 @@ function FinancialTable({
                     <div className="text-xs text-muted-foreground">{item.categoria}</div>
                   </td>
                   <td className="py-3">{statusLabel(item.status)}</td>
-                  <td className="py-3 text-right font-semibold">{money(item.valor)}</td>
+                  <td className="py-3 text-right"><div className="font-semibold">{money(item.valor)}</div>{Number(item.saldoRestante ?? item.valor) < item.valor && <div className="text-xs text-muted-foreground">Saldo {money(item.saldoRestante ?? 0)}</div>}</td>
                   <td className="py-3 text-right whitespace-nowrap">
                     {!['PAGO', 'RECEBIDO', 'CANCELADO'].includes(item.status) && (
                       <Button size="icon" variant="ghost" onClick={() => onQuit(item)} title="Dar baixa">
                         <CheckCircle2 className="h-4 w-4" />
                       </Button>
                     )}
+                    <Button size="icon" variant="ghost" onClick={() => onHistory(item)} title="Histórico"><History className="h-4 w-4" /></Button>
                     <Button size="icon" variant="ghost" onClick={() => onRemove(item.id)} title="Excluir">
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -206,6 +213,12 @@ export default function Financeiro() {
   const [fluxo, setFluxo] = useState<Fluxo | null>(null);
   const [baixaItem, setBaixaItem] = useState<Lancamento | null>(null);
   const [baixaValor, setBaixaValor] = useState("");
+  const [parcelas, setParcelas] = useState("1");
+  const [recorrenteMensal, setRecorrenteMensal] = useState(false);
+  const [baixaForma, setBaixaForma] = useState("");
+  const [baixaObs, setBaixaObs] = useState("");
+  const [baixaComprovanteUrl, setBaixaComprovanteUrl] = useState("");
+  const [historico, setHistorico] = useState<{item:Lancamento;baixas:Baixa[]}|null>(null);
   const [ranking, setRanking] = useState<"VEICULO" | "CLIENTE" | "VIAGEM">("VEICULO");
   const [novoCentro, setNovoCentro] = useState("");
   const [open, setOpen] = useState(false);
@@ -282,17 +295,16 @@ export default function Financeiro() {
       toast.error("Informe descrição e valor.");
       return;
     }
-    await api.post("/financeiro", {
-      ...form,
-      valor: Number(form.valor),
-      dataVencimento: form.dataVencimento || null,
-      dataPagamento: form.dataPagamento || null,
-    });
+    const qtd = Math.max(1, Math.min(120, Number(parcelas) || 1));
+    const total = Number(form.valor); const grupo = qtd > 1 ? `${recorrenteMensal ? "REC" : "PARC"}-${Date.now()}` : null;
+    for (let i=1;i<=qtd;i++) { const venc = form.dataVencimento ? new Date(`${form.dataVencimento}T12:00:00`) : null; if(venc) venc.setMonth(venc.getMonth()+i-1); await api.post("/financeiro", { ...form, descricao: qtd>1 ? `${form.descricao} (${i}/${qtd})` : form.descricao, valor: recorrenteMensal ? total : total/qtd, dataVencimento: venc ? venc.toISOString().slice(0,10) : null, dataPagamento: form.dataPagamento || null, parcelaNumero:i, parcelaTotal:qtd, grupoParcelamento:grupo }); }
     setOpen(false);
-    setForm({ ...empty, centroCustoId: "" });
+    setForm({ ...empty, centroCustoId: "" }); setParcelas("1"); setRecorrenteMensal(false);
     toast.success("Lançamento salvo.");
     await load();
   };
+
+  const abrirHistorico = async (item: Lancamento) => { const r=await api.get("/financeiro/baixas",{params:{lancamentoId:item.id}}); setHistorico({item,baixas:r.data}); };
 
   const remove = async (id: string) => {
     await api.delete(`/financeiro/${id}`);
@@ -318,12 +330,13 @@ export default function Financeiro() {
 
   const quitar = async (item: Lancamento) => {
     setBaixaItem(item);
-    setBaixaValor(String(item.valor));
+    setBaixaValor(String(item.saldoRestante ?? item.valor));
+    setBaixaForma(item.formaPagamento || ""); setBaixaObs(""); setBaixaComprovanteUrl("");
   };
   const confirmarBaixa = async () => {
     if (!baixaItem || Number(baixaValor) <= 0) return;
     try {
-      await api.post(`/financeiro/${baixaItem.id}/baixas`, { valor: Number(baixaValor), data: today(), formaPagamento: baixaItem.formaPagamento || "" });
+      await api.post(`/financeiro/${baixaItem.id}/baixas`, { valor: Number(baixaValor), data: today(), formaPagamento: baixaForma || baixaItem.formaPagamento || "", observacoes: baixaObs, comprovanteUrl: baixaComprovanteUrl || null, comprovanteNome: baixaComprovanteUrl ? "Comprovante" : null });
       toast.success("Pagamento/recebimento registrado.");
       setBaixaItem(null); setBaixaValor(""); await load();
     } catch(e:any){ toast.error(e.response?.data?.message || "Não foi possível registrar a baixa."); }
@@ -463,6 +476,8 @@ export default function Financeiro() {
           </CardContent>
         </Card>
 
+        {ranking === "VEICULO" && (analise?.custosPorVeiculo?.length ?? 0) > 0 && <Card><CardHeader><CardTitle className="text-base">Composição de custos por caminhão</CardTitle></CardHeader><CardContent className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Placa</th><th>Principais custos</th><th className="text-right">Total</th></tr></thead><tbody>{analise?.custosPorVeiculo?.map(row=><tr key={row.id} className="border-b"><td className="py-3 font-semibold">{row.placa}</td><td className="py-3"><div className="flex flex-wrap gap-1.5">{row.categorias.slice(0,8).map(c=><span key={c.categoria} className="rounded-md border bg-muted/20 px-2 py-1 text-xs">{c.categoria}: {money(c.valor)}</span>)}</div></td><td className="py-3 text-right font-bold">{money(row.total)}</td></tr>)}</tbody></table></CardContent></Card>}
+
         <div className="grid min-w-0 gap-4 xl:grid-cols-2">
           <FinancialTable
             title="Contas a Receber"
@@ -470,6 +485,7 @@ export default function Financeiro() {
             emptyText="Nenhuma conta a receber neste período."
             onQuit={quitar}
             onRemove={remove}
+            onHistory={abrirHistorico}
           />
           <FinancialTable
             title="Contas a Pagar"
@@ -477,6 +493,7 @@ export default function Financeiro() {
             emptyText="Nenhuma conta a pagar neste período."
             onQuit={quitar}
             onRemove={remove}
+            onHistory={abrirHistorico}
           />
         </div>
 
@@ -516,7 +533,7 @@ export default function Financeiro() {
                       <td className="py-3">{item.categoria}</td>
                       <td className="py-3">{item.tipo === "RECEITA" ? "Receita" : "Despesa"}</td>
                       <td className="py-3">{statusLabel(item.status)}</td>
-                      <td className="py-3 text-right font-semibold">{money(item.valor)}</td>
+                      <td className="py-3 text-right"><div className="font-semibold">{money(item.valor)}</div>{Number(item.saldoRestante ?? item.valor) < item.valor && <div className="text-xs text-muted-foreground">Saldo {money(item.saldoRestante ?? 0)}</div>}</td>
                       <td className="py-3 text-right whitespace-nowrap">
                         {!['PAGO', 'RECEBIDO', 'CANCELADO'].includes(item.status) && (
                           <Button size="icon" variant="ghost" onClick={() => quitar(item)} title="Dar baixa">
@@ -610,12 +627,17 @@ export default function Financeiro() {
           </Card>
         </div>
 
+        <Dialog open={!!historico} onOpenChange={(o)=>!o&&setHistorico(null)}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Histórico de baixas</DialogTitle></DialogHeader><div className="space-y-2"><div className="rounded-lg border p-3 text-sm"><strong>{historico?.item.descricao}</strong><div className="text-muted-foreground">Total {money(historico?.item.valor||0)} · Saldo {money(historico?.item.saldoRestante??historico?.item.valor??0)}</div></div>{historico?.baixas.length===0?<p className="text-sm text-muted-foreground">Nenhuma baixa registrada.</p>:historico?.baixas.map(b=><div key={b.id} className="flex justify-between rounded-lg border p-3 text-sm"><div>{formatDate(b.data)}<div className="text-xs text-muted-foreground">{b.formaPagamento||"Forma não informada"}</div></div><strong>{money(b.valor)}</strong></div>)}</div></DialogContent></Dialog>
+
         <Dialog open={!!baixaItem} onOpenChange={(o) => !o && setBaixaItem(null)}>
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>Registrar {baixaItem?.tipo === "RECEITA" ? "recebimento" : "pagamento"}</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <div className="rounded-lg border p-3 text-sm"><div className="font-medium">{baixaItem?.descricao}</div><div className="text-muted-foreground">Valor da conta: {money(baixaItem?.valor || 0)}</div></div>
               <label className="text-sm">Valor desta baixa<Input className="mt-1" type="number" step="0.01" value={baixaValor} onChange={(e)=>setBaixaValor(e.target.value)} /></label>
+              <label className="text-sm">Forma de pagamento<Input className="mt-1" value={baixaForma} onChange={e=>setBaixaForma(e.target.value)} placeholder="PIX, boleto, transferência..." /></label>
+              <label className="text-sm">Comprovante (URL/arquivo externo)<Input className="mt-1" value={baixaComprovanteUrl} onChange={e=>setBaixaComprovanteUrl(e.target.value)} placeholder="Link do comprovante" /></label>
+              <label className="text-sm">Observações<Input className="mt-1" value={baixaObs} onChange={e=>setBaixaObs(e.target.value)} /></label>
               <p className="text-xs text-muted-foreground">Você pode informar um valor menor para registrar um pagamento ou recebimento parcial.</p>
             </div>
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={()=>setBaixaItem(null)}>Cancelar</Button><Button onClick={confirmarBaixa}>Registrar baixa</Button></div>
@@ -662,6 +684,11 @@ export default function Financeiro() {
               <label className="text-sm">
                 Vencimento
                 <Input className="mt-1" type="date" value={form.dataVencimento} onChange={(e) => setForm({ ...form, dataVencimento: e.target.value })} />
+              </label>
+              <label className="text-sm">
+                Parcelas
+                <Input className="mt-1" type="number" min="1" max="120" value={parcelas} onChange={(e)=>setParcelas(e.target.value)} />
+                <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={recorrenteMensal} onChange={e=>setRecorrenteMensal(e.target.checked)}/>Repetir o valor integral mensalmente</label>
               </label>
               <label className="text-sm">
                 Forma de pagamento

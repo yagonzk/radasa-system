@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma.js";
-import { created, dateOnly } from "../utils/serialize.js";
+import { created, dateOnly, number } from "../utils/serialize.js";
 import { parseDateOnly } from "../utils/date.js";
 import { AppError } from "../utils/app-error.js";
 
@@ -9,6 +9,7 @@ const serialize = (item: any) => ({
   ipvaVencimento: item.ipvaVencimento ? dateOnly(item.ipvaVencimento) : null,
   licenciamentoVencimento: item.licenciamentoVencimento ? dateOnly(item.licenciamentoVencimento) : null,
   seguroValidade: item.seguroValidade ? dateOnly(item.seguroValidade) : null,
+  ipvaValor: number(item.ipvaValor), licenciamentoValor: number(item.licenciamentoValor), seguroValor: number(item.seguroValor),
   createdAt: created(item.createdAt),
 });
 const normalizeVehicleDates = (data: any) => {

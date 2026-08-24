@@ -29,6 +29,7 @@ import { demandasRoutes } from "./demandas.routes.js";
 import { financeiroRoutes } from "./financeiro.routes.js";
 import { centrosCustoRoutes } from "./centros-custo.routes.js";
 import { manutencaoRoutes } from "./manutencao.routes.js";
+import { dashboardRoutes } from "./dashboard.routes.js";
 
 export const apiRoutes = Router();
 apiRoutes.get("/health", (_req, res) => res.json({ status: "ok" }));
@@ -42,6 +43,7 @@ apiRoutes.use("/demandas", demandasRoutes);
 apiRoutes.use("/financeiro", financeiroRoutes);
 apiRoutes.use("/centros-custo", centrosCustoRoutes);
 apiRoutes.use("/manutencao", manutencaoRoutes);
+apiRoutes.use("/dashboard", dashboardRoutes);
 apiRoutes.use("/migration", migrationRoutes);
 apiRoutes.use("/motoristas", motoristasRoutes);
 apiRoutes.use("/chapas", chapasRoutes);

@@ -14,35 +14,43 @@ const data=(i:any)=>{
  return out;
 };
 export const financeiroService={
- async list(){return (await prisma.lancamentoFinanceiro.findMany({orderBy:[{dataCompetencia:"desc"},{createdAt:"desc"}]})).map(serialize)},
+ async list(){
+  const [items,baixas]=await Promise.all([prisma.lancamentoFinanceiro.findMany({orderBy:[{dataCompetencia:"desc"},{createdAt:"desc"}]}),prisma.baixaFinanceira.groupBy({by:["lancamentoId"],_sum:{valor:true}})]);
+  const pagos=new Map(baixas.map(x=>[x.lancamentoId,number(x._sum.valor)]));
+  return items.map(x=>{const item=serialize(x),valorBaixado=pagos.get(x.id)||0;return{...item,valorBaixado,saldoRestante:Math.max(0,item.valor-valorBaixado)}})
+ },
  async get(id:string){const x=await prisma.lancamentoFinanceiro.findUnique({where:{id}});if(!x)throw new AppError(404,"Lançamento não encontrado.");return serialize(x)},
  async create(i:any){return serialize(await prisma.lancamentoFinanceiro.create({data:data(i)}))},
  async update(id:string,i:any){const d=data(i);delete d.id;delete d.createdAt;return serialize(await prisma.lancamentoFinanceiro.update({where:{id},data:d}))},
  async remove(id:string){await prisma.lancamentoFinanceiro.delete({where:{id}})},
  async resumo(from?:string,to?:string){
   const range=(from||to)?{...(from?{gte:parseDateOnly(from)}:{}),...(to?{lte:parseDateOnly(to)}:{})}:undefined;
-  const [manual,viagens,abastecimentos,fechamentos,estoque,pneus,recapagens,consertos]=await Promise.all([
+  const [manual,viagens,abastecimentos,fechamentos,estoque,pneus,recapagens,consertos,baixasResumo]=await Promise.all([
    prisma.lancamentoFinanceiro.findMany({where:range?{dataCompetencia:range}:undefined}),
-   prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}), prisma.abastecimento.findMany({where:range?{dataEmissao:range}:undefined}), prisma.fechamento.findMany({where:range?{dataFim:range}:undefined}), prisma.estoqueMovimentacao.findMany({where:{tipo:"ENTRADA",...(range?{data:range}:{})}}), prisma.pneu.findMany({where:range?{dataCompra:range}:undefined}), prisma.pneuRecapagem.findMany({where:range?{dataEnvio:range}:undefined}), prisma.pneuConserto.findMany({where:range?{data:range}:undefined})
+   prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}), prisma.abastecimento.findMany({where:range?{dataEmissao:range}:undefined}), prisma.fechamento.findMany({where:range?{dataFim:range}:undefined}), prisma.estoqueMovimentacao.findMany({where:{tipo:"ENTRADA",...(range?{data:range}:{})}}), prisma.pneu.findMany({where:range?{dataCompra:range}:undefined}), prisma.pneuRecapagem.findMany({where:range?{dataEnvio:range}:undefined}), prisma.pneuConserto.findMany({where:range?{data:range}:undefined}), prisma.baixaFinanceira.findMany()
   ]);
   const categorias:Record<string,number>={}; const add=(k:string,v:any)=>categorias[k]=(categorias[k]||0)+number(v);
   let receitasAutomaticas=0,despesasAutomaticas=0;
   for(const v of viagens){receitasAutomaticas+=number(v.valorFrete); add("Receita de fretes",v.valorFrete); for(const [k,val] of [["Pedágios",v.valorPedagio],["Diárias",v.valorDiaria],["Chapas",v.valorChapa]] as const){despesasAutomaticas+=number(val);add(k,val)}}
   for(const x of abastecimentos){despesasAutomaticas+=number(x.valorTotal);add("Abastecimento",x.valorTotal)} for(const x of fechamentos){despesasAutomaticas+=number(x.valorTotal);add("Comissões",x.valorTotal)} for(const x of estoque){despesasAutomaticas+=number(x.valorTotal);add("Almoxarifado",x.valorTotal)} for(const x of pneus){despesasAutomaticas+=number(x.valorCompra);add("Pneus",x.valorCompra)} for(const x of recapagens){despesasAutomaticas+=number(x.valor);add("Recapagem",x.valor)} for(const x of consertos){despesasAutomaticas+=number(x.valor);add("Conserto de pneus",x.valor)}
-  let receitasManuais=0,despesasManuais=0,aReceber=0,aPagar=0; for(const x of manual){if(x.status==="CANCELADO")continue; const v=number(x.valor); if(x.tipo==="RECEITA"){receitasManuais+=v;add(x.categoria,v);if(x.status!=="RECEBIDO")aReceber+=v}else{despesasManuais+=v;add(x.categoria,v);if(x.status!=="PAGO")aPagar+=v}}
+  const pagosResumo=new Map<string,number>();for(const b of baixasResumo)pagosResumo.set(b.lancamentoId,(pagosResumo.get(b.lancamentoId)||0)+number(b.valor));
+  let receitasManuais=0,despesasManuais=0,aReceber=0,aPagar=0; for(const x of manual){if(x.status==="CANCELADO")continue; const v=number(x.valor),saldo=Math.max(0,v-(pagosResumo.get(x.id)||0)); if(x.tipo==="RECEITA"){receitasManuais+=v;add(x.categoria,v);aReceber+=saldo}else{despesasManuais+=v;add(x.categoria,v);aPagar+=saldo}}
   const receitas=receitasAutomaticas+receitasManuais, despesas=despesasAutomaticas+despesasManuais, resultado=receitas-despesas; return {receitas,despesas,resultado,margem:receitas?resultado/receitas*100:0,aReceber,aPagar,receitasAutomaticas,despesasAutomaticas,receitasManuais,despesasManuais,categorias:Object.entries(categorias).map(([categoria,valor])=>({categoria,valor})).sort((a,b)=>b.valor-a.valor)};
  },
  async analise(from?:string,to?:string){
   const range=(from||to)?{...(from?{gte:parseDateOnly(from)}:{}),...(to?{lte:parseDateOnly(to)}:{})}:undefined;
-  const [viagens,manual,clientes,veiculos,manifestos]=await Promise.all([
+  const [viagens,manual,clientes,veiculos,manifestos,abastecimentos,pneusDetalhe]=await Promise.all([
    prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}),
    prisma.lancamentoFinanceiro.findMany({where:{...(range?{dataCompetencia:range}:{}),status:{not:"CANCELADO"}}}),
    prisma.cliente.findMany({select:{id:true,nomeFantasia:true,razaoSocial:true}}),
-   prisma.veiculo.findMany({select:{id:true,placa:true}}),
-   prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{id:true,clienteId:true,dataManifesto:true,placaVeiculo:true}})
+   prisma.veiculo.findMany({select:{id:true,placa:true,ipvaValor:true,ipvaVencimento:true,ipvaPago:true,licenciamentoValor:true,licenciamentoVencimento:true,seguroValor:true,seguroValidade:true}}),
+   prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{id:true,clienteId:true,dataManifesto:true,placaVeiculo:true}}),
+   prisma.abastecimento.findMany({where:range?{dataEmissao:range}:undefined,select:{veiculoId:true,valorTotal:true,produtos:{select:{valorTotal:true,produto:{select:{nome:true}}}}}}),
+   prisma.pneu.findMany({where:{deletedAt:null,...(range?{dataCompra:range}:{})},select:{valorCompra:true,instalacoes:{orderBy:{createdAt:"asc"},take:1,select:{veiculoId:true}}}})
   ]);
   const clienteNome=new Map(clientes.map(x=>[x.id,x.nomeFantasia||x.razaoSocial||"Sem cliente"]));
   const veiculoPlaca=new Map(veiculos.map(x=>[x.id,x.placa]));
+  const inRange=(d:Date|null)=>{if(!d)return false;const ds=dateOnly(d);return(!from||ds>=from)&&(!to||ds<=to)};
   const norm=(v:any)=>String(v||"").replace(/[^A-Z0-9]/gi,"").toUpperCase();
   const key=(data:any,placa:any)=>`${dateOnly(data)}|${norm(placa)}`;
   const clientesRomaneio=new Map<string,Set<string>>();
@@ -61,6 +69,8 @@ export const financeiroService={
   const buckets=()=>new Map<string,{id:string;nome:string;receita:number;despesa:number;viagens:Set<string>;distanciaKm:number}>();
   const byVeiculo=buckets(),byCliente=buckets();
   const ensure=(m:any,id:string,nome:string)=>{if(!m.has(id))m.set(id,{id,nome,receita:0,despesa:0,viagens:new Set<string>(),distanciaKm:0});return m.get(id)};
+  const custosMap=new Map<string,{id:string;placa:string;categorias:Record<string,number>;total:number}>();
+  const addCusto=(veiculoKey:string,placa:string,categoria:string,valor:any)=>{if(!veiculoKey)return; if(!custosMap.has(veiculoKey))custosMap.set(veiculoKey,{id:veiculoKey,placa,categorias:{},total:0});const row=custosMap.get(veiculoKey)!;const n=number(valor);row.categorias[categoria]=(row.categorias[categoria]||0)+n;row.total+=n};
   const viagensRows=new Map<string,{id:string;codigo:string;placa:string;cliente:string;destino:string;data:string;receita:number;despesa:number;distanciaKm:number}>();
   for(const v of viagens){
    const placa=String(v.placa||"Sem placa");
@@ -68,7 +78,7 @@ export const financeiroService={
    const nomesClientes=idsClientes.map(id=>clienteNome.get(id)||"Sem cliente");
    const cliente=nomesClientes.length?nomesClientes.join(", "):"Sem cliente";
    const receita=number(v.valorFrete),despesa=number(v.valorPedagio)+number(v.valorDiaria)+number(v.valorAbastecimento)+number(v.valorChapa),dist=number(v.distanciaKm);
-   const vr=ensure(byVeiculo,norm(placa)||placa,placa);vr.receita+=receita;vr.despesa+=despesa;vr.viagens.add(v.id);vr.distanciaKm+=dist;
+   const vk=norm(placa)||placa;const vr=ensure(byVeiculo,vk,placa);vr.receita+=receita;vr.despesa+=despesa;vr.viagens.add(v.id);vr.distanciaKm+=dist;addCusto(vk,placa,"Pedágios",v.valorPedagio);addCusto(vk,placa,"Diárias",v.valorDiaria);addCusto(vk,placa,"Chapas",v.valorChapa);if(number(v.valorAbastecimento)>0)addCusto(vk,placa,"Combustível (manual)",v.valorAbastecimento);
    if(idsClientes.length){
      const divisor=idsClientes.length;
      for(const clienteId of idsClientes){
@@ -78,10 +88,13 @@ export const financeiroService={
    }
    viagensRows.set(v.id,{id:v.id,codigo:`VIAGEM ${dateOnly(v.dataManifesto)}`,placa,cliente,destino:v.cidadeEntrega||"—",data:dateOnly(v.dataManifesto),receita,despesa,distanciaKm:dist});
   }
+  for(const a of abastecimentos){const placa=veiculoPlaca.get(a.veiculoId)||"";if(placa){const vk=norm(placa)||placa,r=ensure(byVeiculo,vk,placa);r.despesa+=number(a.valorTotal);for(const p of a.produtos){const nome=String(p.produto.nome||"").toUpperCase();addCusto(vk,placa,nome.includes("ARLA")?"ARLA":nome.includes("DIESEL")?"Diesel":"Combustível",p.valorTotal)}}}
+  for(const v of veiculos){const vk=norm(v.placa)||v.placa,r=ensure(byVeiculo,vk,v.placa);if(inRange(v.ipvaVencimento)&&!v.ipvaPago){r.despesa+=number(v.ipvaValor);addCusto(vk,v.placa,"IPVA",v.ipvaValor)}if(inRange(v.licenciamentoVencimento)){r.despesa+=number(v.licenciamentoValor);addCusto(vk,v.placa,"Licenciamento",v.licenciamentoValor)}if(inRange(v.seguroValidade)){r.despesa+=number(v.seguroValor);addCusto(vk,v.placa,"Seguro",v.seguroValor)}}
+  for(const pneu of pneusDetalhe){const vid=pneu.instalacoes[0]?.veiculoId,placa=vid?veiculoPlaca.get(vid)||"":"";if(placa){const vk=norm(placa)||placa;const r=ensure(byVeiculo,vk,placa);r.despesa+=number(pneu.valorCompra);addCusto(vk,placa,"Pneus",pneu.valorCompra)}}
   for(const x of manual){
    const val=number(x.valor),isRec=x.tipo==="RECEITA"; const viagem=x.viagemId?viagemMap.get(x.viagemId):null;
    const placa=x.veiculoId?veiculoPlaca.get(x.veiculoId)||"":viagem?.placa||"";
-   if(placa){const r=ensure(byVeiculo,norm(placa)||placa,placa);if(isRec)r.receita+=val;else r.despesa+=val;if(x.viagemId)r.viagens.add(x.viagemId)}
+   if(placa){const vk=norm(placa)||placa,r=ensure(byVeiculo,vk,placa);if(isRec)r.receita+=val;else{r.despesa+=val;addCusto(vk,placa,x.categoria||"Outras despesas",val)}if(x.viagemId)r.viagens.add(x.viagemId)}
    const idsClientes=x.clienteId?[x.clienteId]:(viagem?clientesDaViagem(viagem):[]);
    if(idsClientes.length){
      const divisor=idsClientes.length;
@@ -96,7 +109,7 @@ export const financeiroService={
   const finish=(m:any):Row[]=>Array.from(m.values()).map((x:any)=>{const resultado=x.receita-x.despesa;return{id:x.id,nome:x.nome,receita:x.receita,despesa:x.despesa,resultado,margem:x.receita?resultado/x.receita*100:0,viagens:x.viagens.size,distanciaKm:x.distanciaKm,custoKm:x.distanciaKm?x.despesa/x.distanciaKm:0,lucroKm:x.distanciaKm?resultado/x.distanciaKm:0}}).sort((a:any,b:any)=>b.resultado-a.resultado);
   const porViagem=Array.from(viagensRows.values()).map(x=>{const resultado=x.receita-x.despesa;return{...x,resultado,margem:x.receita?resultado/x.receita*100:0,custoKm:x.distanciaKm?x.despesa/x.distanciaKm:0,lucroKm:x.distanciaKm?resultado/x.distanciaKm:0}}).sort((a,b)=>b.resultado-a.resultado);
   const totalReceita=porViagem.reduce((a,x)=>a+x.receita,0),totalDespesa=porViagem.reduce((a,x)=>a+x.despesa,0),totalResultado=totalReceita-totalDespesa;
-  return{resumo:{receita:totalReceita,despesa:totalDespesa,resultado:totalResultado,margem:totalReceita?totalResultado/totalReceita*100:0,viagens:porViagem.length},porVeiculo:finish(byVeiculo),porCliente:finish(byCliente),porViagem};
+  return{resumo:{receita:totalReceita,despesa:totalDespesa,resultado:totalResultado,margem:totalReceita?totalResultado/totalReceita*100:0,viagens:porViagem.length},porVeiculo:finish(byVeiculo),porCliente:finish(byCliente),porViagem,custosPorVeiculo:Array.from(custosMap.values()).map(x=>({...x,categorias:Object.entries(x.categorias).map(([categoria,valor])=>({categoria,valor})).sort((a,b)=>b.valor-a.valor)})).sort((a,b)=>b.total-a.total)};
  },
  async baixas(lancamentoId?:string){return (await prisma.baixaFinanceira.findMany({where:lancamentoId?{lancamentoId}:undefined,orderBy:[{data:"desc"},{createdAt:"desc"}]})).map((x:any)=>({...x,valor:number(x.valor),data:dateOnly(x.data),createdAt:created(x.createdAt)}))},
  async adicionarBaixa(lancamentoId:string,i:any){
