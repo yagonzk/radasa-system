@@ -30,10 +30,10 @@ export const fiscalController = {
   },
 
   async updatePrecoProduto(req: Request, res: Response) {
-    res.json(await fiscalService.updatePrecoProduto(req.params.id, req.body));
+    res.json(await fiscalService.updatePrecoProduto(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, req.body));
   },
 
   async removePrecoProduto(req: Request, res: Response) {
-    res.json(await fiscalService.removePrecoProduto(req.params.id));
+    res.json(await fiscalService.removePrecoProduto(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id));
   },
 };

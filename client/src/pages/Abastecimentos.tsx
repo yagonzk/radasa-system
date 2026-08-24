@@ -85,6 +85,10 @@ interface ProdutoDraft {
   valorUnitario: string;
 }
 
+function normalizePlate(value: unknown) {
+  return String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 const emptyForm: FormState = {
   clienteId: "",
   dataEmissao: "",

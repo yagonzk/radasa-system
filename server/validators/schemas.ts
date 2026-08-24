@@ -414,3 +414,17 @@ export const pneuInspecaoBody = z.object({
   bolhas: z.boolean().default(false), trincas: z.boolean().default(false), desgasteIrregular: z.boolean().default(false),
   lonaAparente: z.boolean().default(false), observacoes: optionalText(2000), fotos: z.array(z.string().max(20_000_000)).max(10).optional(),
 });
+
+export const demandaBody = z.object({
+  id: id.optional(),
+  titulo: text(220),
+  descricao: z.string().trim().max(10000).optional().default(""),
+  status: z.enum(["BACKLOG", "A_FAZER", "EM_ANDAMENTO", "AGUARDANDO", "CONCLUIDA"]).optional().default("A_FAZER"),
+  prioridade: z.enum(["BAIXA", "MEDIA", "ALTA", "URGENTE"]).optional().default("MEDIA"),
+  responsavel: z.string().trim().max(160).optional().default(""),
+  etiquetas: z.array(z.string().trim().min(1).max(40)).max(12).optional().default([]),
+  dataPrazo: dateOnly.optional().nullable().or(z.literal("")),
+  ordem: z.coerce.number().int().min(0).optional(),
+  arquivada: z.coerce.boolean().optional().default(false),
+  createdAt: z.string().optional(),
+});

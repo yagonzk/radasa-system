@@ -6,6 +6,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Dashboard from "./pages/Dashboard";
+import Demandas from "./pages/Demandas";
 import Cadastros from "./pages/Cadastros";
 import Pedagios from "./pages/Pedagios";
 import Viagens from "./pages/Viagens";
@@ -31,6 +32,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/demandas" component={Demandas} />
       <Route path="/cadastros" component={Cadastros} />
       <Route path="/cadastros/:tab" component={Cadastros} />
       <Route path="/pedagios" component={Pedagios} />

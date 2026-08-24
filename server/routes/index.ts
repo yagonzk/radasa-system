@@ -25,6 +25,7 @@ import { pedagiosRoutes } from "./pedagios.routes.js";
 import { auditMutations } from "../middlewares/audit-log.js";
 import { bootstrapRoutes } from "./bootstrap.routes.js";
 import { fiscalRoutes } from "./fiscal.routes.js";
+import { demandasRoutes } from "./demandas.routes.js";
 
 export const apiRoutes = Router();
 apiRoutes.get("/health", (_req, res) => res.json({ status: "ok" }));
@@ -34,6 +35,7 @@ apiRoutes.use(authenticateIfRequired);
 apiRoutes.use(auditMutations);
 apiRoutes.use("/bootstrap", bootstrapRoutes);
 apiRoutes.use("/logs", logsRoutes);
+apiRoutes.use("/demandas", demandasRoutes);
 apiRoutes.use("/migration", migrationRoutes);
 apiRoutes.use("/motoristas", motoristasRoutes);
 apiRoutes.use("/chapas", chapasRoutes);

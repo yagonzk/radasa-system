@@ -56,6 +56,53 @@ enum SubcategoriaVeiculo {
   MOTO
 }
 
+
+enum StatusDemanda {
+  BACKLOG
+  A_FAZER
+  EM_ANDAMENTO
+  AGUARDANDO
+  CONCLUIDA
+}
+
+enum PrioridadeDemanda {
+  BAIXA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum TipoDespesaViagem {
+  PEDAGIO
+  DIARIA
+  CHAPA
+  MANUTENCAO
+  ESTACIONAMENTO
+  ALIMENTACAO
+  OUTROS
+}
+
+
+model Demanda {
+  id          String            @id @default(cuid())
+  titulo      String
+  descricao   String            @default("") @db.Text
+  status      StatusDemanda     @default(A_FAZER)
+  prioridade  PrioridadeDemanda @default(MEDIA)
+  responsavel String            @default("")
+  etiquetas   String[]          @default([])
+  dataPrazo   DateTime?         @db.Date
+  ordem       Int               @default(0)
+  arquivada   Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([status, ordem])
+  @@index([dataPrazo])
+  @@index([arquivada])
+  @@map("demandas")
+}
+
 model User {
   id           String     @id @default(cuid())
   name         String

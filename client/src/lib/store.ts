@@ -5,6 +5,11 @@ export type StatusMotorista = "ATIVO" | "DEMITIDO";
 export interface Motorista { id: string; nome: string; cpf: string; salarioBase: number; status: StatusMotorista; createdAt: string; }
 export interface Chapa { id: string; nome: string; telefone: string; cpf: string; cidade: string; chavePix: string; valorFixo: number; createdAt: string; }
 export interface Cliente { id: string; nomeFantasia: string; razaoSocial: string; codigoInterno: string; cnpj: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
+export type StatusDemanda = "BACKLOG" | "A_FAZER" | "EM_ANDAMENTO" | "AGUARDANDO" | "CONCLUIDA";
+export type PrioridadeDemanda = "BAIXA" | "MEDIA" | "ALTA" | "URGENTE";
+export interface Demanda {
+  id: string; titulo: string; descricao: string; status: StatusDemanda; prioridade: PrioridadeDemanda; responsavel: string; etiquetas: string[]; dataPrazo?: string | null; ordem: number; arquivada: boolean; createdAt: string; updatedAt?: string;
+}
 
 export interface Empresa {
   id: string;
@@ -377,6 +382,19 @@ export const useEstoqueProdutos = () => useApiCrud<EstoqueProduto>("estoque/prod
 export const useLocais = () => useApiCrud<Local>("locais", "Local");
 export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");
 export const useViagens = () => useApiCrud<Viagem>("viagens", "Viagem");
+export type DemandaInput = Omit<Demanda, "id" | "createdAt" | "updatedAt" | "ordem" | "arquivada"> & {
+  ordem?: number;
+  arquivada?: boolean;
+};
+
+export const useDemandas = () => {
+  const crud = useApiCrud<Demanda>("demandas", "Demanda", { optimistic: false });
+  return {
+    ...crud,
+    create: crud.create as unknown as (data: DemandaInput) => Promise<Demanda>,
+    update: crud.update as unknown as (id: string, data: Partial<DemandaInput>) => Promise<Demanda>,
+  };
+};
 export const useAbastecimentos = () => useApiCrud<Abastecimento>("abastecimentos", "Abastecimento");
 export const useCiots = () => useApiCrud<Ciot>("ciots", "CIOT");
 function normalizePneuEntity(value: Pneu | null | undefined): Pneu | null {

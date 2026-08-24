@@ -395,9 +395,10 @@ export default function Fiscal() {
                   <CardTitle className="text-base">Composição das despesas</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {despesasRows.map(([label, value, icon]) => (
-                    <BreakdownRow key={label} label={label} value={value} total={data.despesas.total} icon={icon} />
-                  ))}
+                  {despesasRows.map((row) => {
+                    const [label, value, icon] = row;
+                    return <BreakdownRow key={label} label={label} value={value} total={data.despesas.total} icon={icon} />;
+                  })}
                 </CardContent>
               </Card>
             </div>
