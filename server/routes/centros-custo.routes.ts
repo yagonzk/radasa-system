@@ -1,0 +1,1 @@
+import {crudRoutes} from "./crud.routes.js";import {centrosCustoController} from "../controllers/centros-custo.controller.js";import {centroCustoBody} from "../validators/schemas.js";export const centrosCustoRoutes=crudRoutes(centrosCustoController,centroCustoBody);

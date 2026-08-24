@@ -29,6 +29,7 @@ const navGroups = [
     label: "Financeiro",
     icon: <WalletCards className="h-[18px] w-[18px]" />,
     items: [
+      { label: "Visão Geral", href: "/financeiro", icon: <WalletCards className="h-4 w-4" />, matchPaths: ["/financeiro"] },
       { label: "Comissões", href: "/fechamentos", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/fechamentos"] },
       { label: "Comercial", href: "/fiscal", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/fiscal"] },
     ],

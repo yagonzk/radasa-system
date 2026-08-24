@@ -300,6 +300,7 @@ model Viagem {
   valorFrete         Decimal   @db.Decimal(14, 2)
   dataManifesto      DateTime  @db.Date
   cidadeEntrega      String
+  rotas              String[]  @default([])
   distanciaKm        Decimal   @db.Decimal(14, 2)
   valorPedagio       Decimal   @db.Decimal(14, 2)
   valorDiaria        Decimal   @db.Decimal(14, 2)
@@ -912,4 +913,46 @@ model Pedagio {
   @@index([uf])
   @@index([rodovia])
   @@map("pedagios")
+}
+
+
+model CentroCusto {
+  id        String   @id @default(cuid())
+  nome      String
+  tipo      String   @default("ADMINISTRATIVO")
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([nome])
+  @@map("centros_custo")
+}
+
+model LancamentoFinanceiro {
+  id              String    @id @default(cuid())
+  tipo            String
+  descricao       String
+  categoria       String
+  subcategoria    String    @default("")
+  valor           Decimal   @db.Decimal(14, 2)
+  dataCompetencia DateTime  @db.Date
+  dataVencimento  DateTime? @db.Date
+  dataPagamento   DateTime? @db.Date
+  status          String    @default("PENDENTE")
+  clienteId       String?
+  fornecedor      String    @default("")
+  veiculoId       String?
+  viagemId        String?
+  centroCustoId   String?
+  formaPagamento  String    @default("")
+  observacoes     String    @default("") @db.Text
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  @@index([tipo])
+  @@index([status])
+  @@index([dataCompetencia])
+  @@index([dataVencimento])
+  @@index([veiculoId])
+  @@index([viagemId])
+  @@index([centroCustoId])
+  @@map("lancamentos_financeiros")
 }

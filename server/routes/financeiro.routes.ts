@@ -1,0 +1,12 @@
+import { Router } from "express";
+import { asyncHandler } from "../utils/async-handler.js";
+import { validate } from "../middlewares/validate.js";
+import { bodySchema, idParamsSchema, partialBodySchema, lancamentoFinanceiroBody } from "../validators/schemas.js";
+import { financeiroController } from "../controllers/financeiro.controller.js";
+export const financeiroRoutes = Router();
+financeiroRoutes.get("/resumo/dre", asyncHandler(financeiroController.resumo));
+financeiroRoutes.get("/", asyncHandler(financeiroController.list));
+financeiroRoutes.get("/:id", validate(idParamsSchema), asyncHandler(financeiroController.get));
+financeiroRoutes.post("/", validate(bodySchema(lancamentoFinanceiroBody)), asyncHandler(financeiroController.create));
+financeiroRoutes.put("/:id", validate(partialBodySchema(lancamentoFinanceiroBody)), asyncHandler(financeiroController.update));
+financeiroRoutes.delete("/:id", validate(idParamsSchema), asyncHandler(financeiroController.remove));

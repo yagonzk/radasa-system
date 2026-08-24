@@ -124,7 +124,7 @@ export const veiculoBody = z.object({
   id: id.optional(), placa: text(20), modelo: optionalText(255), subcategoria: z.enum(["CAMINHAO", "CARRO", "MOTO"]).optional().nullable(), motoristaId: id.optional().nullable().or(z.literal("")), quantidadePneus: z.coerce.number().int().min(4).max(16).default(10), quantidadeEstepes: z.coerce.number().int().min(0).max(3).default(1), createdAt: z.string().optional(),
 });
 export const viagemBody = z.object({
-  id: id.optional(), placa: text(20), motoristaId: id, valorFrete: money, dataManifesto: dateOnly, cidadeEntrega: text(), distanciaKm: money, valorPedagio: money, valorDiaria: money, valorAbastecimento: money, valorChapa: money, createdAt: z.string().optional(),
+  id: id.optional(), placa: text(20), motoristaId: id, valorFrete: money, dataManifesto: dateOnly, cidadeEntrega: text(), rotas: z.array(text()).default([]), distanciaKm: money, valorPedagio: money, valorDiaria: money, valorAbastecimento: money, valorChapa: money, createdAt: z.string().optional(),
 });
 export const fechamentoBody = z.object({
   id: id.optional(), motoristaId: id, dataInicio: dateOnly, dataFim: dateOnly,
@@ -428,3 +428,8 @@ export const demandaBody = z.object({
   arquivada: z.coerce.boolean().optional().default(false),
   createdAt: z.string().optional(),
 });
+
+export const lancamentoFinanceiroBody = z.object({
+  id: id.optional(), tipo: z.enum(["RECEITA", "DESPESA"]), descricao: text(255), categoria: text(120), subcategoria: z.string().trim().max(120).optional().default(""), valor: money, dataCompetencia: dateOnly, dataVencimento: dateOnly.optional().nullable().or(z.literal("")), dataPagamento: dateOnly.optional().nullable().or(z.literal("")), status: z.enum(["PENDENTE", "PAGO", "RECEBIDO", "VENCIDO", "CANCELADO"]).default("PENDENTE"), clienteId: id.optional().nullable().or(z.literal("")), fornecedor: z.string().trim().max(255).optional().default(""), veiculoId: id.optional().nullable().or(z.literal("")), viagemId: id.optional().nullable().or(z.literal("")), centroCustoId: id.optional().nullable().or(z.literal("")), formaPagamento: z.string().trim().max(120).optional().default(""), observacoes: z.string().trim().max(4000).optional().default(""), createdAt: z.string().optional(),
+});
+export const centroCustoBody = z.object({ id: id.optional(), nome: text(160), tipo: z.enum(["VEICULO", "VIAGEM", "CLIENTE", "MOTORISTA", "ADMINISTRATIVO", "OUTRO"]).default("ADMINISTRATIVO"), ativo: z.coerce.boolean().default(true), createdAt: z.string().optional() });

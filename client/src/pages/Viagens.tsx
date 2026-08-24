@@ -193,6 +193,8 @@ export default function Viagens() {
   const [valorFrete, setValorFrete] = useState("");
   const [dataManifesto, setDataManifesto] = useState("");
   const [cidadeEntrega, setCidadeEntrega] = useState("");
+  const [rotas, setRotas] = useState<string[]>([]);
+  const [novaRota, setNovaRota] = useState("");
   const [distanciaKm, setDistanciaKm] = useState("");
   const [valorPedagio, setValorPedagio] = useState("");
   const [valorDiaria, setValorDiaria] = useState("");
@@ -240,6 +242,7 @@ export default function Viagens() {
             v.placa,
             motoristaNome,
             v.cidadeEntrega,
+            ...(v.rotas ?? []),
             formatKm(v.distanciaKm),
             formatBRL(v.valorFrete),
             formatBRL(totalCusto),
@@ -338,6 +341,8 @@ export default function Viagens() {
     setValorFrete(String(v.valorFrete));
     setDataManifesto(v.dataManifesto);
     setCidadeEntrega(v.cidadeEntrega);
+    setRotas(v.rotas ?? []);
+    setNovaRota("");
     setDistanciaKm(String(v.distanciaKm));
     setValorPedagio(String(v.valorPedagio));
     setValorDiaria(String(v.valorDiaria));
@@ -351,6 +356,8 @@ export default function Viagens() {
     setValorFrete("");
     setDataManifesto("");
     setCidadeEntrega("");
+    setRotas([]);
+    setNovaRota("");
     setDistanciaKm("");
     setValorPedagio("");
     setValorDiaria("");
@@ -449,6 +456,7 @@ export default function Viagens() {
       valorFrete: parseFloat(valorFrete) || 0,
       dataManifesto,
       cidadeEntrega,
+      rotas,
       distanciaKm: parseFloat(distanciaKm) || 0,
       valorPedagio: parseFloat(valorPedagio) || 0,
       valorDiaria: parseFloat(valorDiaria) || 0,
@@ -887,6 +895,72 @@ export default function Viagens() {
               />
             </div>
 
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-sm font-medium">Rotas</Label>
+                <span className="text-xs text-muted-foreground">Cidades de passagem na ordem do trajeto</span>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  value={novaRota}
+                  onChange={(e) => setNovaRota(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const cidade = novaRota.trim();
+                      if (cidade && !rotas.some((item) => item.toLowerCase() === cidade.toLowerCase())) {
+                        setRotas((prev) => [...prev, cidade]);
+                      }
+                      setNovaRota("");
+                    }
+                  }}
+                  placeholder="Ex.: Sinop, MT"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={() => {
+                    const cidade = novaRota.trim();
+                    if (!cidade) return;
+                    if (!rotas.some((item) => item.toLowerCase() === cidade.toLowerCase())) {
+                      setRotas((prev) => [...prev, cidade]);
+                    }
+                    setNovaRota("");
+                  }}
+                >
+                  <Plus className="mr-1 h-4 w-4" /> Adicionar
+                </Button>
+              </div>
+
+              {rotas.length > 0 ? (
+                <div className="rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {rotas.map((cidade, index) => (
+                      <div key={`${cidade}-${index}`} className="flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm">
+                        <span className="mr-1 text-xs font-semibold text-muted-foreground">{index + 1}</span>
+                        <span>{cidade}</span>
+                        <button
+                          type="button"
+                          className="ml-1 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setRotas((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
+                          aria-label={`Remover ${cidade}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Sequência: {rotas.join(" → ")} → {cidadeEntrega || "Destino"}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Nenhuma cidade intermediária adicionada.</p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Distância (KM)</Label>
@@ -1048,6 +1122,20 @@ export default function Viagens() {
                     <p className="mt-1 text-sm font-medium">{viewingViagem.cidadeEntrega}</p>
                   </div>
                 </div>
+
+                {(viewingViagem.rotas ?? []).length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Rotas</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {(viewingViagem.rotas ?? []).map((cidade, index) => (
+                        <span key={`${cidade}-${index}`} className="rounded-md border border-border bg-muted/30 px-2 py-1 text-xs font-medium">
+                          {index + 1}. {cidade}
+                        </span>
+                      ))}
+                      <span className="text-xs text-muted-foreground">→ {viewingViagem.cidadeEntrega}</span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>

@@ -26,6 +26,8 @@ import { auditMutations } from "../middlewares/audit-log.js";
 import { bootstrapRoutes } from "./bootstrap.routes.js";
 import { fiscalRoutes } from "./fiscal.routes.js";
 import { demandasRoutes } from "./demandas.routes.js";
+import { financeiroRoutes } from "./financeiro.routes.js";
+import { centrosCustoRoutes } from "./centros-custo.routes.js";
 
 export const apiRoutes = Router();
 apiRoutes.get("/health", (_req, res) => res.json({ status: "ok" }));
@@ -36,6 +38,8 @@ apiRoutes.use(auditMutations);
 apiRoutes.use("/bootstrap", bootstrapRoutes);
 apiRoutes.use("/logs", logsRoutes);
 apiRoutes.use("/demandas", demandasRoutes);
+apiRoutes.use("/financeiro", financeiroRoutes);
+apiRoutes.use("/centros-custo", centrosCustoRoutes);
 apiRoutes.use("/migration", migrationRoutes);
 apiRoutes.use("/motoristas", motoristasRoutes);
 apiRoutes.use("/chapas", chapasRoutes);
