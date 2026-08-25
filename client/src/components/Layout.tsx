@@ -1,6 +1,6 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3, Smartphone, ContactRound } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3, ContactRound } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useEffect, useState } from "react";
@@ -24,7 +24,6 @@ const navGroups = [
       { label: "Abastecimentos", href: "/abastecimentos", icon: <Fuel className="h-4 w-4" />, matchPaths: ["/abastecimentos"] },
       { label: "Rotas", href: "/pedagios", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/pedagios"] },
       { label: "Alertas", href: "/alertas", icon: <ScrollText className="h-4 w-4" />, matchPaths: ["/alertas"] },
-      { label: "Portal Motorista", href: "/portal-motorista", icon: <Smartphone className="h-4 w-4" />, matchPaths: ["/portal-motorista"] },
     ],
   },
   {
@@ -69,7 +68,7 @@ const navGroups = [
     label: "Cadastros",
     icon: <Users className="h-[18px] w-[18px]" />,
     items: [
-      { label: "Frota", href: "/cadastros/veiculos", icon: <Truck className="h-4 w-4" />, matchPaths: ["/cadastros/veiculos", "/pneus"] },
+      { label: "Veículos", href: "/cadastros/veiculos", icon: <Truck className="h-4 w-4" />, matchPaths: ["/cadastros/veiculos", "/pneus"] },
       { label: "Pessoas", href: "/cadastros/motoristas", icon: <Users className="h-4 w-4" />, matchPaths: ["/cadastros/motoristas", "/cadastros/chapas"] },
       { label: "Comercial", href: "/cadastros/clientes", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/cadastros/clientes", "/cadastros/produtos", "/cadastros/empresa"] },
       { label: "Localidades", href: "/cadastros/locais", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/cadastros/locais"] },

@@ -28,7 +28,6 @@ import Manutencao from "./pages/Manutencao";
 import Alertas from "./pages/Alertas";
 import BIGerencial from "./pages/BIGerencial";
 import Administracao from "./pages/Administracao";
-import PortalMotorista from "./pages/PortalMotorista";
 import ComercialCRM from "./pages/ComercialCRM";
 import CiotGerar from "./pages/CiotGerar";
 import CiotGerados from "./pages/CiotGerados";
@@ -51,7 +50,6 @@ function Router() {
       <Route path="/alertas" component={Alertas} />
       <Route path="/bi" component={BIGerencial} />
       <Route path="/administracao" component={Administracao} />
-      <Route path="/portal-motorista" component={PortalMotorista} />
       <Route path="/comercial" component={ComercialCRM} />
       <Route path="/manifestos" component={Romaneios} />
       <Route path="/fechamentos" component={Fechamentos} />

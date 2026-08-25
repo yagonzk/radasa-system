@@ -33,7 +33,6 @@ import { manutencaoRoutes } from "./manutencao.routes.js";
 import { dashboardRoutes } from "./dashboard.routes.js";
 import { biRoutes } from "./bi.routes.js";
 import { adminRoutes } from "./admin.routes.js";
-import { portalMotoristaRoutes } from "./portal-motorista.routes.js";
 import { comercialRoutes } from "./comercial.routes.js";
 
 export const apiRoutes = Router();
@@ -52,7 +51,6 @@ apiRoutes.use("/manutencao", manutencaoRoutes);
 apiRoutes.use("/dashboard", dashboardRoutes);
 apiRoutes.use("/bi", biRoutes);
 apiRoutes.use("/admin", adminRoutes);
-apiRoutes.use("/portal-motorista", portalMotoristaRoutes);
 apiRoutes.use("/comercial", comercialRoutes);
 apiRoutes.use("/migration", migrationRoutes);
 apiRoutes.use("/motoristas", motoristasRoutes);
