@@ -1,6 +1,6 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useEffect, useState } from "react";
@@ -65,6 +65,13 @@ const navGroups = [
       { label: "Pessoas", href: "/cadastros/motoristas", icon: <Users className="h-4 w-4" />, matchPaths: ["/cadastros/motoristas", "/cadastros/chapas"] },
       { label: "Comercial", href: "/cadastros/clientes", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/cadastros/clientes", "/cadastros/produtos", "/cadastros/empresa"] },
       { label: "Localidades", href: "/cadastros/locais", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/cadastros/locais"] },
+    ],
+  },
+  {
+    label: "Relatórios",
+    icon: <BarChart3 className="h-[18px] w-[18px]" />,
+    items: [
+      { label: "BI Gerencial", href: "/bi", icon: <BarChart3 className="h-4 w-4" />, matchPaths: ["/bi"] },
     ],
   },
   {

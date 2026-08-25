@@ -1104,3 +1104,43 @@ model DocumentoFrota {
   @@index([validade])
   @@map("documentos_frota")
 }
+
+model BiNfe {
+  id              String      @id @default(cuid())
+  chave           String      @unique
+  numero          String      @default("")
+  serie           String      @default("")
+  dataEmissao     DateTime?   @db.Date
+  emitenteCnpj    String      @default("")
+  emitenteNome    String      @default("")
+  destinatarioCnpj String     @default("")
+  destinatarioNome String     @default("")
+  valorProdutos   Decimal     @default(0) @db.Decimal(14, 2)
+  valorNota       Decimal     @default(0) @db.Decimal(14, 2)
+  arquivoNome     String      @default("")
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  itens           BiNfeItem[]
+
+  @@index([numero, serie])
+  @@index([dataEmissao])
+  @@map("bi_nfes")
+}
+
+model BiNfeItem {
+  id            String   @id @default(cuid())
+  nfeId         String
+  codigo        String   @default("")
+  descricao     String   @default("")
+  ncm           String   @default("")
+  cfop          String   @default("")
+  unidade       String   @default("")
+  quantidade    Decimal  @default(0) @db.Decimal(14, 3)
+  valorUnitario Decimal  @default(0) @db.Decimal(14, 4)
+  valorTotal    Decimal  @default(0) @db.Decimal(14, 2)
+  nfe           BiNfe    @relation(fields: [nfeId], references: [id], onDelete: Cascade)
+
+  @@index([nfeId])
+  @@index([codigo])
+  @@map("bi_nfe_itens")
+}

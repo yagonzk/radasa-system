@@ -30,6 +30,7 @@ import { financeiroRoutes } from "./financeiro.routes.js";
 import { centrosCustoRoutes } from "./centros-custo.routes.js";
 import { manutencaoRoutes } from "./manutencao.routes.js";
 import { dashboardRoutes } from "./dashboard.routes.js";
+import { biRoutes } from "./bi.routes.js";
 
 export const apiRoutes = Router();
 apiRoutes.get("/health", (_req, res) => res.json({ status: "ok" }));
@@ -44,6 +45,7 @@ apiRoutes.use("/financeiro", financeiroRoutes);
 apiRoutes.use("/centros-custo", centrosCustoRoutes);
 apiRoutes.use("/manutencao", manutencaoRoutes);
 apiRoutes.use("/dashboard", dashboardRoutes);
+apiRoutes.use("/bi", biRoutes);
 apiRoutes.use("/migration", migrationRoutes);
 apiRoutes.use("/motoristas", motoristasRoutes);
 apiRoutes.use("/chapas", chapasRoutes);
