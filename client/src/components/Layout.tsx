@@ -23,7 +23,6 @@ const navGroups = [
       { label: "Viagens", href: "/viagens", icon: <Truck className="h-4 w-4" />, matchPaths: ["/viagens"] },
       { label: "Abastecimentos", href: "/abastecimentos", icon: <Fuel className="h-4 w-4" />, matchPaths: ["/abastecimentos"] },
       { label: "Rotas", href: "/pedagios", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/pedagios"] },
-      { label: "Alertas", href: "/alertas", icon: <ScrollText className="h-4 w-4" />, matchPaths: ["/alertas"] },
     ],
   },
   {
