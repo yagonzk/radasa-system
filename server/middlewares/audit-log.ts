@@ -6,7 +6,7 @@ import { requestParam } from "../utils/request-param.js";
 const labels: Record<string, string> = {
   motoristas: "motorista", chapas: "chapa", clientes: "cliente", empresa: "empresa", produtos: "produto",
   locais: "local", veiculos: "veículo", viagens: "viagem", fechamentos: "comissão",
-  manifestos: "romaneio", romaneios: "romaneio", abastecimentos: "abastecimento", pneus: "pneu", estoque: "movimentação de almoxarifado", usuarios: "usuário",
+  manifestos: "romaneio", romaneios: "romaneio", abastecimentos: "abastecimento", pneus: "pneu", estoque: "movimentação de almoxarifado", usuarios: "usuário", comercial: "registro comercial", admin: "configuração administrativa", "portal-motorista": "registro do motorista",
 };
 
 function describe(method: string, path: string, body?: unknown) {
@@ -46,6 +46,7 @@ export const auditMutations: RequestHandler = (req, res, next) => {
       data: {
         userId: req.user.id, action: describe(req.method, req.originalUrl, req.body), method: req.method,
         path: req.originalUrl, entityId: requestParam(req.params.id) || null,
+        detalhes: (() => { const body = req.body && typeof req.body === "object" ? { ...req.body } : {}; for (const key of ["password","newPassword","currentPassword","certificadoSenha"]) delete (body as any)[key]; return body as any; })(),
       },
     }).catch(error => logger.error({ error }, "Falha ao registrar log de auditoria"));
     trackPrismaTask(auditTask);

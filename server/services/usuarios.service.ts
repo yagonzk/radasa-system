@@ -12,6 +12,8 @@ const select = {
   fotoPerfil: true,
   role: true,
   active: true,
+  motoristaId: true,
+  permissoes: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -81,6 +83,8 @@ export const usuariosService = {
         email: data.email?.toLowerCase(),
         role: data.role,
         active: data.active,
+        motoristaId: data.motoristaId === undefined ? undefined : (data.motoristaId || null),
+        permissoes: data.permissoes === undefined ? undefined : data.permissoes,
         ...(passwordHash ? { passwordHash } : {}),
       },
     });

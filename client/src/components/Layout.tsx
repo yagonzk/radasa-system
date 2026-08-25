@@ -1,6 +1,6 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3 } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3, Smartphone, ContactRound } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useEffect, useState } from "react";
@@ -24,6 +24,7 @@ const navGroups = [
       { label: "Abastecimentos", href: "/abastecimentos", icon: <Fuel className="h-4 w-4" />, matchPaths: ["/abastecimentos"] },
       { label: "Rotas", href: "/pedagios", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/pedagios"] },
       { label: "Alertas", href: "/alertas", icon: <ScrollText className="h-4 w-4" />, matchPaths: ["/alertas"] },
+      { label: "Portal Motorista", href: "/portal-motorista", icon: <Smartphone className="h-4 w-4" />, matchPaths: ["/portal-motorista"] },
     ],
   },
   {
@@ -40,7 +41,14 @@ const navGroups = [
     items: [
       { label: "Visão Geral", href: "/financeiro", icon: <WalletCards className="h-4 w-4" />, matchPaths: ["/financeiro"] },
       { label: "Comissões", href: "/fechamentos", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/fechamentos"] },
-      { label: "Comercial", href: "/fiscal", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/fiscal"] },
+      { label: "Rentabilidade", href: "/fiscal", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/fiscal"] },
+    ],
+  },
+  {
+    label: "Comercial",
+    icon: <ContactRound className="h-[18px] w-[18px]" />,
+    items: [
+      { label: "CRM e Propostas", href: "/comercial", icon: <BriefcaseBusiness className="h-4 w-4" />, matchPaths: ["/comercial"] },
     ],
   },
   {
@@ -79,6 +87,7 @@ const navGroups = [
     icon: <Settings2 className="h-[18px] w-[18px]" />,
     adminOnly: true,
     items: [
+      { label: "Central administrativa", href: "/administracao", icon: <Settings2 className="h-4 w-4" />, matchPaths: ["/administracao"] },
       { label: "Aprovação de contas", href: "/aprovacao-contas", icon: <ShieldCheck className="h-4 w-4" />, matchPaths: ["/aprovacao-contas"] },
       { label: "Logs do sistema", href: "/logs", icon: <ScrollText className="h-4 w-4" />, matchPaths: ["/logs"] },
     ],
@@ -93,6 +102,11 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(navGroups.map(group => [group.label, group.items.some(item => item.matchPaths.some(path => location.startsWith(path)))])));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isDark = theme === "dark";
+  const configuredPermissions = user?.permissoes && Object.keys(user.permissoes).length > 0;
+  const permissionFor = (href: string) => href.startsWith("/romaneios") ? "romaneios" : href.startsWith("/viagens") || href.startsWith("/pedagios") ? "viagens" : href.startsWith("/abastecimentos") ? "abastecimentos" : href.startsWith("/manutencao") || href.startsWith("/pneus") ? "frota" : href.startsWith("/financeiro") || href.startsWith("/fechamentos") ? "financeiro" : href.startsWith("/ciot") || href.startsWith("/fiscal") ? "fiscal" : href.startsWith("/comercial") ? "comercial" : href.startsWith("/bi") ? "bi" : href.startsWith("/cadastros") || href.startsWith("/estoque") ? "cadastros" : href.startsWith("/portal-motorista") ? "portal_motorista" : href.startsWith("/alertas") ? "dashboard" : "dashboard";
+  const canAccessItem = (item: NavItem) => user?.role === "ADMIN" || !configuredPermissions || user?.permissoes?.[permissionFor(item.href)] === true;
+  const canAccessStandalone = (permission: string) => user?.role === "ADMIN" || !configuredPermissions || user?.permissoes?.[permission] === true;
+
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -142,7 +156,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
         {/* Nav */}
         <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          <Link
+          {canAccessStandalone("demandas") && <Link
             href="/demandas"
             onClick={() => setMobileMenuOpen(false)}
             className={cn(
@@ -153,9 +167,9 @@ export default function Layout({ children }: { children: ReactNode }) {
             <ListTodo className={cn("h-[18px] w-[18px]", location === "/demandas" && "text-primary")} />
             Demandas
             {location === "/demandas" && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
-          </Link>
+          </Link>}
 
-          <Link
+          {canAccessStandalone("dashboard") && <Link
             href="/"
             onClick={() => setMobileMenuOpen(false)}
             className={cn(
@@ -166,9 +180,9 @@ export default function Layout({ children }: { children: ReactNode }) {
             <LayoutDashboard className={cn("h-[18px] w-[18px]", location === "/" && "text-primary")} />
             Dashboard
             {location === "/" && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
-          </Link>
+          </Link>}
 
-          {navGroups.filter(group => !group.adminOnly || user?.role === "ADMIN").map(group => {
+          {navGroups.map(group => ({ ...group, items: group.items.filter(canAccessItem) })).filter(group => group.items.length > 0 && (!group.adminOnly || user?.role === "ADMIN")).map(group => {
             const groupActive = group.items.some(isActive);
             const open = openGroups[group.label] ?? false;
             return (

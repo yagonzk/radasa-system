@@ -1,0 +1,1 @@
+import{Router}from"express";import{asyncHandler}from"../utils/async-handler.js";import{portalMotoristaController as c}from"../controllers/portal-motorista.controller.js";export const portalMotoristaRoutes=Router();portalMotoristaRoutes.get("/resumo",asyncHandler(c.resumo));portalMotoristaRoutes.post("/eventos",asyncHandler(c.evento));

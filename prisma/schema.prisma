@@ -114,6 +114,8 @@ model User {
   passwordHash String
   role         UserRole   @default(VISUALIZACAO)
   active       Boolean    @default(true)
+  motoristaId  String?
+  permissoes   Json       @default("{}")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   auditLogs    AuditLog[]
@@ -906,6 +908,7 @@ model AuditLog {
   method    String
   path      String
   entityId  String?
+  detalhes  Json?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1143,4 +1146,91 @@ model BiNfeItem {
   @@index([nfeId])
   @@index([codigo])
   @@map("bi_nfe_itens")
+}
+
+
+model ComercialProposta {
+  id             String   @id @default(cuid())
+  codigo         String   @unique
+  clienteId      String
+  origem         String   @default("")
+  destino        String   @default("")
+  distanciaKm    Decimal  @default(0) @db.Decimal(14, 2)
+  valorFrete     Decimal  @default(0) @db.Decimal(14, 2)
+  custoEstimado  Decimal  @default(0) @db.Decimal(14, 2)
+  margemPrevista Decimal  @default(0) @db.Decimal(8, 2)
+  status         String   @default("RASCUNHO")
+  validade       DateTime? @db.Date
+  observacoes    String   @default("") @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([clienteId])
+  @@index([status])
+  @@index([validade])
+  @@map("comercial_propostas")
+}
+
+model ComercialTabelaFrete {
+  id           String   @id @default(cuid())
+  clienteId    String?
+  origem       String   @default("")
+  destino      String   @default("")
+  valorFrete   Decimal  @default(0) @db.Decimal(14, 2)
+  valorKm      Decimal  @default(0) @db.Decimal(14, 4)
+  vigenciaInicio DateTime @db.Date
+  vigenciaFim  DateTime? @db.Date
+  observacoes  String   @default("") @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([clienteId])
+  @@index([origem, destino])
+  @@index([vigenciaInicio])
+  @@map("comercial_tabelas_frete")
+}
+
+model ComercialContrato {
+  id           String   @id @default(cuid())
+  numero       String   @unique
+  clienteId    String
+  inicio       DateTime @db.Date
+  fim          DateTime? @db.Date
+  status       String   @default("ATIVO")
+  indiceReajuste String @default("")
+  observacoes  String   @default("") @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([clienteId])
+  @@index([status])
+  @@map("comercial_contratos")
+}
+
+model MotoristaEvento {
+  id          String   @id @default(cuid())
+  motoristaId String
+  viagemId    String?
+  tipo        String
+  descricao   String   @default("") @db.Text
+  valor       Decimal  @default(0) @db.Decimal(14, 2)
+  arquivoNome String?
+  arquivoUrl  String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([motoristaId])
+  @@index([viagemId])
+  @@index([tipo])
+  @@index([createdAt])
+  @@map("motorista_eventos")
+}
+
+model ConfiguracaoSistema {
+  id        String   @id @default(cuid())
+  chave     String   @unique
+  valor     Json
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("configuracoes_sistema")
 }

@@ -16,6 +16,8 @@ function publicUser(user: {
   cpf: string | null;
   fotoPerfil: string | null;
   role: "ADMIN" | "GERENTE" | "BORRACHARIA" | "MANUTENCAO" | "VISUALIZACAO" | "USER";
+  motoristaId?: string | null;
+  permissoes?: unknown;
 }) {
   return {
     id: user.id,
@@ -26,6 +28,8 @@ function publicUser(user: {
     cpf: user.cpf,
     fotoPerfil: user.fotoPerfil,
     role: user.role,
+    motoristaId: user.motoristaId ?? null,
+    permissoes: user.permissoes ?? {},
   };
 }
 

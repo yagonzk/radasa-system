@@ -11,6 +11,8 @@ export type AuthUser = {
   cpf: string | null;
   fotoPerfil: string | null;
   role: "ADMIN" | "GERENTE" | "BORRACHARIA" | "MANUTENCAO" | "VISUALIZACAO" | "USER";
+  motoristaId?: string | null;
+  permissoes?: Record<string, boolean>;
 };
 
 type AuthResponse = { token: string; user: AuthUser };

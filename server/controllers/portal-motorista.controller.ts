@@ -1,0 +1,1 @@
+import type{Request,Response}from"express";import{portalMotoristaService as s}from"../services/portal-motorista.service.js";export const portalMotoristaController={resumo:async(r:Request,res:Response)=>res.json(await s.resumo(r.user!.id)),evento:async(r:Request,res:Response)=>res.status(201).json(await s.evento(r.user!.id,r.body))};
