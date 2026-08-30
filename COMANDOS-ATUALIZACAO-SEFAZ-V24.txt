@@ -1,0 +1,11 @@
+# RADASA SYSTEM - SEFAZ AUTOMÁTICA V24
+
+cd "C:\Users\yago\Downloads\Radasa_Projeto_SEFAZ_Automatica_V24"
+
+pnpm install
+npx prisma migrate deploy
+pnpm run check
+pnpm run deploy:cloudflare
+
+# O deploy do Wrangler também publica o Cron Trigger configurado em wrangler.jsonc.
+# Cron atual: a cada 15 minutos.

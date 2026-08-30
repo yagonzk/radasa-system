@@ -13,11 +13,15 @@ type WorkerBindings = {
 // automaticamente a connection string acelerada. Sem binding, o projeto
 // continua funcionando com DATABASE_URL, o que torna o rollout reversível.
 const bindings = cloudflareEnv as unknown as WorkerBindings;
+(globalThis as typeof globalThis & { __RADASA_CLOUDFLARE?: boolean }).__RADASA_CLOUDFLARE = true;
 const hyperdrive = bindings.HYPERDRIVE;
 if (hyperdrive?.connectionString) {
   (globalThis as typeof globalThis & { __RADASA_DATABASE_URL?: string }).__RADASA_DATABASE_URL =
     hyperdrive.connectionString;
 }
+
+
+
 
 if (bindings.RESEND_API_KEY) {
   (
@@ -32,4 +36,14 @@ registerErrors(app);
 const server = createServer(app);
 server.listen(3000);
 
-export default httpServerHandler(server);
+const httpHandler = httpServerHandler(server) as any;
+
+export default {
+  fetch(request: any, env: any, ctx: any) {
+    return httpHandler.fetch(request, env, ctx);
+  },
+  async scheduled(_controller: any, _env: any, _ctx: any) {
+    // A consulta SEFAZ é executada pelo Agente SEFAZ local no Windows.
+    // O Worker não tenta mTLS diretamente para evitar incompatibilidade com o Ambiente Nacional.
+  },
+};

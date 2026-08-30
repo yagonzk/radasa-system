@@ -1,6 +1,6 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3, ContactRound } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useEffect, useState } from "react";
@@ -20,7 +20,7 @@ const navGroups = [
     icon: <BriefcaseBusiness className="h-[18px] w-[18px]" />,
     items: [
       { label: "Romaneios", href: "/romaneios", icon: <ClipboardList className="h-4 w-4" />, matchPaths: ["/romaneios", "/manifestos"] },
-      { label: "Viagens", href: "/viagens", icon: <Truck className="h-4 w-4" />, matchPaths: ["/viagens"] },
+      { label: "Acerto de Viagem", href: "/viagens", icon: <Truck className="h-4 w-4" />, matchPaths: ["/viagens"] },
       { label: "Abastecimentos", href: "/abastecimentos", icon: <Fuel className="h-4 w-4" />, matchPaths: ["/abastecimentos"] },
       { label: "Rotas", href: "/pedagios", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/pedagios"] },
     ],
@@ -29,55 +29,32 @@ const navGroups = [
     label: "Frota",
     icon: <Truck className="h-[18px] w-[18px]" />,
     items: [
-      { label: "Manutenção", href: "/manutencao", icon: <Truck className="h-4 w-4" />, matchPaths: ["/manutencao"] },
+      { label: "Veículos", href: "/cadastros/veiculos", icon: <Truck className="h-4 w-4" />, matchPaths: ["/cadastros/veiculos"] },
       { label: "Pneus", href: "/pneus", icon: <Truck className="h-4 w-4" />, matchPaths: ["/pneus"] },
+      { label: "Manutenção", href: "/manutencao", icon: <Settings2 className="h-4 w-4" />, matchPaths: ["/manutencao"] },
     ],
   },
   {
-    label: "Financeiro",
+    label: "Gestão",
     icon: <WalletCards className="h-[18px] w-[18px]" />,
     items: [
-      { label: "Visão Geral", href: "/financeiro", icon: <WalletCards className="h-4 w-4" />, matchPaths: ["/financeiro"] },
+      { label: "Financeiro", href: "/financeiro", icon: <WalletCards className="h-4 w-4" />, matchPaths: ["/financeiro"] },
       { label: "Comissões", href: "/fechamentos", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/fechamentos"] },
-      { label: "Rentabilidade", href: "/fiscal", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/fiscal"] },
-    ],
-  },
-  {
-    label: "Comercial",
-    icon: <ContactRound className="h-[18px] w-[18px]" />,
-    items: [
-      { label: "CRM e Propostas", href: "/comercial", icon: <BriefcaseBusiness className="h-4 w-4" />, matchPaths: ["/comercial"] },
-    ],
-  },
-  {
-    label: "Fiscal",
-    icon: <FileBadge2 className="h-[18px] w-[18px]" />,
-    items: [
+      { label: "Almoxarifado", href: "/estoque", icon: <Boxes className="h-4 w-4" />, matchPaths: ["/estoque"] },
       { label: "CIOT", href: "/ciot/gerar", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/ciot"] },
-    ],
-  },
-  {
-    label: "Almoxarifado",
-    icon: <Boxes className="h-[18px] w-[18px]" />,
-    items: [
-      { label: "Estoque e movimentações", href: "/estoque", icon: <Boxes className="h-4 w-4" />, matchPaths: ["/estoque"] },
+      { label: "BI Gerencial", href: "/bi", icon: <BarChart3 className="h-4 w-4" />, matchPaths: ["/bi"] },
     ],
   },
   {
     label: "Cadastros",
     icon: <Users className="h-[18px] w-[18px]" />,
     items: [
-      { label: "Veículos", href: "/cadastros/veiculos", icon: <Truck className="h-4 w-4" />, matchPaths: ["/cadastros/veiculos", "/pneus"] },
-      { label: "Pessoas", href: "/cadastros/motoristas", icon: <Users className="h-4 w-4" />, matchPaths: ["/cadastros/motoristas", "/cadastros/chapas"] },
-      { label: "Comercial", href: "/cadastros/clientes", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/cadastros/clientes", "/cadastros/produtos", "/cadastros/empresa"] },
+      { label: "Motoristas", href: "/cadastros/motoristas", icon: <Users className="h-4 w-4" />, matchPaths: ["/cadastros/motoristas"] },
+      { label: "Chapas", href: "/cadastros/chapas", icon: <UserRound className="h-4 w-4" />, matchPaths: ["/cadastros/chapas"] },
+      { label: "Clientes e produtos", href: "/cadastros/clientes", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/cadastros/clientes", "/cadastros/produtos"] },
       { label: "Localidades", href: "/cadastros/locais", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/cadastros/locais"] },
-    ],
-  },
-  {
-    label: "Relatórios",
-    icon: <BarChart3 className="h-[18px] w-[18px]" />,
-    items: [
-      { label: "BI Gerencial", href: "/bi", icon: <BarChart3 className="h-4 w-4" />, matchPaths: ["/bi"] },
+      { label: "Fornecedores", href: "/cadastros/fornecedores", icon: <BriefcaseBusiness className="h-4 w-4" />, matchPaths: ["/cadastros/fornecedores"] },
+      { label: "Empresa", href: "/cadastros/empresa", icon: <BriefcaseBusiness className="h-4 w-4" />, matchPaths: ["/cadastros/empresa"] },
     ],
   },
   {
@@ -101,7 +78,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isDark = theme === "dark";
   const configuredPermissions = user?.permissoes && Object.keys(user.permissoes).length > 0;
-  const permissionFor = (href: string) => href.startsWith("/romaneios") ? "romaneios" : href.startsWith("/viagens") || href.startsWith("/pedagios") ? "viagens" : href.startsWith("/abastecimentos") ? "abastecimentos" : href.startsWith("/manutencao") || href.startsWith("/pneus") ? "frota" : href.startsWith("/financeiro") || href.startsWith("/fechamentos") ? "financeiro" : href.startsWith("/ciot") || href.startsWith("/fiscal") ? "fiscal" : href.startsWith("/comercial") ? "comercial" : href.startsWith("/bi") ? "bi" : href.startsWith("/cadastros") || href.startsWith("/estoque") ? "cadastros" : href.startsWith("/portal-motorista") ? "portal_motorista" : href.startsWith("/alertas") ? "dashboard" : "dashboard";
+  const permissionFor = (href: string) => href.startsWith("/demandas") ? "demandas" : href.startsWith("/romaneios") ? "romaneios" : href.startsWith("/viagens") || href.startsWith("/pedagios") ? "viagens" : href.startsWith("/abastecimentos") ? "abastecimentos" : href.startsWith("/manutencao") || href.startsWith("/pneus") ? "frota" : href.startsWith("/financeiro") || href.startsWith("/fechamentos") ? "financeiro" : href.startsWith("/ciot") || href.startsWith("/fiscal") ? "fiscal" : href.startsWith("/comercial") ? "comercial" : href.startsWith("/bi") ? "bi" : href.startsWith("/cadastros") || href.startsWith("/estoque") ? "cadastros" : href.startsWith("/portal-motorista") ? "portal_motorista" : href.startsWith("/alertas") ? "dashboard" : "dashboard";
   const canAccessItem = (item: NavItem) => user?.role === "ADMIN" || !configuredPermissions || user?.permissoes?.[permissionFor(item.href)] === true;
   const canAccessStandalone = (permission: string) => user?.role === "ADMIN" || !configuredPermissions || user?.permissoes?.[permission] === true;
 
@@ -159,12 +136,12 @@ export default function Layout({ children }: { children: ReactNode }) {
             onClick={() => setMobileMenuOpen(false)}
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all",
-              location === "/demandas" ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+              location.startsWith("/demandas") ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
             )}
           >
-            <ListTodo className={cn("h-[18px] w-[18px]", location === "/demandas" && "text-primary")} />
+            <ListTodo className={cn("h-[18px] w-[18px]", location.startsWith("/demandas") && "text-primary")} />
             Demandas
-            {location === "/demandas" && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+            {location.startsWith("/demandas") && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
           </Link>}
 
           {canAccessStandalone("dashboard") && <Link
@@ -176,7 +153,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             )}
           >
             <LayoutDashboard className={cn("h-[18px] w-[18px]", location === "/" && "text-primary")} />
-            Dashboard
+            Visão Geral
             {location === "/" && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
           </Link>}
 
@@ -210,13 +187,6 @@ export default function Layout({ children }: { children: ReactNode }) {
                         </Link>
                       );
                     })}
-                    {group.label === "Fiscal" && location.startsWith("/ciot") && (
-                      <div className="ml-3 space-y-1 border-l border-sidebar-border pl-2">
-                        <Link href="/ciot/gerar" className="block rounded px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-sidebar-accent">Gerar CIOTs</Link>
-                        <Link href="/ciot/gerados" className="block rounded px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-sidebar-accent">CIOTs gerados</Link>
-                        <Link href="/ciot/configuracao" className="block rounded px-2 py-1.5 text-[11px] text-muted-foreground hover:bg-sidebar-accent">Configuração ANTT</Link>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>

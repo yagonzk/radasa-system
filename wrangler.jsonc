@@ -7,6 +7,7 @@
   "workers_dev": true,
   "preview_urls": true,
 
+
   "assets": {
     "directory": "./dist/public",
     "binding": "ASSETS",
@@ -14,10 +15,14 @@
     "run_worker_first": ["/api/*"]
   },
 
-
   // HYPERDRIVE (opcional, recomendado): depois de criar a configuração,
   // adicione abaixo antes de "vars":
-  // "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "SEU_HYPERDRIVE_ID" }],
+  // "hyperdrive": [
+  //   {
+  //     "binding": "HYPERDRIVE",
+  //     "id": "SEU_HYPERDRIVE_ID"
+  //   }
+  // ],
 
   "vars": {
     "NODE_ENV": "production",

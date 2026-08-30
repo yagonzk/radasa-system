@@ -8,4 +8,5 @@ export const pneusOperacoesController = {
   async retire(req: Request, res: Response) { res.json(await pneusOperacoesService.retire(requestParam(req.params.id), req.body)); },
   async listRotations(_req: Request, res: Response) { res.json(await pneusOperacoesService.listRotations()); },
   async rotate(req: Request, res: Response) { res.status(201).json(await pneusOperacoesService.rotate(req.body)); },
+  async undoRotation(req: Request, res: Response) { res.json(await pneusOperacoesService.undoRotation(requestParam(req.params.id))); },
 };

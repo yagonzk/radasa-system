@@ -85,8 +85,8 @@ export function createApp() {
   );
 
   // Limite interno para falhar de forma previsível em uploads JSON grandes.
-  app.use(express.json({ limit: "4mb" }));
-  app.use(express.urlencoded({ extended: false, limit: "4mb" }));
+  app.use(express.json({ limit: "8mb" }));
+  app.use(express.urlencoded({ extended: false, limit: "8mb" }));
   app.use(sanitizeInputs);
   app.use("/api", (_req, res, next) => {
     // Cadastros e listagens precisam refletir imediatamente as gravações no Neon.

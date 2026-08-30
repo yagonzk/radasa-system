@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Command,
   CommandEmpty,
@@ -54,6 +55,10 @@ import {
   AlertTriangle,
   Layers3,
   LoaderCircle,
+  Activity,
+  Clock3,
+  RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -83,6 +88,34 @@ interface ProdutoDraft {
   produtoId: string;
   quantidadeLitros: string;
   valorUnitario: string;
+}
+
+interface SefazStatusResponse {
+  active: boolean;
+  frequencyMinutes: number;
+  sefazMinimumWaitMinutes?: number;
+  lastCheckAt: string | null;
+  nextScheduledAt: string | null;
+  lastImportedAt: string | null;
+  lastImported: { chave: string; numero: string; emitenteNome: string } | null;
+  status: "ATIVA" | "AGUARDANDO_SEFAZ" | "ERRO" | "CERTIFICADO_AUSENTE" | "AGUARDANDO_PRIMEIRA_EXECUCAO" | "AGENTE_OFFLINE";
+  message: string;
+  certificate: { configured: boolean; validUntil: string | null; transport?: string; agentOnline?: boolean; agentLastSeenAt?: string | null };
+  empresa: { id: string; razaoSocial: string; cnpj: string; uf: string };
+  counts: Record<string, number>;
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "Ainda não ocorreu";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function normalizePlate(value: unknown) {
@@ -492,13 +525,26 @@ interface DocumentoAbastecimentoInterpretado {
 type BatchStatus = "COMPLETO" | "PENDENTE" | "INVALIDO" | "IMPORTADO" | "ERRO";
 
 const MAX_XML_FILES = 1000;
-const XML_READ_BATCH_SIZE = 20;
-const XML_READ_CONCURRENCY = 3;
-const PDF_READ_CONCURRENCY = 2;
-const XML_IMPORT_BATCH_SIZE = 40;
-const MAX_IMPORT_BATCH_JSON_CHARS = 2_700_000;
-const XML_IMPORT_CONCURRENCY = 2;
-const XML_REQUEST_TIMEOUT_MS = 600_000;
+const XML_READ_BATCH_SIZE = 5;
+const XML_READ_CONCURRENCY = 1;
+const PDF_READ_CONCURRENCY = 1;
+const XML_IMPORT_BATCH_SIZE = 5;
+const MAX_IMPORT_BATCH_JSON_CHARS = 700_000;
+const XML_IMPORT_CONCURRENCY = 1;
+const XML_REQUEST_TIMEOUT_MS = 180_000;
+const XML_MAX_RETRIES = 4;
+const XML_BATCH_PAUSE_MS = 350;
+
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const shouldRetryXmlRequest = (error: any) => {
+  const status = Number(error?.response?.status ?? 0);
+  return (
+    error?.code === "ECONNABORTED" ||
+    !error?.response ||
+    [429, 502, 503, 504].includes(status)
+  );
+};
 
 interface XmlProdutoInterpretado {
   codigo: string;
@@ -1089,21 +1135,22 @@ function BatchXmlDialog({
       batch.entries.forEach(({ file }) => formData.append("arquivos", file));
 
       try {
-        const response = await api.post<{
-          arquivos: BatchXmlApiItem[];
-          resumo: {
-            quantidade: number;
-            completos: number;
-            pendentes: number;
-            invalidos: number;
-            jaCadastrados: number;
-            litros: number;
-            valor: number;
-          };
-        }>("/abastecimentos/xml/interpretar", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-          timeout: XML_REQUEST_TIMEOUT_MS,
-        });
+        let response: any = null;
+
+        for (let attempt = 1; attempt <= XML_MAX_RETRIES; attempt += 1) {
+          try {
+            response = await api.post("/abastecimentos/xml/interpretar", formData, {
+              headers: { "Content-Type": "multipart/form-data" },
+              timeout: XML_REQUEST_TIMEOUT_MS,
+            });
+            break;
+          } catch (error: any) {
+            if (!shouldRetryXmlRequest(error) || attempt === XML_MAX_RETRIES) throw error;
+            await wait(750 * attempt);
+          }
+        }
+
+        if (!response) throw new Error("Não foi possível interpretar o lote de XMLs.");
 
         response.data.arquivos.forEach((item, responseIndex) => {
           const localIndex = item.indiceArquivo ?? responseIndex;
@@ -1218,6 +1265,7 @@ function BatchXmlDialog({
             nextXmlBatch += 1;
             if (index >= xmlBatches.length) return;
             await processXmlBatch(xmlBatches[index]);
+            if (index < xmlBatches.length - 1) await wait(XML_BATCH_PAUSE_MS);
           }
         },
       );
@@ -1416,27 +1464,37 @@ function BatchXmlDialog({
 
       const importOneBatch = async (batch: (typeof importBatches)[number]) => {
         try {
-          const response = await api.post<{
-            resultados: Array<{
-              indice: number;
-              chaveNfe: string;
-              acao: "CRIADO" | "ATUALIZADO" | "IGNORADO" | "ERRO";
-              erro?: string;
-            }>;
-            resumo: {
-              total: number;
-              criados: number;
-              atualizados: number;
-              ignorados: number;
-              erros: number;
-              produtosCriados: number;
-            };
-          }>("/abastecimentos/xml/importar-lote", {
-            politicaDuplicidade: correcaoSincronizacao ? "ATUALIZAR" : "IGNORAR",
-            itens: batch.payload,
-          }, {
-            timeout: XML_REQUEST_TIMEOUT_MS,
-          });
+          let response: any = null;
+          for (let attempt = 1; attempt <= XML_MAX_RETRIES; attempt += 1) {
+            try {
+              response = await api.post<{
+                resultados: Array<{
+                  indice: number;
+                  chaveNfe: string;
+                  acao: "CRIADO" | "ATUALIZADO" | "IGNORADO" | "ERRO";
+                  erro?: string;
+                }>;
+                resumo: {
+                  total: number;
+                  criados: number;
+                  atualizados: number;
+                  ignorados: number;
+                  erros: number;
+                  produtosCriados: number;
+                };
+              }>("/abastecimentos/xml/importar-lote", {
+                politicaDuplicidade: correcaoSincronizacao ? "ATUALIZAR" : "IGNORAR",
+                itens: batch.payload,
+              }, {
+                timeout: XML_REQUEST_TIMEOUT_MS,
+              });
+              break;
+            } catch (error: any) {
+              if (!shouldRetryXmlRequest(error) || attempt === XML_MAX_RETRIES) throw error;
+              await wait(1000 * attempt);
+            }
+          }
+          if (!response) throw new Error("O lote não retornou resposta do servidor.");
 
           summary.criados += response.data.resumo.criados;
           summary.atualizados += response.data.resumo.atualizados;
@@ -1486,6 +1544,7 @@ function BatchXmlDialog({
             nextImportBatch += 1;
             if (index >= importBatches.length) return;
             await importOneBatch(importBatches[index]);
+            if (index < importBatches.length - 1) await wait(XML_BATCH_PAUSE_MS);
           }
         },
       );
@@ -1804,7 +1863,7 @@ function BatchXmlDialog({
             </Button>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Processamento paralelo ativo: até {XML_READ_CONCURRENCY} lotes de {XML_READ_BATCH_SIZE} XMLs e {PDF_READ_CONCURRENCY} PDFs são analisados simultaneamente.
+            Processamento protegido: lotes de {XML_READ_BATCH_SIZE} XMLs, uma requisição por vez, com novas tentativas automáticas em falhas temporárias.
           </p>
         </div>
 
@@ -2236,6 +2295,7 @@ interface AbastecimentoFormProps {
   onCreateCliente: ReturnType<typeof useClientes>["create"];
   onUpdate: ReturnType<typeof useAbastecimentos>["update"];
   onPreviewPdf: (url: string, title: string) => void;
+  onOpenBatchImport: () => void;
 }
 
 function AbastecimentoForm({
@@ -2250,6 +2310,7 @@ function AbastecimentoForm({
   onCreateCliente,
   onUpdate,
   onPreviewPdf,
+  onOpenBatchImport,
 }: AbastecimentoFormProps) {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [draft, setDraft] = useState<ProdutoDraft>(emptyProdutoDraft);
@@ -2709,15 +2770,30 @@ function AbastecimentoForm({
                 no rodapé e sempre devem ser conferidos.
               </p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={readingDocument}
-              onClick={() => documentInputRef.current?.click()}
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              {readingDocument ? "Interpretando..." : "Importar PDF ou XML"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {!editing && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    onClose();
+                    onOpenBatchImport();
+                  }}
+                >
+                  <Layers3 className="mr-2 h-4 w-4" />
+                  Importar XML/PDF em massa
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={readingDocument}
+                onClick={() => documentInputRef.current?.click()}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                {readingDocument ? "Interpretando..." : "Importar um PDF ou XML"}
+              </Button>
+            </div>
           </div>
 
           <input
@@ -3111,12 +3187,17 @@ function formatSubcategoriaVeiculo(value: unknown) {
 }
 
 export default function Abastecimentos() {
-  const { items, create, update, remove } = useAbastecimentos();
+  const { items, create, update, remove, removeMany } = useAbastecimentos();
   const { items: clientes, create: createCliente } = useClientes();
   const { items: produtos } = useProdutos();
   const { items: veiculos } = useVeiculos();
   const [formOpen, setFormOpen] = useState(false);
   const [batchXmlOpen, setBatchXmlOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [sefazStatus, setSefazStatus] = useState<SefazStatusResponse | null>(null);
+  const [loadingSefazStatus, setLoadingSefazStatus] = useState(false);
+  const [forcingSefazSync, setForcingSefazSync] = useState(false);
+  const [sefazStatusError, setSefazStatusError] = useState("");
   const [editing, setEditing] = useState<Abastecimento | null>(null);
   const [viewing, setViewing] = useState<Abastecimento | null>(null);
   const [downloadTarget, setDownloadTarget] = useState<Abastecimento | null>(null);
@@ -3129,11 +3210,71 @@ export default function Abastecimentos() {
   const [filterSearch, setFilterSearch] = useState("");
   const [pageSize, setPageSize] = useState(15);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<string>>(new Set());
+  const [deletingMany, setDeletingMany] = useState(false);
   const [visibleSummaryValues, setVisibleSummaryValues] = useState<Record<string, boolean>>({});
 
   const toggleSummaryValue = (key: string) => {
     setVisibleSummaryValues((current) => ({ ...current, [key]: !current[key] }));
   };
+
+  const loadSefazStatus = async () => {
+    setLoadingSefazStatus(true);
+    setSefazStatusError("");
+    try {
+      const response = await api.get<SefazStatusResponse>("/sefaz/status");
+      setSefazStatus(response.data);
+    } catch (error: any) {
+      setSefazStatusError(
+        error?.response?.data?.message ?? error?.message ?? "Não foi possível consultar o status da SEFAZ.",
+      );
+    } finally {
+      setLoadingSefazStatus(false);
+    }
+  };
+
+  const forceSefazSync = async () => {
+    setForcingSefazSync(true);
+    setSefazStatusError("");
+    try {
+      const response = await api.post("/sefaz/sincronizar", {});
+      if (response?.data?.queued) {
+        toast.success(response?.data?.message || "Atualização solicitada ao Agente SEFAZ local.");
+        await loadSefazStatus();
+        return;
+      }
+
+      const imported = Number(response?.data?.imported ?? response?.data?.importados ?? 0);
+      const processed = Number(response?.data?.processed ?? response?.data?.processados ?? response?.data?.received ?? 0);
+      const hasMore = Boolean(response?.data?.hasMore);
+
+      if (imported > 0) {
+        toast.success(`${imported} NF-e${imported === 1 ? "" : "s"} importada${imported === 1 ? "" : "s"} para Abastecimentos.${hasMore ? " Ainda há documentos pendentes para os próximos lotes." : ""}`);
+      } else if (processed > 0) {
+        toast.success(`Lote processado com ${processed} documento(s). Nenhuma nova NF-e de abastecimento foi encontrada.${hasMore ? " Ainda há documentos pendentes." : ""}`);
+      } else {
+        toast.success("Atualização da SEFAZ executada com sucesso.");
+      }
+
+      await loadSefazStatus();
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message ?? error?.message ?? "Não foi possível forçar a atualização da SEFAZ.";
+      setSefazStatusError(message);
+      toast.error(message);
+    } finally {
+      setForcingSefazSync(false);
+    }
+  };
+
+  useEffect(() => {
+    // Mantém o contador de pendências atualizado mesmo com o popup de Status fechado.
+    void loadSefazStatus();
+    const timer = window.setInterval(() => void loadSefazStatus(), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const sefazPendingCount = Number(sefazStatus?.counts?.PENDENTE || 0);
 
   const filteredItems = useMemo(() => {
     return [...items]
@@ -3442,6 +3583,43 @@ export default function Abastecimentos() {
     { key: "placa", label: "Placa / Modelo" },
     { key: "hodometro", label: "Odômetro", align: "right" },
   ];
+
+  const toggleDeleteSelection = (id: string) => {
+    setSelectedDeleteIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allPageSelected = paginatedItems.length > 0 && paginatedItems.every((item) => selectedDeleteIds.has(item.id));
+
+  const toggleCurrentPageSelection = () => {
+    setSelectedDeleteIds((current) => {
+      const next = new Set(current);
+      if (allPageSelected) paginatedItems.forEach((item) => next.delete(item.id));
+      else paginatedItems.forEach((item) => next.add(item.id));
+      return next;
+    });
+  };
+
+  const handleDeleteMany = async () => {
+    const ids = Array.from(selectedDeleteIds);
+    if (!ids.length) return;
+    if (!window.confirm(`Deseja excluir ${ids.length} abastecimento(s) de uma só vez? Esta ação não poderá ser desfeita.`)) return;
+    setDeletingMany(true);
+    try {
+      const deleted = await removeMany(ids);
+      setSelectedDeleteIds(new Set());
+      toast.success(`${deleted} abastecimento(s) excluído(s) em lote.`);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message ?? "Não foi possível excluir os abastecimentos selecionados.");
+    } finally {
+      setDeletingMany(false);
+    }
+  };
 
   const handleDelete = async (item: Abastecimento) => {
     if (!window.confirm("Deseja realmente excluir este abastecimento?")) return;
@@ -3923,10 +4101,23 @@ export default function Abastecimentos() {
             <p className="mt-1 text-sm text-muted-foreground">Cadastre notas fiscais de abastecimento e acompanhe litros, valores e odômetros.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setBatchXmlOpen(true)}>
-              <Layers3 className="mr-2 h-4 w-4" />
-              Importar XML/PDF
+            <Button variant="outline" onClick={() => setStatusOpen(true)}>
+              <Activity className="mr-2 h-4 w-4" />
+              Status
             </Button>
+            {sefazPendingCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                className="border-amber-500/50 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
+                onClick={() => setStatusOpen(true)}
+                title={`${sefazPendingCount} nota${sefazPendingCount === 1 ? "" : "s"} pendente${sefazPendingCount === 1 ? "" : "s"} de processamento`}
+              >
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                Pendente
+                <span className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-amber-500/20 px-1.5 text-[11px] font-bold">{sefazPendingCount}</span>
+              </Button>
+            )}
             <Button onClick={() => { setEditing(null); setFormOpen(true); }}>
               <Plus className="mr-2 h-4 w-4" /> Novo Abastecimento
             </Button>
@@ -4012,38 +4203,60 @@ export default function Abastecimentos() {
         </div>
 
         <div className="mb-3 flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="outline" onClick={() => setRelatorioOpen(true)}>
-            <FileText className="mr-2 h-4 w-4" /> Gerar relatório PDF
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={filters.placa.length < 2}
-            title={filters.placa.length < 2 ? "Selecione duas ou mais placas no filtro para comparar." : "Gerar comparativo das placas selecionadas"}
-            onClick={() => {
-              setRelatorioOpcoes((current) => ({ ...current, comparativoPorPlaca: true }));
-              setRelatorioOpen(true);
-            }}
-          >
-            <FileText className="mr-2 h-4 w-4" /> Relatório comparativo
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={filters.placa.length < 2}
-            title={filters.placa.length < 2 ? "Selecione duas ou mais placas no filtro para exportar." : "Exportar o comparativo das placas selecionadas para XLSX"}
-            onClick={gerarComparativoXlsx}
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" /> Comparativo XLSX
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline">
+                <FileText className="mr-2 h-4 w-4" />
+                Relatórios
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem onSelect={() => setRelatorioOpen(true)}>
+                <FileText className="mr-2 h-4 w-4" />
+                Gerar relatório PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={filters.placa.length < 2}
+                onSelect={() => {
+                  setRelatorioOpcoes((current) => ({ ...current, comparativoPorPlaca: true }));
+                  setRelatorioOpen(true);
+                }}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Relatório comparativo
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={filters.placa.length < 2}
+                onSelect={() => gerarComparativoXlsx()}
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Comparativo XLSX
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
+
+        {selectedDeleteIds.size > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+            <span className="text-sm font-medium">{selectedDeleteIds.size} abastecimento(s) selecionado(s)</span>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedDeleteIds(new Set())} disabled={deletingMany}>Cancelar seleção</Button>
+              <Button type="button" variant="destructive" size="sm" onClick={() => void handleDeleteMany()} disabled={deletingMany}>
+                {deletingMany ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                Excluir selecionados
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card">
           <div className="w-full min-w-0 overflow-x-auto">
             <table className="w-full min-w-[1180px] table-fixed text-xs">
               <colgroup>
-                {/* 10 colunas: 9 dados + Ações. As larguras somam 100%. */}
-                <col style={{ width: "18%" }} /> {/* Posto */}
+                {/* Seleção + 9 dados + Ações. */}
+                <col style={{ width: "3%" }} />  {/* Seleção */}
+                <col style={{ width: "15%" }} /> {/* Posto */}
                 <col style={{ width: "8%" }} />  {/* Emissão */}
                 <col style={{ width: "8%" }} />  {/* Produtos */}
                 <col style={{ width: "10%" }} /> {/* Diesel / ARLA */}
@@ -4056,6 +4269,15 @@ export default function Abastecimentos() {
               </colgroup>
               <thead className="border-b border-border bg-muted/30">
                 <tr>
+                  <th className="px-2 py-3 text-center align-middle">
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={toggleCurrentPageSelection}
+                      aria-label="Selecionar abastecimentos desta página"
+                      className="h-4 w-4 cursor-pointer accent-primary"
+                    />
+                  </th>
                   {columns.map((column) => {
                     const key = column.key;
                     const active = column.date
@@ -4158,7 +4380,7 @@ export default function Abastecimentos() {
               </thead>
               <tbody>
                 {filteredItems.length === 0 ? (
-                  <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">Nenhum abastecimento encontrado.</td></tr>
+                  <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">Nenhum abastecimento encontrado.</td></tr>
                 ) : paginatedItems.map((item) => {
                   const cliente = resolveAbastecimentoPosto(item, clientes);
                   const veiculo = resolveAbastecimentoVehicle(item, veiculos);
@@ -4167,6 +4389,15 @@ export default function Abastecimentos() {
                   const bruto = combustiveis.dieselValor;
                   return (
                     <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                      <td className="px-2 py-3 text-center align-middle">
+                        <input
+                          type="checkbox"
+                          checked={selectedDeleteIds.has(item.id)}
+                          onChange={() => toggleDeleteSelection(item.id)}
+                          aria-label={`Selecionar abastecimento ${item.numeroNfe || item.id}`}
+                          className="h-4 w-4 cursor-pointer accent-primary"
+                        />
+                      </td>
                       <td className="overflow-hidden px-3 py-3 align-middle"><ClienteIdentity cliente={cliente} /></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle text-muted-foreground"><span className="block whitespace-nowrap">{formatDate(item.dataEmissao)}</span></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle font-medium"><span className="block whitespace-nowrap">{item.produtos.length} produto(s)</span></td>
@@ -4253,6 +4484,120 @@ export default function Abastecimentos() {
         </div>
       </div>
 
+      <Dialog open={statusOpen} onOpenChange={setStatusOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Status da sincronização SEFAZ
+            </DialogTitle>
+          </DialogHeader>
+
+          {loadingSefazStatus && !sefazStatus ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+              <LoaderCircle className="h-5 w-5 animate-spin" /> Consultando status...
+            </div>
+          ) : sefazStatusError ? (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              <p className="font-medium">Não foi possível consultar a sincronização.</p>
+              <p className="mt-1">{sefazStatusError}</p>
+            </div>
+          ) : sefazStatus ? (
+            <div className="space-y-4">
+              <div className={`rounded-xl border p-4 ${
+                sefazStatus.status === "ERRO" || sefazStatus.status === "CERTIFICADO_AUSENTE" || sefazStatus.status === "AGENTE_OFFLINE"
+                  ? "border-destructive/30 bg-destructive/5"
+                  : sefazStatus.status === "AGUARDANDO_SEFAZ" || sefazStatus.status === "AGUARDANDO_PRIMEIRA_EXECUCAO"
+                    ? "border-amber-500/30 bg-amber-500/5"
+                    : "border-emerald-500/30 bg-emerald-500/5"
+              }`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Sincronização automática</p>
+                    <p className="mt-1 text-lg font-semibold">
+                      {sefazStatus.status === "ATIVA" ? "Ativa" :
+                        sefazStatus.status === "AGUARDANDO_SEFAZ" ? "Ativa — aguardando SEFAZ" :
+                        sefazStatus.status === "AGUARDANDO_PRIMEIRA_EXECUCAO" ? "Ativa — aguardando primeira execução" :
+                        sefazStatus.status === "CERTIFICADO_AUSENTE" ? "Certificado não configurado" :
+                        sefazStatus.status === "AGENTE_OFFLINE" ? "Agente SEFAZ offline" : "Erro na sincronização"}
+                    </p>
+                  </div>
+                  <span className={`h-3 w-3 shrink-0 rounded-full ${
+                    sefazStatus.status === "ERRO" || sefazStatus.status === "CERTIFICADO_AUSENTE" || sefazStatus.status === "AGENTE_OFFLINE"
+                      ? "bg-destructive"
+                      : sefazStatus.status === "AGUARDANDO_SEFAZ" || sefazStatus.status === "AGUARDANDO_PRIMEIRA_EXECUCAO"
+                        ? "bg-amber-500"
+                        : "bg-emerald-500"
+                  }`} />
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{sefazStatus.message}</p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border p-3">
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" /> Última verificação</p>
+                  <p className="mt-1 text-sm font-medium">{formatDateTime(sefazStatus.lastCheckAt)}</p>
+                </div>
+                <div className="rounded-xl border p-3">
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground"><RefreshCw className="h-3.5 w-3.5" /> Próxima verificação</p>
+                  <p className="mt-1 text-sm font-medium">{sefazStatus.nextScheduledAt ? formatDateTime(sefazStatus.nextScheduledAt) : `Automática a cada ${sefazStatus.frequencyMinutes} minutos`}</p>
+                </div>
+
+                <div className="rounded-xl border p-3">
+                  <p className="text-xs text-muted-foreground">Documentos recebidos da SEFAZ</p>
+                  <p className="mt-1 text-xl font-semibold">{Object.values(sefazStatus.counts || {}).reduce((total, value) => total + Number(value || 0), 0)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Total já processado pelo agente</p>
+                </div>
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+                  <p className="text-xs text-muted-foreground">Importados em Abastecimentos</p>
+                  <p className="mt-1 text-xl font-semibold">{Number(sefazStatus.counts?.IMPORTADO || 0)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">NF-e de combustível criadas automaticamente</p>
+                </div>
+
+                {(Number(sefazStatus.counts?.PENDENTE || 0) > 0 || Number(sefazStatus.counts?.ERRO || 0) > 0 || Number(sefazStatus.counts?.AGUARDANDO_XML || 0) > 0 || Number(sefazStatus.counts?.IGNORADO || 0) > 0) && (
+                  <div className="rounded-xl border p-3 sm:col-span-2">
+                    <p className="text-xs text-muted-foreground">Processamento dos documentos</p>
+                    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+                      {Number(sefazStatus.counts?.PENDENTE || 0) > 0 && <span>Pendentes transitórios: <strong>{Number(sefazStatus.counts?.PENDENTE || 0)}</strong></span>}
+                      <span>Erros: <strong>{Number(sefazStatus.counts?.ERRO || 0)}</strong></span>
+                      <span>Aguardando XML completo: <strong>{Number(sefazStatus.counts?.AGUARDANDO_XML || 0)}</strong></span>
+                      <span>Ignorados/não abastecimento: <strong>{Number(sefazStatus.counts?.IGNORADO || 0)}</strong></span>
+                      <span>Novos: <strong>{Number(sefazStatus.counts?.NOVO || 0)}</strong></span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="rounded-xl border p-3 sm:col-span-2">
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground"><Fuel className="h-3.5 w-3.5" /> Última NF-e importada em Abastecimentos</p>
+                  <p className="mt-1 text-sm font-medium">{formatDateTime(sefazStatus.lastImportedAt)}</p>
+                  {sefazStatus.lastImported && (
+                    <p className="mt-1 text-xs text-muted-foreground">NF {sefazStatus.lastImported.numero || "—"} • {sefazStatus.lastImported.emitenteNome || "Emitente não informado"}</p>
+                  )}
+                </div>
+                <div className="rounded-xl border p-3 sm:col-span-2">
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5" /> Certificado A1 da Empresa</p>
+                  <p className="mt-1 text-sm font-medium">{sefazStatus.certificate.configured ? "Configurado" : "Não configurado"}</p>
+                  {sefazStatus.certificate.validUntil && <p className="mt-1 text-xs text-muted-foreground">Validade: {formatDate(sefazStatus.certificate.validUntil)}</p>}
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <p className="text-xs text-muted-foreground">O Agente SEFAZ local verifica automaticamente a cada {sefazStatus.frequencyMinutes} minutos. Quando a SEFAZ retorna 137/656, o sistema respeita automaticamente a janela mínima de 1 hora antes de consultar novamente.</p>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button className="w-full sm:w-auto" type="button" size="sm" variant="outline" onClick={() => void loadSefazStatus()} disabled={loadingSefazStatus || forcingSefazSync}>
+                    <RefreshCw className={`mr-2 h-3.5 w-3.5 ${loadingSefazStatus ? "animate-spin" : ""}`} /> Atualizar status
+                  </Button>
+                  <Button className="w-full sm:w-auto" type="button" size="sm" onClick={() => void forceSefazSync()} disabled={forcingSefazSync || loadingSefazStatus}>
+                    <RefreshCw className={`mr-2 h-3.5 w-3.5 ${forcingSefazSync ? "animate-spin" : ""}`} />
+                    {forcingSefazSync ? "Atualizando..." : "Forçar atualização"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <BatchXmlDialog
         open={batchXmlOpen}
         clientes={clientes}
@@ -4334,6 +4679,7 @@ export default function Abastecimentos() {
         onCreateCliente={createCliente}
         onUpdate={update}
         onPreviewPdf={(url, title) => setPdfPreview({ url, title })}
+        onOpenBatchImport={() => setBatchXmlOpen(true)}
       />
 
       <Dialog open={Boolean(viewing)} onOpenChange={(open) => !open && setViewing(null)}>

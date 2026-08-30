@@ -25,7 +25,10 @@
     "dev:cloudflare": "pnpm run build:cloudflare && wrangler dev",
     "deploy": "pnpm run deploy:cloudflare",
     "hyperdrive:list": "wrangler hyperdrive list",
-    "db:fix-vasilhames": "tsx scripts/corrigir-vasilhames.ts"
+    "db:fix-vasilhames": "tsx scripts/corrigir-vasilhames.ts",
+    "build:sefaz-agent": "prisma generate && esbuild sefaz-agent/index.ts --platform=node --packages=external --bundle --format=esm --outfile=dist-sefaz-agent/index.js",
+    "start:sefaz-agent": "node dist-sefaz-agent/index.js",
+    "dev:sefaz-agent": "tsx watch sefaz-agent/index.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

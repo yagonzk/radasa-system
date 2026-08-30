@@ -637,8 +637,38 @@ export const abastecimentosService = {
       produtosCriados?: number;
     }> = [];
 
+    // Uma única consulta identifica NF-es já gravadas antes de abrir transações.
+    // Em reimportações, isso evita várias transações e dezenas de queries inúteis.
+    const normalizedKeys = inputs.map((input) =>
+      String(input.chaveNfe ?? "").replace(/\D/g, ""),
+    );
+    const existingKeys =
+      politica === "IGNORAR"
+        ? new Set(
+            (
+              await prisma.abastecimento.findMany({
+                where: { chaveNfe: { in: normalizedKeys } },
+                select: { chaveNfe: true },
+              })
+            )
+              .map((item) => String(item.chaveNfe ?? ""))
+              .filter(Boolean),
+          )
+        : new Set<string>();
+
     for (let index = 0; index < inputs.length; index += 1) {
       const input = inputs[index];
+      const chaveNfe = normalizedKeys[index];
+
+      if (politica === "IGNORAR" && existingKeys.has(chaveNfe)) {
+        resultados.push({
+          indice: index,
+          chaveNfe,
+          acao: "IGNORADO",
+          produtosCriados: 0,
+        });
+        continue;
+      }
 
       try {
         const result = await prisma.$transaction((tx) =>
@@ -680,6 +710,15 @@ export const abastecimentosService = {
         ),
       },
     };
+  },
+
+  async removeMany(ids: string[]) {
+    const uniqueIds = Array.from(new Set(ids)).slice(0, 500);
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.abastecimentoProduto.deleteMany({ where: { abastecimentoId: { in: uniqueIds } } });
+      return tx.abastecimento.deleteMany({ where: { id: { in: uniqueIds } } });
+    });
+    return { requested: uniqueIds.length, deleted: result.count };
   },
 
   async remove(id: string) {

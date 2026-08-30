@@ -7,6 +7,7 @@ import {
   Search,
 } from "lucide-react";
 import Layout from "@/components/Layout";
+import CiotSubtabs from "@/components/ciot/CiotSubtabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -166,6 +167,7 @@ export default function CiotGeradosPage() {
   return (
     <Layout>
       <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6">
+        <CiotSubtabs />
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">
             CIOTs gerados

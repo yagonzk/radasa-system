@@ -37,7 +37,7 @@ const batchWaiters = new Map<string, Array<{ resolve: (value: unknown) => void; 
 let batchScheduled = false;
 
 const BATCHABLE_RESOURCES = new Set([
-  "motoristas", "chapas", "clientes", "empresa", "produtos", "locais",
+  "motoristas", "chapas", "clientes", "fornecedores", "empresa", "produtos", "locais",
   "veiculos", "viagens", "fechamentos", "manifestos", "abastecimentos", "pneus",
 ]);
 
@@ -45,7 +45,7 @@ const BATCHABLE_RESOURCES = new Set([
 // mesma aba. O dado persistido é mostrado imediatamente e a atualização acontece
 // em segundo plano, sem a tela voltar a ficar vazia enquanto o Neon responde.
 const SESSION_CACHE_RESOURCES = new Set([
-  "motoristas", "chapas", "clientes", "empresa", "produtos", "locais", "veiculos",
+  "motoristas", "chapas", "clientes", "fornecedores", "empresa", "produtos", "locais", "veiculos",
   "manifestos", "abastecimentos",
 ]);
 const SESSION_CACHE_PREFIX = "radasa_resource_cache_v154:";

@@ -1,15 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getResourceCollection, invalidateResourceCache, peekResourceCollection } from "./api";
 
-export type StatusMotorista = "ATIVO" | "DEMITIDO";
+export type StatusMotorista = "ATIVO" | "FERIAS" | "DEMITIDO";
 export interface Motorista {
   id: string; nome: string; cpf: string; rg?: string; dataNascimento?: string | null; telefone?: string; email?: string;
   endereco?: string; cidade?: string; uf?: string; cep?: string; salarioBase: number; dataAdmissao?: string | null;
-  cnhNumero?: string; cnhRegistro?: string; cnhCategoria?: string; cnhValidade?: string | null; primeiraHabilitacao?: string | null;
-  moppValidade?: string | null; toxicologicoValidade?: string | null; observacoes?: string; status: StatusMotorista; createdAt: string;
+  cnhNumero?: string; cnhRegistro?: string; cnhCategoria?: string; cnhValidade?: string | null; cnhEmissao?: string | null; primeiraHabilitacao?: string | null;
+  moppValidade?: string | null; toxicologicoValidade?: string | null; cnhPdfNome?: string; cnhPdfStored?: boolean; toxicologicoPdfNome?: string; toxicologicoPdfStored?: boolean; observacoes?: string; status: StatusMotorista; createdAt: string;
 }
 export interface Chapa { id: string; nome: string; telefone: string; cpf: string; cidade: string; chavePix: string; valorFixo: number; createdAt: string; }
 export interface Cliente { id: string; nomeFantasia: string; razaoSocial: string; codigoInterno: string; cnpj: string; email: string; telefone: string; enderecoFiscal: string; createdAt: string; }
+export interface Fornecedor {
+  id: string;
+  razaoSocial: string;
+  nomeFantasia: string;
+  documento: string;
+  tipos: string[];
+  telefone: string;
+  email: string;
+  endereco: string;
+  cidade: string;
+  uf: string;
+  contato: string;
+  observacoes: string;
+  ativo: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
 export type StatusDemanda = "BACKLOG" | "A_FAZER" | "EM_ANDAMENTO" | "AGUARDANDO" | "CONCLUIDA";
 export type PrioridadeDemanda = "BAIXA" | "MEDIA" | "ALTA" | "URGENTE";
 export interface Demanda {
@@ -56,9 +73,10 @@ export interface Veiculo {
   anoModelo?: number | null; cor?: string; combustivel?: string; proprietario?: string; situacaoOperacional?: "DISPONIVEL"|"EM_VIAGEM"|"MANUTENCAO"|"INATIVO"; subcategoria?: SubcategoriaVeiculo | null;
   motoristaId?: string | null; quantidadePneus?: number; quantidadeEstepes?: number; crlvValidade?: string | null;
   ipvaVencimento?: string | null; ipvaPago?: boolean; ipvaValor?: number; licenciamentoVencimento?: string | null; licenciamentoValor?: number; seguroValidade?: string | null; seguroValor?: number;
-  rntrc?: string; observacoes?: string; createdAt: string;
+  rntrc?: string; crlvPdfNome?: string; crlvPdfStored?: boolean; observacoes?: string; createdAt: string;
 }
-export interface Viagem { id: string; codigo?: string | null; status?: "PLANEJADA"|"CARREGANDO"|"EM_TRANSITO"|"ENTREGUE"|"FINALIZADA"|"CANCELADA"; placa: string; motoristaId: string; clienteId?: string | null; valorFrete: number; dataManifesto: string; cidadeOrigem?: string; cidadeEntrega: string; rotas: string[]; distanciaKm: number; kmSaida?: number | null; kmChegada?: number | null; dataSaida?: string | null; previsaoChegada?: string | null; dataChegada?: string | null; valorPedagio: number; valorDiaria: number; valorAbastecimento: number; valorChapa: number; observacoes?: string; createdAt: string; }
+export interface ViagemDespesaExtrato { id:string; viagemId:string; tipo:"PEDAGIO"|"CHAPA"; data:string; hora:string; valor:number; descricao:string; colaborador:string; origem:string; fingerprint:string; createdAt:string; }
+export interface Viagem { id: string; codigo?: string | null; status?: "PLANEJADA"|"CARREGANDO"|"EM_TRANSITO"|"ENTREGUE"|"FINALIZADA"|"CANCELADA"; placa: string; motoristaId: string; clienteId?: string | null; valorFrete: number; dataManifesto: string; cidadeOrigem?: string; cidadeEntrega: string; rotas: string[]; distanciaKm: number; kmSaida?: number | null; kmChegada?: number | null; dataSaida?: string | null; previsaoChegada?: string | null; dataChegada?: string | null; valorPedagio: number; valorPedagioManual?: number; valorPedagioImportado?: number; valorDiaria: number; valorAbastecimento: number; valorChapa: number; valorChapaManual?: number; valorChapaImportado?: number; valorMulta?: number; custoExtraTag?: string; valorCustoExtra?: number; despesasExtrato?: ViagemDespesaExtrato[]; observacoes?: string; createdAt: string; }
 export type TipoManifesto = "Bonificação - Lebrinha" | "Acertar c/ Lebrinha" | "Receber c/ Cliente" | "Vasilhame";
 export interface ManifestoProduto { id?: string; produtoId: string; clienteId?: string | null; romaneio?: string; notaFiscal?: string; serieNf?: string; instrucaoCobranca?: string; quantidade: number; valorUnitario: number; valorTotal: number; tipoManifesto?: TipoManifesto; pagoCliente?: boolean | null; }
 export interface ManifestoMetadata {
@@ -379,13 +397,41 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string, opti
     }
   }, [resource, sourceId]);
 
+  const removeMany = useCallback(async (ids: string[]): Promise<number> => {
+    const uniqueIds = Array.from(new Set(ids)).filter(Boolean).slice(0, 500);
+    if (!uniqueIds.length) return 0;
+    const selected = new Set(uniqueIds);
+    let previous: T[] = [];
+    mutationRevision.current += 1;
+    setItems(current => {
+      previous = current.filter(item => selected.has(item.id));
+      return current.filter(item => !selected.has(item.id));
+    });
+
+    try {
+      const response = await api.post<{ deleted?: number }>(`/${resource}/excluir-lote`, { ids: uniqueIds });
+      invalidateResourceCache(resource);
+      notifyApiChange(resource, sourceId);
+      return Number(response.data?.deleted ?? uniqueIds.length);
+    } catch (error) {
+      if (previous.length) {
+        setItems(current => {
+          const existing = new Set(current.map(item => item.id));
+          return [...current, ...previous.filter(item => !existing.has(item.id))];
+        });
+      }
+      throw error;
+    }
+  }, [resource, sourceId]);
+
   const getById = useCallback((id: string) => items.find(item => item.id === id), [items]);
-  return { items, create, update, remove, getById, entityName, refresh, replaceLocalItem };
+  return { items, create, update, remove, removeMany, getById, entityName, refresh, replaceLocalItem };
 }
 
 export const useMotoristas = () => useApiCrud<Motorista>("motoristas", "Motorista");
 export const useChapas = () => useApiCrud<Chapa>("chapas", "Chapa");
 export const useClientes = () => useApiCrud<Cliente>("clientes", "Cliente");
+export const useFornecedores = () => useApiCrud<Fornecedor>("fornecedores", "Fornecedor");
 export const useEmpresa = () => useApiCrud<Empresa>("empresa", "Empresa");
 export const useProdutos = () => useApiCrud<Produto>("produtos", "Produto");
 export const useEstoqueTipos = () => useApiCrud<EstoqueTipoProduto>("estoque/tipos", "Tipo de produto do almoxarifado");
@@ -518,7 +564,12 @@ export function usePneuOperacoes() {
     window.dispatchEvent(new Event(eventName("pneus")));
     return item;
   }, [refresh]);
-  return { instalacoes, rodizios, instalar, retirar, rodiziar, refresh };
+  const desfazerRodizio = useCallback(async (id: string) => {
+    await api.delete(`/pneus/rodizios/${id}`);
+    await refresh();
+    window.dispatchEvent(new Event(eventName("pneus")));
+  }, [refresh]);
+  return { instalacoes, rodizios, instalar, retirar, rodiziar, desfazerRodizio, refresh };
 }
 
 

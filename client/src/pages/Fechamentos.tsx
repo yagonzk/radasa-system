@@ -117,7 +117,7 @@ export default function Fechamentos() {
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Selecione o motorista e o período. As viagens são carregadas automaticamente
-              da aba Viagens conforme o destino.
+              da aba Acerto de Viagem conforme o destino.
             </p>
           </div>
           <Button onClick={handleOpenCreate}>

@@ -3,8 +3,11 @@ import { created, dateOnly, number } from "../utils/serialize.js";
 import { parseDateOnly } from "../utils/date.js";
 import { AppError } from "../utils/app-error.js";
 
-const serialize = (item: any) => ({
-  ...item,
+const serialize = (item: any) => {
+  const { crlvPdfUrl, ...safe } = item;
+  return ({
+  ...safe,
+  crlvPdfStored: Boolean(crlvPdfUrl),
   crlvValidade: item.crlvValidade ? dateOnly(item.crlvValidade) : null,
   ipvaVencimento: item.ipvaVencimento ? dateOnly(item.ipvaVencimento) : null,
   licenciamentoVencimento: item.licenciamentoVencimento ? dateOnly(item.licenciamentoVencimento) : null,
@@ -12,6 +15,7 @@ const serialize = (item: any) => ({
   ipvaValor: number(item.ipvaValor), licenciamentoValor: number(item.licenciamentoValor), seguroValor: number(item.seguroValor),
   createdAt: created(item.createdAt),
 });
+};
 const normalizeVehicleDates = (data: any) => {
   const out = { ...data };
   for (const key of ["crlvValidade","ipvaVencimento","licenciamentoVencimento","seguroValidade"]) {
@@ -91,6 +95,10 @@ async function syncVehicleIntoManifestos(vehicle: { id: string; placa: string; m
   }
 }
 
+function pdfDataUrl(file: Express.Multer.File) {
+  return `data:application/pdf;base64,${file.buffer.toString("base64")}`;
+}
+
 export const veiculosService = {
   async list() {
     return (await prisma.veiculo.findMany({ orderBy: { createdAt: "desc" } })).map(serialize);
@@ -145,6 +153,32 @@ export const veiculosService = {
     // Mudanças de modelo/placa passam a refletir imediatamente em todos os
     // romaneios já cadastrados desse veículo.
     await syncVehicleIntoManifestos(item, current.placa).catch(() => undefined);
+    return serialize(item);
+  },
+
+  async uploadCrlvPdf(id: string, file: Express.Multer.File) {
+    const exists = await prisma.veiculo.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) throw new AppError(404, "Veiculo não encontrado.");
+    const item = await prisma.veiculo.update({
+      where: { id },
+      data: { crlvPdfNome: file.originalname, crlvPdfUrl: pdfDataUrl(file) },
+    });
+    return serialize(item);
+  },
+
+  async getCrlvPdf(id: string) {
+    const item = await prisma.veiculo.findUnique({ where: { id } });
+    if (!item) throw new AppError(404, "Veiculo não encontrado.");
+    const dataUrl = String((item as any).crlvPdfUrl ?? "");
+    if (!dataUrl) throw new AppError(404, "CRLV não cadastrado.");
+    const encoded = dataUrl.includes(",") ? dataUrl.slice(dataUrl.indexOf(",") + 1) : dataUrl;
+    return { nome: String((item as any).crlvPdfNome || "crlv.pdf"), buffer: Buffer.from(encoded, "base64") };
+  },
+
+  async removeCrlvPdf(id: string) {
+    const exists = await prisma.veiculo.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) throw new AppError(404, "Veiculo não encontrado.");
+    const item = await prisma.veiculo.update({ where: { id }, data: { crlvPdfNome: "", crlvPdfUrl: "" } });
     return serialize(item);
   },
 

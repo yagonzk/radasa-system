@@ -456,7 +456,7 @@ export default function Fiscal() {
 
             <Card className="border-dashed">
               <CardContent className="p-4 text-xs leading-relaxed text-muted-foreground">
-                <strong className="text-foreground">Critérios do Comercial:</strong> faturamento vem dos produtos dos Romaneios classificados como Receber c/ Cliente, Acertar c/ Lebrinha ou Bonificação Lebrinha. Vasilhames ficam fora do faturamento. Abastecimento usa o valor total das NFs. Almoxarifado considera entradas, pneus consideram compras/recapagens/consertos e pedágios usam a base de Viagens. <strong className="text-foreground">Diárias e Chapas são apuradas separadamente, cada uma pelo seu próprio campo em cada viagem.</strong> O valor de abastecimento da base de Viagens não é somado novamente para evitar duplicidade.
+                <strong className="text-foreground">Critérios do Comercial:</strong> faturamento vem dos produtos dos Romaneios classificados como Receber c/ Cliente, Acertar c/ Lebrinha ou Bonificação Lebrinha. Vasilhames ficam fora do faturamento. Abastecimento usa o valor total das NFs. Almoxarifado considera entradas, pneus consideram compras/recapagens/consertos e pedágios usam a base de Acerto de Viagem. <strong className="text-foreground">Diárias e Chapas são apuradas separadamente, cada uma pelo seu próprio campo em cada viagem.</strong> O valor de abastecimento da base de Acerto de Viagem não é somado novamente para evitar duplicidade.
               </CardContent>
             </Card>
               </>

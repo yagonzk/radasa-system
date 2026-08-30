@@ -21,6 +21,11 @@ viagensRoutes.post("/ler-manifesto", async (req, res, next) => {
   }
 });
 
+viagensRoutes.post("/custos/importar-por-data", asyncHandler(viagensController.importarCustosPorData));
+viagensRoutes.post("/extrato/preview", asyncHandler(viagensController.previewExtratoTruckPag));
+viagensRoutes.post("/extrato/importar", asyncHandler(viagensController.importarExtratoTruckPag));
+viagensRoutes.get("/:id/despesas-extrato", asyncHandler(viagensController.despesasExtrato));
+
 viagensRoutes.get("/:id/rentabilidade", asyncHandler(viagensController.rentabilidade));
 
 viagensRoutes.use(crudRoutes(viagensController, viagemBody));

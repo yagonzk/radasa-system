@@ -26,6 +26,7 @@ enum TipoManifesto {
 
 enum StatusMotorista {
   ATIVO
+  FERIAS
   DEMITIDO
 }
 
@@ -157,9 +158,14 @@ model Motorista {
   cnhRegistro              String          @default("")
   cnhCategoria             String          @default("")
   cnhValidade              DateTime?       @db.Date
+  cnhEmissao               DateTime?       @db.Date
   primeiraHabilitacao      DateTime?       @db.Date
   moppValidade             DateTime?       @db.Date
   toxicologicoValidade     DateTime?       @db.Date
+  cnhPdfNome               String          @default("")
+  cnhPdfUrl                String          @default("") @db.Text
+  toxicologicoPdfNome      String          @default("")
+  toxicologicoPdfUrl       String          @default("") @db.Text
   observacoes              String          @default("") @db.Text
   status                   StatusMotorista @default(ATIVO)
   createdAt                DateTime        @default(now())
@@ -212,6 +218,31 @@ model Cliente {
   @@index([codigoInterno])
   @@index([cnpj])
   @@map("clientes")
+}
+
+model Fornecedor {
+  id             String   @id @default(cuid())
+  razaoSocial    String
+  nomeFantasia   String   @default("")
+  documento      String   @default("")
+  tipos          String[] @default([])
+  telefone       String   @default("")
+  email          String   @default("")
+  endereco       String   @default("")
+  cidade         String   @default("")
+  uf             String   @default("")
+  contato        String   @default("")
+  observacoes    String   @default("") @db.Text
+  ativo          Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  ordensServico  OrdemServico[]
+
+  @@index([razaoSocial])
+  @@index([nomeFantasia])
+  @@index([documento])
+  @@index([ativo])
+  @@map("fornecedores")
 }
 
 model Produto {
@@ -317,6 +348,8 @@ model Veiculo {
   seguroValidade         DateTime?        @db.Date
   seguroValor            Decimal          @default(0) @db.Decimal(14, 2)
   rntrc                  String           @default("")
+  crlvPdfNome            String           @default("")
+  crlvPdfUrl             String           @default("") @db.Text
   observacoes            String           @default("") @db.Text
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
@@ -359,10 +392,14 @@ model Viagem {
   valorDiaria        Decimal   @db.Decimal(14, 2)
   valorAbastecimento Decimal   @db.Decimal(14, 2)
   valorChapa         Decimal   @db.Decimal(14, 2)
+  valorMulta         Decimal   @default(0) @db.Decimal(14, 2)
+  custoExtraTag      String    @default("")
+  valorCustoExtra    Decimal   @default(0) @db.Decimal(14, 2)
   observacoes        String    @default("") @db.Text
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   motorista          Motorista @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
+  despesasExtrato    ViagemDespesaExtrato[]
 
   @@index([motoristaId])
   @@index([clienteId])
@@ -1058,22 +1095,32 @@ model PlanoManutencao {
 model OrdemServico {
   id              String   @id @default(cuid())
   numero          String   @unique
+  numeroFornecedor String  @default("")
   veiculoId       String
   tipo            String   @default("PREVENTIVA")
   status          String   @default("ABERTA")
   descricao       String   @db.Text
+  servicoRealizado String  @default("") @db.Text
+  responsavel     String   @default("")
+  fornecedorId    String?
   fornecedor      String   @default("")
   kmAbertura      Decimal? @db.Decimal(14, 2)
+  kmConclusao     Decimal? @db.Decimal(14, 2)
   dataAbertura    DateTime @db.Date
   dataConclusao   DateTime? @db.Date
   valorPecas      Decimal  @default(0) @db.Decimal(14, 2)
   valorMaoObra    Decimal  @default(0) @db.Decimal(14, 2)
   valorOutros     Decimal  @default(0) @db.Decimal(14, 2)
+  desconto        Decimal  @default(0) @db.Decimal(14, 2)
   observacoes     String   @default("") @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  fornecedorCadastro Fornecedor? @relation(fields: [fornecedorId], references: [id], onDelete: SetNull)
   itens           OrdemServicoItem[]
+  notasFiscais    OrdemServicoNotaFiscal[]
+  anexos          OrdemServicoAnexo[]
   @@index([veiculoId])
+  @@index([fornecedorId])
   @@index([status])
   @@index([dataAbertura])
   @@map("ordens_servico")
@@ -1082,16 +1129,54 @@ model OrdemServico {
 model OrdemServicoItem {
   id             String   @id @default(cuid())
   ordemServicoId String
-  produtoId      String
+  produtoId      String?
+  tipo           String   @default("SERVICO")
+  descricao      String   @default("")
   quantidade     Decimal  @db.Decimal(14,3)
   valorUnitario  Decimal  @default(0) @db.Decimal(14,2)
   valorTotal     Decimal  @default(0) @db.Decimal(14,2)
   createdAt      DateTime @default(now())
   ordemServico   OrdemServico @relation(fields: [ordemServicoId], references: [id], onDelete: Cascade)
-  produto        EstoqueProduto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  produto        EstoqueProduto? @relation(fields: [produtoId], references: [id], onDelete: SetNull)
   @@index([ordemServicoId])
   @@index([produtoId])
   @@map("ordem_servico_itens")
+}
+
+model OrdemServicoNotaFiscal {
+  id             String   @id @default(cuid())
+  ordemServicoId String
+  numero         String   @default("")
+  serie          String   @default("")
+  chaveAcesso    String   @default("")
+  dataEmissao    DateTime? @db.Date
+  valor          Decimal  @default(0) @db.Decimal(14, 2)
+  arquivoNome    String   @default("")
+  arquivoMime    String   @default("")
+  arquivoUrl     String   @default("") @db.Text
+  createdAt      DateTime @default(now())
+  ordemServico   OrdemServico @relation(fields: [ordemServicoId], references: [id], onDelete: Cascade)
+
+  @@index([ordemServicoId])
+  @@index([numero])
+  @@index([chaveAcesso])
+  @@map("ordem_servico_notas_fiscais")
+}
+
+model OrdemServicoAnexo {
+  id             String   @id @default(cuid())
+  ordemServicoId String
+  tipo           String   @default("OUTRO")
+  descricao      String   @default("")
+  arquivoNome    String
+  arquivoMime    String   @default("")
+  arquivoUrl     String   @db.Text
+  createdAt      DateTime @default(now())
+  ordemServico   OrdemServico @relation(fields: [ordemServicoId], references: [id], onDelete: Cascade)
+
+  @@index([ordemServicoId])
+  @@index([tipo])
+  @@map("ordem_servico_anexos")
 }
 
 model DocumentoFrota {
@@ -1233,4 +1318,75 @@ model ConfiguracaoSistema {
   createdAt DateTime @default(now())
 
   @@map("configuracoes_sistema")
+}
+
+
+model ViagemDespesaExtrato {
+  id          String   @id @default(cuid())
+  viagemId    String
+  tipo        String
+  data        DateTime @db.Date
+  hora        String   @default("")
+  valor       Decimal  @db.Decimal(14, 2)
+  descricao   String   @default("") @db.Text
+  colaborador String   @default("")
+  origem      String   @default("TRUCKPAG")
+  fingerprint String   @unique
+  createdAt   DateTime @default(now())
+  viagem      Viagem   @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+
+  @@index([viagemId])
+  @@index([tipo])
+  @@index([data])
+  @@map("viagem_despesas_extrato")
+}
+
+model SefazSyncState {
+  id          String   @id @default(cuid())
+  empresaId   String   @unique
+  ultNsu      String   @default("000000000000000")
+  maxNsu      String   @default("000000000000000")
+  lastCStat   String   @default("")
+  lastMessage String   @default("") @db.Text
+  lastQueryAt DateTime?
+  forceRequestedAt DateTime?
+  agentLastSeenAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([empresaId])
+  @@map("sefaz_sync_state")
+}
+
+model SefazDocumento {
+  id                  String    @id @default(cuid())
+  empresaId           String
+  chave               String    @unique
+  nsu                  String    @default("")
+  schema               String    @default("")
+  tipo                 String    @default("NFE")
+  classificacao       String    @default("OUTRO")
+  status               String    @default("NOVO")
+  numero               String    @default("")
+  serie                String    @default("")
+  dataEmissao          DateTime? @db.Date
+  emitenteCnpj         String    @default("")
+  emitenteNome         String    @default("")
+  valorTotal           Decimal   @default(0) @db.Decimal(14, 2)
+  placa                String    @default("")
+  hodometro            Decimal?  @db.Decimal(14, 1)
+  xmlUrl               String?   @db.Text
+  dados                 Json?
+  erro                  String    @default("") @db.Text
+  abastecimentoId      String?
+  importedAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([empresaId, nsu])
+  @@index([empresaId])
+  @@index([status])
+  @@index([classificacao])
+  @@index([dataEmissao])
+  @@map("sefaz_documentos")
 }

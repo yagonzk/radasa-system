@@ -30,11 +30,12 @@ export const motoristaBody = z.object({
   cnhRegistro: z.string().trim().max(40).optional().default(""),
   cnhCategoria: z.string().trim().max(10).optional().default(""),
   cnhValidade: dateOnly.optional().nullable().or(z.literal("")),
+  cnhEmissao: dateOnly.optional().nullable().or(z.literal("")),
   primeiraHabilitacao: dateOnly.optional().nullable().or(z.literal("")),
   moppValidade: dateOnly.optional().nullable().or(z.literal("")),
   toxicologicoValidade: dateOnly.optional().nullable().or(z.literal("")),
   observacoes: z.string().trim().max(5000).optional().default(""),
-  status: z.enum(["ATIVO", "DEMITIDO"]).default("ATIVO"),
+  status: z.enum(["ATIVO", "FERIAS", "DEMITIDO"]).default("ATIVO"),
   createdAt: z.string().optional(),
 });
 export const chapaBody = z.object({
@@ -69,6 +70,23 @@ export const clienteBody = z.object({
   id: id.optional(), nomeFantasia: text(), razaoSocial: z.string().trim().max(255).default(""), codigoInterno: text(100), cnpj: z.string().trim().max(18).transform(v => v.replace(/\D/g, "")).refine(v => !v || v.length === 14, "CNPJ deve possuir 14 dígitos").default(""), email: z.string().trim().max(255), telefone: z.string().trim().max(100), enderecoFiscal: z.string().trim().max(1000), createdAt: z.string().optional(),
 });
 
+export const fornecedorBody = z.object({
+  id: id.optional(),
+  razaoSocial: text(255),
+  nomeFantasia: z.string().trim().max(255).optional().default(""),
+  documento: z.string().trim().max(18).transform(v => v.replace(/\D/g, "")).refine(v => !v || v.length === 11 || v.length === 14, "CNPJ/CPF deve possuir 11 ou 14 dígitos").optional().default(""),
+  tipos: z.array(z.string().trim().min(1).max(100)).max(30).optional().default([]),
+  telefone: z.string().trim().max(100).optional().default(""),
+  email: z.string().trim().max(255).optional().default(""),
+  endereco: z.string().trim().max(1000).optional().default(""),
+  cidade: z.string().trim().max(160).optional().default(""),
+  uf: z.string().trim().max(2).optional().default(""),
+  contato: z.string().trim().max(255).optional().default(""),
+  observacoes: z.string().trim().max(5000).optional().default(""),
+  ativo: z.boolean().optional().default(true),
+  createdAt: z.string().optional(),
+});
+
 export const clienteSyncBody = z.object({
   rows: z.array(z.object({
     rowNumber: z.coerce.number().int().positive(),
@@ -100,7 +118,7 @@ export const empresaBody = z.object({
   bairro: optionalText(255),
   cidade: optionalText(120),
   uf: z.string().trim().max(2).optional().or(z.literal("")),
-  certificadoArquivo: optionalText(500),
+  certificadoArquivo: z.string().trim().max(8_000_000).optional().or(z.literal("")),
   certificadoSenha: optionalText(500),
   certificadoValidade: z.string().optional().nullable().or(z.literal("")),
   ativa: z.coerce.boolean().default(true),
@@ -173,11 +191,11 @@ export const veiculoBody = z.object({
 export const viagemBody = z.object({
   id: id.optional(), codigo: z.string().trim().max(30).optional().nullable(),
   status: z.enum(["PLANEJADA","CARREGANDO","EM_TRANSITO","ENTREGUE","FINALIZADA","CANCELADA"]).optional().default("PLANEJADA"),
-  placa: text(20), motoristaId: id, clienteId: id.optional().nullable().or(z.literal("")), valorFrete: money,
+  placa: text(20), motoristaId: id, valorFrete: money,
   dataManifesto: dateOnly, cidadeOrigem: z.string().trim().max(160).optional().default(""), cidadeEntrega: text(), rotas: z.array(text()).default([]),
   distanciaKm: money, kmSaida: z.coerce.number().finite().min(0).optional().nullable(), kmChegada: z.coerce.number().finite().min(0).optional().nullable(),
   dataSaida: z.string().optional().nullable().or(z.literal("")), previsaoChegada: z.string().optional().nullable().or(z.literal("")), dataChegada: z.string().optional().nullable().or(z.literal("")),
-  valorPedagio: money, valorDiaria: money, valorAbastecimento: money, valorChapa: money, observacoes: z.string().trim().max(5000).optional().default(""), createdAt: z.string().optional(),
+  valorPedagio: money, valorDiaria: money, valorAbastecimento: money, valorChapa: money, valorMulta: money.optional().default(0), custoExtraTag: z.string().trim().max(120).optional().default(""), valorCustoExtra: money.optional().default(0), observacoes: z.string().trim().max(5000).optional().default(""), createdAt: z.string().optional(),
 });
 export const fechamentoBody = z.object({
   id: id.optional(), motoristaId: id, dataInicio: dateOnly, dataFim: dateOnly,
@@ -406,7 +424,7 @@ export const updateProfileSchema = bodySchema(z.object({
 export const createUserSchema = bodySchema(z.object({ name: text(), username, email: z.string().email().transform(v => v.toLowerCase()), password, role: z.enum(["ADMIN", "GERENTE", "BORRACHARIA", "MANUTENCAO", "VISUALIZACAO", "USER"]).default("VISUALIZACAO") }));
 
 export const migrationSchema = bodySchema(z.object({
-  motoristas: z.array(motoristaBody).default([]), chapas: z.array(chapaBody).default([]), clientes: z.array(clienteBody).default([]), produtos: z.array(produtoBody).default([]), locais: z.array(localBody).default([]), veiculos: z.array(veiculoBody).default([]), viagens: z.array(viagemBody).default([]), fechamentos: z.array(fechamentoBody).default([]), manifestos: z.array(manifestoBody).default([]),
+  motoristas: z.array(motoristaBody).default([]), chapas: z.array(chapaBody).default([]), clientes: z.array(clienteBody).default([]), fornecedores: z.array(fornecedorBody).default([]), produtos: z.array(produtoBody).default([]), locais: z.array(localBody).default([]), veiculos: z.array(veiculoBody).default([]), viagens: z.array(viagemBody).default([]), fechamentos: z.array(fechamentoBody).default([]), manifestos: z.array(manifestoBody).default([]),
 }));
 
 export const pneuInstalacaoBody = z.object({
@@ -439,7 +457,7 @@ export const pneuRodizioBody = z.object({
     posicaoOrigem: text(80),
     eixoDestino: text(80),
     posicaoDestino: text(80),
-  })).min(2, "Selecione ao menos duas posições para o rodízio."),
+  })).min(1, "Selecione ao menos um pneu para o rodízio."),
 });
 
 

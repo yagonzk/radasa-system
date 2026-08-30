@@ -11,6 +11,25 @@ import {
 
 export const manifestosRoutes = Router();
 
+manifestosRoutes.post("/excluir-lote", async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.ids)
+      ? req.body.ids.map((id: unknown) => String(id ?? "").trim()).filter(Boolean)
+      : [];
+    if (!ids.length) {
+      res.status(400).json({ message: "Selecione ao menos um romaneio para excluir." });
+      return;
+    }
+    if (ids.length > 500) {
+      res.status(400).json({ message: "Exclua no máximo 500 romaneios por operação." });
+      return;
+    }
+    res.json(await manifestosService.removeMany(ids));
+  } catch (error) {
+    next(error);
+  }
+});
+
 
 function montarPendencias(documento: ReturnType<typeof interpretarTextoManifestoPdf>) {
   const pendencias: string[] = [];
@@ -56,6 +75,17 @@ manifestosRoutes.post(
       });
 
       res.json({ resultados });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+manifestosRoutes.post(
+  "/importar-planilha-item",
+  async (req, res, next) => {
+    try {
+      res.status(201).json(await manifestosService.createSpreadsheetItem(req.body));
     } catch (error) {
       next(error);
     }

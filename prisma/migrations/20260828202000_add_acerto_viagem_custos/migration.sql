@@ -1,0 +1,6 @@
+ALTER TABLE "viagens"
+  ADD COLUMN IF NOT EXISTS "valorMulta" DECIMAL(14,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "custoExtraTag" TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS "valorCustoExtra" DECIMAL(14,2) NOT NULL DEFAULT 0;
+
+UPDATE "viagens" SET "cidadeOrigem" = 'Ipiranga do Norte, MT';

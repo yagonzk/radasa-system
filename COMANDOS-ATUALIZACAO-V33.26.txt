@@ -1,0 +1,9 @@
+cd C:\Users\yago\Downloads\Radasa-System-Cloudflare-v1.4
+pnpm install
+pnpm exec prisma generate
+pnpm run check
+pnpm run build:cloudflare
+pnpm exec wrangler deploy
+
+# ou, se o script deploy estiver configurado:
+pnpm run deploy

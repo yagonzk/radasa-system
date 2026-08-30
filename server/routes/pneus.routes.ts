@@ -34,6 +34,7 @@ pneusRoutes.post("/:id/inspecoes", validate(bodySchema(pneuInspecaoBody)), async
 pneusRoutes.get("/instalacoes", asyncHandler(pneusOperacoesController.listInstallations));
 pneusRoutes.get("/rodizios", asyncHandler(pneusOperacoesController.listRotations));
 pneusRoutes.post("/rodizios", validate(bodySchema(pneuRodizioBody)), asyncHandler(pneusOperacoesController.rotate));
+pneusRoutes.delete("/rodizios/:id", asyncHandler(pneusOperacoesController.undoRotation));
 pneusRoutes.post("/:id/instalar", validate(bodySchema(pneuInstalacaoBody)), asyncHandler(pneusOperacoesController.install));
 pneusRoutes.post("/:id/retirar", validate(bodySchema(pneuRetiradaBody)), asyncHandler(pneusOperacoesController.retire));
 

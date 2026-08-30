@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Plus,
   TrendingUp,
@@ -24,6 +26,8 @@ import {
   Route,
   Trophy,
   AlertTriangle,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -116,6 +120,77 @@ const empty = {
   veiculoId: "",
   viagemId: "",
 };
+
+
+
+type SearchableOption = { value: string; label: string; keywords?: string };
+
+function SearchableSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  searchPlaceholder,
+  emptyText = "Nenhum resultado encontrado.",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: SearchableOption[];
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyText?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="mt-1 h-10 w-full justify-between px-3 font-normal"
+        >
+          <span className="truncate text-left">{selected?.label ?? placeholder}</span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} autoFocus />
+          <CommandList className="max-h-72">
+            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandItem
+              value={placeholder}
+              onSelect={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              <Check className={`h-4 w-4 ${value === "" ? "opacity-100" : "opacity-0"}`} />
+              <span className="truncate">{placeholder}</span>
+            </CommandItem>
+            {options.map((option) => (
+              <CommandItem
+                key={option.value}
+                value={`${option.label} ${option.keywords ?? ""}`}
+                onSelect={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                <Check className={`h-4 w-4 ${value === option.value ? "opacity-100" : "opacity-0"}`} />
+                <span className="truncate">{option.label}</span>
+              </CommandItem>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 const formatDate = (value?: string | null) => {
   if (!value) return "—";
@@ -225,6 +300,8 @@ export default function Financeiro() {
   const [form, setForm] = useState<LancamentoForm>({ ...empty, centroCustoId: "" });
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [activeTab, setActiveTab] = useState<"GERAL" | "RECEBER" | "PAGAR" | "MOVIMENTACOES" | "CENTROS">("GERAL");
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const load = async () => {
     try {
@@ -312,6 +389,22 @@ export default function Financeiro() {
     await load();
   };
 
+  const removeAll = async () => {
+    if (items.length === 0 || deletingAll) return;
+    const confirmed = window.confirm(`Excluir todas as ${items.length} movimentações financeiras? Esta ação não pode ser desfeita.`);
+    if (!confirmed) return;
+    try {
+      setDeletingAll(true);
+      const response = await api.delete("/financeiro/todos");
+      toast.success(`${response.data?.removidos ?? items.length} movimentação(ões) removida(s) de uma vez.`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Não foi possível excluir todas as movimentações.");
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
   const addCentro = async () => {
     if (!novoCentro.trim()) return;
     await api.post("/centros-custo", {
@@ -355,15 +448,31 @@ export default function Financeiro() {
       <div className="space-y-6 p-4 md:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold">Visão Geral</h1>
+            <h1 className="text-2xl font-bold">Financeiro</h1>
             <p className="text-sm text-muted-foreground">
-              Acompanhe contas, movimentações, centros de custo e resultado financeiro em uma única tela.
+              Gestão financeira organizada por áreas, sem repetir informação na mesma tela.
             </p>
           </div>
           <Button onClick={() => setOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Novo lançamento
           </Button>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border bg-card p-1">
+          <div className="flex min-w-max gap-1">
+            {([
+              ["GERAL", "Geral"],
+              ["RECEBER", "Contas a Receber"],
+              ["PAGAR", "Contas a Pagar"],
+              ["MOVIMENTACOES", "Movimentações"],
+              ["CENTROS", "Centro de Custos"],
+            ] as const).map(([key, label]) => (
+              <Button key={key} size="sm" variant={activeTab === key ? "default" : "ghost"} onClick={() => setActiveTab(key)}>
+                {label}
+              </Button>
+            ))}
+          </div>
         </div>
 
         <Card>
@@ -384,7 +493,7 @@ export default function Financeiro() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className={activeTab === "GERAL" ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-5" : "hidden"}>
           {cards.map((card) => (
             <Card key={card.title}>
               <CardContent className="p-4">
@@ -399,7 +508,7 @@ export default function Financeiro() {
         </div>
 
 
-        <Card>
+        <Card className={activeTab === "GERAL" ? "" : "hidden"}>
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -410,7 +519,7 @@ export default function Financeiro() {
                 {([
                   ["VEICULO", "Caminhões", Truck],
                   ["CLIENTE", "Clientes", Users],
-                  ["VIAGEM", "Viagens", Route],
+                  ["VIAGEM", "Acerto de Viagem", Route],
                 ] as const).map(([key, label, Icon]) => (
                   <Button key={key} size="sm" variant={ranking === key ? "default" : "ghost"} onClick={() => setRanking(key)}>
                     <Icon className="mr-1.5 h-4 w-4" />{label}
@@ -463,7 +572,7 @@ export default function Financeiro() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={activeTab === "GERAL" ? "" : "hidden"}>
           <CardHeader className="pb-3"><CardTitle className="text-base">Fluxo de Caixa e Previsão</CardTitle></CardHeader>
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -476,9 +585,10 @@ export default function Financeiro() {
           </CardContent>
         </Card>
 
-        {ranking === "VEICULO" && (analise?.custosPorVeiculo?.length ?? 0) > 0 && <Card><CardHeader><CardTitle className="text-base">Composição de custos por caminhão</CardTitle></CardHeader><CardContent className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Placa</th><th>Principais custos</th><th className="text-right">Total</th></tr></thead><tbody>{analise?.custosPorVeiculo?.map(row=><tr key={row.id} className="border-b"><td className="py-3 font-semibold">{row.placa}</td><td className="py-3"><div className="flex flex-wrap gap-1.5">{row.categorias.slice(0,8).map(c=><span key={c.categoria} className="rounded-md border bg-muted/20 px-2 py-1 text-xs">{c.categoria}: {money(c.valor)}</span>)}</div></td><td className="py-3 text-right font-bold">{money(row.total)}</td></tr>)}</tbody></table></CardContent></Card>}
+        {activeTab === "GERAL" && ranking === "VEICULO" && (analise?.custosPorVeiculo?.length ?? 0) > 0 && <Card><CardHeader><CardTitle className="text-base">Composição de custos por caminhão</CardTitle></CardHeader><CardContent className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Placa</th><th>Principais custos</th><th className="text-right">Total</th></tr></thead><tbody>{analise?.custosPorVeiculo?.map(row=><tr key={row.id} className="border-b"><td className="py-3 font-semibold">{row.placa}</td><td className="py-3"><div className="flex flex-wrap gap-1.5">{row.categorias.slice(0,8).map(c=><span key={c.categoria} className="rounded-md border bg-muted/20 px-2 py-1 text-xs">{c.categoria}: {money(c.valor)}</span>)}</div></td><td className="py-3 text-right font-bold">{money(row.total)}</td></tr>)}</tbody></table></CardContent></Card>}
 
         <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+          <div className={activeTab === "GERAL" || activeTab === "RECEBER" ? "min-w-0" : "hidden"}>
           <FinancialTable
             title="Contas a Receber"
             items={contasReceber}
@@ -487,6 +597,8 @@ export default function Financeiro() {
             onRemove={remove}
             onHistory={abrirHistorico}
           />
+          </div>
+          <div className={activeTab === "GERAL" || activeTab === "PAGAR" ? "min-w-0" : "hidden"}>
           <FinancialTable
             title="Contas a Pagar"
             items={contasPagar}
@@ -495,16 +607,25 @@ export default function Financeiro() {
             onRemove={remove}
             onHistory={abrirHistorico}
           />
+          </div>
         </div>
 
-        <Card>
+        <Card className={activeTab === "GERAL" || activeTab === "MOVIMENTACOES" ? "" : "hidden"}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <ListChecks className="h-4 w-4 text-muted-foreground" />
                 <CardTitle className="text-base">Movimentações</CardTitle>
               </div>
-              <span className="text-xs text-muted-foreground">Últimos {movimentacoes.length} lançamento(s)</span>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <span className="text-xs text-muted-foreground">Últimos {movimentacoes.length} lançamento(s)</span>
+                {items.length > 0 && (
+                  <Button size="sm" variant="destructive" onClick={() => void removeAll()} disabled={deletingAll}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {deletingAll ? "Excluindo..." : "Excluir tudo"}
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="overflow-x-auto">
@@ -552,8 +673,8 @@ export default function Financeiro() {
           </CardContent>
         </Card>
 
-        <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-          <Card>
+        <div className={activeTab === "GERAL" || activeTab === "CENTROS" ? "grid min-w-0 gap-4 xl:grid-cols-2" : "hidden"}>
+          <Card className={activeTab === "CENTROS" ? "xl:col-span-2" : ""}>
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <Landmark className="h-4 w-4 text-muted-foreground" />
@@ -592,12 +713,12 @@ export default function Financeiro() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className={activeTab === "GERAL" ? "" : "hidden"}>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <ReceiptText className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-base">DRE Gerencial</CardTitle>
+                  <CardTitle className="text-base">DRE Operacional</CardTitle>
                 </div>
                 <span className="text-xs text-muted-foreground">
                   Margem {(resumo?.margem || 0).toFixed(1)}%
@@ -700,55 +821,54 @@ export default function Financeiro() {
               </label>
               <label className="text-sm sm:col-span-2">
                 Viagem vinculada
-                <select
-                  className="mt-1 h-10 w-full rounded-md border bg-background px-3"
+                <SearchableSelect
                   value={form.viagemId}
-                  onChange={(e) => handleViagemChange(e.target.value)}
-                >
-                  <option value="">Sem viagem vinculada</option>
-                  {viagens.map((viagem) => (
-                    <option key={viagem.id} value={viagem.id}>{viagemLabel(viagem)}</option>
-                  ))}
-                </select>
+                  onChange={handleViagemChange}
+                  placeholder="Sem viagem vinculada"
+                  searchPlaceholder="Pesquisar viagem por placa, motorista, destino ou data..."
+                  options={viagens.map((viagem) => ({
+                    value: viagem.id,
+                    label: viagemLabel(viagem),
+                  }))}
+                />
               </label>
               <label className="text-sm">
                 Veículo
-                <select
-                  className="mt-1 h-10 w-full rounded-md border bg-background px-3"
+                <SearchableSelect
                   value={form.veiculoId}
-                  onChange={(e) => setForm({ ...form, veiculoId: e.target.value })}
-                >
-                  <option value="">Sem veículo vinculado</option>
-                  {veiculos.map((veiculo) => (
-                    <option key={veiculo.id} value={veiculo.id}>{veiculo.placa}</option>
-                  ))}
-                </select>
+                  onChange={(veiculoId) => setForm({ ...form, veiculoId })}
+                  placeholder="Sem veículo vinculado"
+                  searchPlaceholder="Pesquisar veículo por placa..."
+                  options={veiculos.map((veiculo) => ({
+                    value: veiculo.id,
+                    label: veiculo.placa,
+                    keywords: `${veiculo.modelo ?? ""} ${veiculo.marca ?? ""}`,
+                  }))}
+                />
               </label>
               <label className="text-sm">
                 Cliente
-                <select
-                  className="mt-1 h-10 w-full rounded-md border bg-background px-3"
+                <SearchableSelect
                   value={form.clienteId}
-                  onChange={(e) => setForm({ ...form, clienteId: e.target.value })}
-                >
-                  <option value="">Sem cliente vinculado</option>
-                  {clientes.map((cliente) => (
-                    <option key={cliente.id} value={cliente.id}>{cliente.nomeFantasia || cliente.razaoSocial}</option>
-                  ))}
-                </select>
+                  onChange={(clienteId) => setForm({ ...form, clienteId })}
+                  placeholder="Sem cliente vinculado"
+                  searchPlaceholder="Pesquisar cliente por nome..."
+                  options={clientes.map((cliente) => ({
+                    value: cliente.id,
+                    label: cliente.nomeFantasia || cliente.razaoSocial,
+                    keywords: `${cliente.razaoSocial ?? ""} ${cliente.nomeFantasia ?? ""} ${cliente.cnpj ?? ""}`,
+                  }))}
+                />
               </label>
               <label className="text-sm sm:col-span-2">
                 Centro de custo
-                <select
-                  className="mt-1 h-10 w-full rounded-md border bg-background px-3"
+                <SearchableSelect
                   value={form.centroCustoId}
-                  onChange={(e) => setForm({ ...form, centroCustoId: e.target.value })}
-                >
-                  <option value="">Sem centro de custo</option>
-                  {centros.map((centro) => (
-                    <option key={centro.id} value={centro.id}>{centro.nome}</option>
-                  ))}
-                </select>
+                  onChange={(centroCustoId) => setForm({ ...form, centroCustoId })}
+                  placeholder="Sem centro de custo"
+                  searchPlaceholder="Pesquisar centro de custo..."
+                  options={centros.map((centro) => ({ value: centro.id, label: centro.nome, keywords: centro.tipo }))}
+                />
               </label>
             </div>
             <div className="flex justify-end gap-2">

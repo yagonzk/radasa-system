@@ -12,6 +12,7 @@ import {
   Truck,
 } from "lucide-react";
 import Layout from "@/components/Layout";
+import CiotSubtabs from "@/components/ciot/CiotSubtabs";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -239,6 +240,7 @@ export default function CiotConfiguracaoPage() {
   return (
     <Layout>
       <div className="mx-auto w-full min-w-0 max-w-6xl space-y-6">
+        <CiotSubtabs />
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl font-bold">Configuração ANTT</h1>

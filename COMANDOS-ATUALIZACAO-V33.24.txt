@@ -1,0 +1,10 @@
+# Execute dentro da pasta do projeto
+
+pnpm install
+pnpm exec prisma generate
+pnpm run check
+pnpm run build:cloudflare
+pnpm exec wrangler deploy
+
+# Ou, se preferir usar o script de deploy já configurado:
+pnpm run deploy

@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import Layout from "@/components/Layout";
+import CiotSubtabs from "@/components/ciot/CiotSubtabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1234,6 +1235,7 @@ export default function CiotGerarPage() {
   return (
     <Layout>
       <div className="mx-auto w-full min-w-0 max-w-[1800px] space-y-6 px-0 sm:space-y-8 sm:px-2 xl:px-4">
+        <CiotSubtabs />
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl font-bold">Gerar CIOTs</h1>

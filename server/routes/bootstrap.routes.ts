@@ -2,6 +2,7 @@ import { Router } from "express";
 import { motoristasService } from "../services/motoristas.service.js";
 import { chapasService } from "../services/chapas.service.js";
 import { clientesService } from "../services/clientes.service.js";
+import { fornecedoresService } from "../services/fornecedores.service.js";
 import { empresaService } from "../services/empresa.service.js";
 import { produtosService } from "../services/produtos.service.js";
 import { locaisService } from "../services/locais.service.js";
@@ -16,6 +17,7 @@ const loaders = {
   motoristas: () => motoristasService.list(),
   chapas: () => chapasService.list(),
   clientes: () => clientesService.list(),
+  fornecedores: () => fornecedoresService.list(),
   empresa: () => empresaService.list(),
   produtos: () => produtosService.list(),
   locais: () => locaisService.list(),
@@ -37,7 +39,7 @@ bootstrapRoutes.get("/", async (req, res) => {
     .map((value) => value.trim())
     .filter((value): value is ResourceName => value in loaders);
 
-  const resources = [...new Set(requested)].slice(0, 12);
+  const resources = [...new Set(requested)].slice(0, 16);
   if (!resources.length) {
     res.status(400).json({ message: "Informe ao menos um recurso válido." });
     return;

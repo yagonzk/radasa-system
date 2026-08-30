@@ -10,6 +10,7 @@ financeiroRoutes.get("/fluxo-caixa", asyncHandler(financeiroController.fluxo));
 financeiroRoutes.get("/baixas", asyncHandler(financeiroController.baixas));
 financeiroRoutes.post("/:id/baixas", validate(idParamsSchema), asyncHandler(financeiroController.adicionarBaixa));
 financeiroRoutes.delete("/baixas/:id", validate(idParamsSchema), asyncHandler(financeiroController.removerBaixa));
+financeiroRoutes.delete("/todos", asyncHandler(financeiroController.removeAll));
 financeiroRoutes.get("/", asyncHandler(financeiroController.list));
 financeiroRoutes.get("/:id", validate(idParamsSchema), asyncHandler(financeiroController.get));
 financeiroRoutes.post("/", validate(bodySchema(lancamentoFinanceiroBody)), asyncHandler(financeiroController.create));

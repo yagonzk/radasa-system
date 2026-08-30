@@ -19,6 +19,25 @@ const upload = multer({
 
 export const abastecimentosRoutes = Router();
 
+abastecimentosRoutes.post("/excluir-lote", async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.ids)
+      ? req.body.ids.map((id: unknown) => String(id ?? "").trim()).filter(Boolean)
+      : [];
+    if (!ids.length) {
+      res.status(400).json({ message: "Selecione ao menos um abastecimento para excluir." });
+      return;
+    }
+    if (ids.length > 500) {
+      res.status(400).json({ message: "Exclua no máximo 500 abastecimentos por operação." });
+      return;
+    }
+    res.json(await abastecimentosService.removeMany(ids));
+  } catch (error) {
+    next(error);
+  }
+});
+
 abastecimentosRoutes.post("/interpretar-texto-pdf", async (req, res, next) => {
   try {
     const texto = String(req.body?.texto ?? "");

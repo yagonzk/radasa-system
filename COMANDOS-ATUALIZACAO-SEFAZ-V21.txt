@@ -1,0 +1,44 @@
+RADASA SYSTEM - SEFAZ AUTOMATICA V21
+
+1) MIGRACAO E PUBLICACAO
+
+cd C:\Users\yago\Downloads\Radasa-System-Cloudflare-v1.4
+pnpm install
+npx prisma generate
+npx prisma migrate deploy
+pnpm run check
+pnpm run deploy:cloudflare
+
+2) CONFIGURACAO UNICA DO CERTIFICADO PARA O CLOUDFLARE WORKER
+
+IMPORTANTE: o Cloudflare Workers nao aceita PFX/passphrase dinamicamente no https.Agent.
+Para chamadas mTLS a SEFAZ, o certificado precisa ser cadastrado tambem como binding mTLS do Worker.
+
+Converta seu A1 PFX para PEM (execute na pasta onde esta o certificado):
+
+openssl pkcs12 -in certificado.pfx -clcerts -nokeys -out sefaz-cert.pem
+openssl pkcs12 -in certificado.pfx -nocerts -nodes -out sefaz-key.pem
+
+Envie para o Cloudflare:
+
+npx wrangler mtls-certificate upload --cert sefaz-cert.pem --key sefaz-key.pem --name radasa-sefaz
+
+O comando retornara um CERTIFICATE_ID. Depois acrescente ao wrangler.jsonc:
+
+"mtls_certificates": [
+  {
+    "binding": "SEFAZ_MTLS",
+    "certificate_id": "COLE_AQUI_O_CERTIFICATE_ID"
+  }
+],
+
+Depois publique novamente:
+
+pnpm run deploy:cloudflare
+
+3) USO
+
+Abra: Fiscal > Documentos Fiscais
+Clique: Sincronizar SEFAZ
+
+O sistema grava o ultNSU, baixa somente os proximos DF-e, classifica as notas e importa automaticamente os abastecimentos que possuam dados suficientes.

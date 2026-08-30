@@ -135,6 +135,105 @@ export const pneusOperacoesService = {
     return items.map(serializeRotation);
   },
 
+  async undoRotation(id: string) {
+    const rotation: any = await prisma.pneuRodizio.findUnique({
+      where: { id },
+      include: { veiculo: true, carreta: true, movimentos: { include: { pneu: true } } },
+    });
+    if (!rotation) throw new AppError(404, "Rodízio não encontrado.");
+    if (!rotation.movimentos.length) throw new AppError(409, "Este rodízio não possui movimentações para desfazer.");
+
+    const pneuIds = rotation.movimentos.map((m: any) => m.pneuId);
+    const laterRotation = await prisma.pneuRodizioMovimento.findFirst({
+      where: {
+        pneuId: { in: pneuIds },
+        rodizio: { createdAt: { gt: rotation.createdAt } },
+      },
+      include: { rodizio: true },
+    });
+    if (laterRotation) {
+      throw new AppError(409, "Não é possível desfazer este rodízio porque um dos pneus possui um rodízio posterior.");
+    }
+
+    const active: any[] = await prisma.pneuInstalacao.findMany({
+      where: { pneuId: { in: pneuIds }, ativo: true },
+    });
+    if (active.length !== pneuIds.length) {
+      throw new AppError(409, "Não é possível desfazer: um dos pneus já foi retirado ou reinstalado após este rodízio.");
+    }
+
+    const crossVehicle = Boolean(rotation.carretaId && rotation.carretaId !== rotation.veiculoId);
+    const byPneu = new Map<string, any>(active.map((i: any) => [i.pneuId, i]));
+
+    // Só desfaz quando os pneus ainda estão exatamente nos destinos registrados.
+    for (const movement of rotation.movimentos) {
+      const current = byPneu.get(movement.pneuId);
+      if (!current || current.eixo !== movement.eixoDestino || current.posicao !== movement.posicaoDestino) {
+        throw new AppError(409, "Não é possível desfazer: a posição atual de um dos pneus já foi alterada depois deste rodízio.");
+      }
+    }
+
+    const movingPneuIds = new Set(pneuIds);
+    for (const movement of rotation.movimentos) {
+      const current = byPneu.get(movement.pneuId)!;
+      const originVehicleId = crossVehicle
+        ? (current.veiculoId === rotation.veiculoId ? rotation.carretaId : rotation.veiculoId)
+        : current.veiculoId;
+      const occupied = await prisma.pneuInstalacao.findFirst({
+        where: {
+          ativo: true,
+          veiculoId: originVehicleId,
+          carretaId: null,
+          eixo: movement.eixoOrigem,
+          posicao: movement.posicaoOrigem,
+        },
+      });
+      if (occupied && !movingPneuIds.has(occupied.pneuId)) {
+        throw new AppError(409, "Não é possível desfazer: uma posição de origem já está ocupada por outro pneu.");
+      }
+    }
+
+    await prisma.$transaction(async (tx: any) => {
+      for (const current of active) {
+        await tx.pneuInstalacao.update({
+          where: { id: current.id },
+          data: { eixo: `TEMP-UNDO-${current.id}`, posicao: `TEMP-UNDO-${current.id}` },
+        });
+      }
+
+      for (const movement of rotation.movimentos) {
+        const current = byPneu.get(movement.pneuId)!;
+        const originVehicleId = crossVehicle
+          ? (current.veiculoId === rotation.veiculoId ? rotation.carretaId : rotation.veiculoId)
+          : current.veiculoId;
+        await tx.pneuInstalacao.update({
+          where: { id: current.id },
+          data: {
+            veiculoId: originVehicleId,
+            carretaId: null,
+            eixo: movement.eixoOrigem,
+            posicao: movement.posicaoOrigem,
+          },
+        });
+        await tx.pneuEvento.create({
+          data: {
+            pneuId: movement.pneuId,
+            tipo: "ALTERACAO",
+            data: new Date(),
+            quilometragem: Number(rotation.quilometragem),
+            responsavel: rotation.responsavel,
+            observacoes: `Rodízio desfeito: ${movement.eixoDestino} / ${movement.posicaoDestino} → ${movement.eixoOrigem} / ${movement.posicaoOrigem}.`,
+            dados: { rodizioDesfeitoId: rotation.id, movimentoId: movement.id },
+          },
+        });
+      }
+
+      await tx.pneuRodizio.delete({ where: { id: rotation.id } });
+    });
+
+    return { ok: true };
+  },
+
   async rotate(input: any) {
     const destinations = new Set(input.movimentos.map((m: any) => `${m.eixoDestino}:${m.posicaoDestino}`));
     if (destinations.size !== input.movimentos.length) throw new AppError(400, "As posições de destino não podem se repetir.");
@@ -143,15 +242,48 @@ export const pneusOperacoesService = {
     const active: any[] = await prisma.pneuInstalacao.findMany({ where: { pneuId: { in: ids }, ativo: true } });
     if (active.length !== ids.length) throw new AppError(409, "Todos os pneus do rodízio precisam estar instalados.");
 
+    const crossVehicle = Boolean(input.carretaId && input.carretaId !== input.veiculoId);
+    const allowedVehicles = new Set([input.veiculoId, ...(crossVehicle ? [input.carretaId] : [])]);
     const byPneu = new Map<string, any>(active.map((i: any) => [i.pneuId, i]));
+
     for (const movement of input.movimentos) {
       const current = byPneu.get(movement.pneuId);
       if (!current || current.eixo !== movement.eixoOrigem || current.posicao !== movement.posicaoOrigem) {
         throw new AppError(409, "Uma das posições de origem não corresponde à instalação atual.");
       }
+      if (current.carretaId || !allowedVehicles.has(current.veiculoId)) {
+        throw new AppError(409, "Os pneus selecionados não pertencem aos caminhões informados para o rodízio.");
+      }
+    }
+
+    if (crossVehicle && (active.length < 1 || active.length > 2)) {
+      throw new AppError(400, "No rodízio entre caminhões, mova um pneu para uma posição livre ou troque dois pneus entre os caminhões.");
+    }
+
+    // Garante que cada destino esteja realmente livre, exceto quando o pneu que ocupa
+    // o destino também participa do mesmo rodízio e será movido para outra posição.
+    const movingPneuIds = new Set(ids);
+    for (const movement of input.movimentos) {
+      const current = byPneu.get(movement.pneuId)!;
+      const destinationVehicleId = crossVehicle
+        ? (current.veiculoId === input.veiculoId ? input.carretaId : input.veiculoId)
+        : current.veiculoId;
+      const occupied = await prisma.pneuInstalacao.findFirst({
+        where: {
+          ativo: true,
+          veiculoId: destinationVehicleId,
+          carretaId: null,
+          eixo: movement.eixoDestino,
+          posicao: movement.posicaoDestino,
+        },
+      });
+      if (occupied && !movingPneuIds.has(occupied.pneuId)) {
+        throw new AppError(409, "A posição de destino já possui um pneu instalado.");
+      }
     }
 
     return prisma.$transaction(async (tx: any) => {
+      // Libera temporariamente as duas posições para permitir a troca inclusive entre veículos.
       for (const current of active) {
         await tx.pneuInstalacao.update({ where: { id: current.id }, data: { eixo: `TEMP-${current.id}`, posicao: `TEMP-${current.id}` } });
       }
@@ -159,7 +291,8 @@ export const pneusOperacoesService = {
       const rotation = await tx.pneuRodizio.create({
         data: {
           veiculoId: input.veiculoId,
-          carretaId: input.carretaId || null,
+          // Em rodízio entre caminhões este campo registra o segundo veículo.
+          carretaId: crossVehicle ? input.carretaId : null,
           data: parseDateOnly(input.data),
           quilometragem: Number(input.quilometragem),
           responsavel: input.responsavel,
@@ -171,9 +304,18 @@ export const pneusOperacoesService = {
 
       for (const movement of input.movimentos) {
         const current = byPneu.get(movement.pneuId)!;
+        const destinationVehicleId = crossVehicle
+          ? (current.veiculoId === input.veiculoId ? input.carretaId : input.veiculoId)
+          : current.veiculoId;
+
         await tx.pneuInstalacao.update({
           where: { id: current.id },
-          data: { eixo: movement.eixoDestino, posicao: movement.posicaoDestino },
+          data: {
+            veiculoId: destinationVehicleId,
+            carretaId: null,
+            eixo: movement.eixoDestino,
+            posicao: movement.posicaoDestino,
+          },
         });
         await tx.pneuEvento.create({
           data: {
@@ -182,8 +324,15 @@ export const pneusOperacoesService = {
             data: parseDateOnly(input.data),
             quilometragem: Number(input.quilometragem),
             responsavel: input.responsavel,
-            observacoes: `${movement.eixoOrigem} / ${movement.posicaoOrigem} → ${movement.eixoDestino} / ${movement.posicaoDestino}. ${input.motivo}`,
-            dados: movement,
+            observacoes: crossVehicle
+              ? `Rodízio entre caminhões: ${movement.eixoOrigem} / ${movement.posicaoOrigem} → ${movement.eixoDestino} / ${movement.posicaoDestino}. ${input.motivo}`
+              : `${movement.eixoOrigem} / ${movement.posicaoOrigem} → ${movement.eixoDestino} / ${movement.posicaoDestino}. ${input.motivo}`,
+            dados: {
+              ...movement,
+              veiculoOrigemId: current.veiculoId,
+              veiculoDestinoId: destinationVehicleId,
+              entreCaminhoes: crossVehicle,
+            },
           },
         });
       }

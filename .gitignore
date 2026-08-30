@@ -124,3 +124,8 @@ client/public/__manus__/version.json
 
 # Vercel/Vite build output at project root
 /public/
+
+# Certificados locais SEFAZ
+*.pfx
+*.p12
+*.pem

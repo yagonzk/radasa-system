@@ -181,7 +181,7 @@ export default function FechamentoForm({
       setAutoResumo("Nenhuma viagem encontrada para este motorista no período selecionado.");
     } else {
       setAutoResumo(
-        `${totalVinculadas} de ${totalEncontradas} viagem(ns) carregada(s) automaticamente da aba Viagens.`
+        `${totalVinculadas} de ${totalEncontradas} viagem(ns) carregada(s) automaticamente da aba Acerto de Viagem.`
       );
     }
   }, [dataFim, dataInicio, editingFechamento, locais, motoristaId, viagensDoPeriodo]);
@@ -300,7 +300,7 @@ export default function FechamentoForm({
               <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
                 <Route className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <div>
-                  <p className="text-sm font-semibold">Viagens carregadas automaticamente</p>
+                  <p className="text-sm font-semibold">Acertos carregados automaticamente</p>
                   <p className="text-xs text-muted-foreground">{autoResumo}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Regra: Colniza R$ 350,00 · cidades do Pará R$ 300,00 · demais cidades R$ 275,00.
@@ -326,7 +326,7 @@ export default function FechamentoForm({
           {/* Viagens */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Viagens por Local</Label>
+              <Label className="text-sm font-medium">Acertos por Local</Label>
               <Button
                 type="button"
                 variant="outline"

@@ -318,6 +318,88 @@ export const manifestosService = {
     return serialize(item);
   },
 
+  async createSpreadsheetItem(input: any) {
+    const rows = Array.isArray(input?.produtos) ? input.produtos : [];
+    if (!rows.length) throw new AppError(400, "O romaneio não possui itens para importar.");
+
+    const cleanCode = (value: unknown) => String(value ?? "").trim().split("/")[0];
+    const plateKey = normalizeKeyPart(input?.placaVeiculo);
+    if (!plateKey) throw new AppError(400, "Informe a placa do veículo.");
+
+    const vehicle = await prisma.veiculo.findFirst({
+      where: { placa: { equals: formatPlate(input.placaVeiculo), mode: "insensitive" } },
+      select: { id: true, placa: true, modelo: true },
+    });
+    if (!vehicle) throw new AppError(400, `Placa ${String(input.placaVeiculo ?? "")} não cadastrada.`);
+
+    const clientCodes: string[] = Array.from(new Set<string>(rows.map((row: any) => cleanCode(row.clienteCodigo)).filter((code: string) => Boolean(code))));
+    const productCodes: string[] = Array.from(new Set<string>(rows.map((row: any) => cleanCode(row.produtoCodigo)).filter((code: string) => Boolean(code))));
+
+    const [existingClients, existingProducts] = await Promise.all([
+      prisma.cliente.findMany({ where: { codigoInterno: { in: clientCodes } } }),
+      prisma.produto.findMany({ where: { codigoInterno: { in: productCodes } } }),
+    ]);
+    const clients = new Map(existingClients.map((item) => [cleanCode(item.codigoInterno), item]));
+    const products = new Map(existingProducts.map((item) => [cleanCode(item.codigoInterno), item]));
+
+    // Cria somente os cadastros realmente ausentes deste romaneio. Como esta rota
+    // recebe um romaneio por request, cada chamada permanece pequena no Worker.
+    for (const row of rows) {
+      const code = cleanCode(row.clienteCodigo);
+      if (!code || clients.has(code)) continue;
+      const name = String(row.clienteNome || code).trim() || code;
+      const createdClient = await prisma.cliente.create({
+        data: { nomeFantasia: name, razaoSocial: name, codigoInterno: code, cnpj: "", email: "-", telefone: "-", enderecoFiscal: "-" },
+      });
+      clients.set(code, createdClient);
+    }
+    for (const row of rows) {
+      const code = cleanCode(row.produtoCodigo);
+      if (!code || products.has(code)) continue;
+      const name = String(row.produtoDescricao || code).trim() || code;
+      const createdProduct = await prisma.produto.create({
+        data: { nome: name, codigoInterno: code, categoriaEstoque: "Produtos de piscina" },
+      });
+      products.set(code, createdProduct);
+    }
+
+    const produtos = rows.map((row: any) => {
+      const cliente = clients.get(cleanCode(row.clienteCodigo));
+      const produto = products.get(cleanCode(row.produtoCodigo));
+      if (!cliente || !produto) throw new AppError(400, "Não foi possível resolver cliente/produto do romaneio.");
+      return {
+        produtoId: produto.id,
+        clienteId: cliente.id,
+        romaneio: String(row.romaneio || ""),
+        notaFiscal: String(row.notaFiscal || ""),
+        serieNf: String(row.serieNf || ""),
+        instrucaoCobranca: String(row.instrucaoCobranca || ""),
+        quantidade: Number(row.quantidade || 0),
+        valorUnitario: Number(row.valorUnitario || 0),
+        valorTotal: Number(row.valorTotal || 0),
+        tipoManifesto: String(row.tipoManifesto || "Acertar c/ Lebrinha"),
+      };
+    });
+
+    const first = produtos[0];
+    const payload = {
+      clienteId: first.clienteId,
+      dataManifesto: input.dataManifesto,
+      produtos,
+      tipoManifesto: first.tipoManifesto,
+      transportadoraCodigo: String(input.transportadoraCodigo || ""),
+      transportadoraNome: String(input.transportadoraNome || ""),
+      veiculoCodigo: vehicle.id,
+      placaVeiculo: vehicle.placa,
+      modeloVeiculo: vehicle.modelo || "",
+      romaneios: String(input.romaneios || ""),
+      notasFiscais: String(input.notasFiscais || ""),
+    };
+
+    const createdItem = await this.create(payload);
+    return { id: createdItem.id };
+  },
+
   async createMany(inputs: any[]) {
     if (!Array.isArray(inputs) || !inputs.length) return { imported: [], failed: [] };
 
@@ -447,6 +529,15 @@ export const manifestosService = {
       });
     });
     return serialize(item);
+  },
+
+  async removeMany(ids: string[]) {
+    const uniqueIds = Array.from(new Set(ids)).slice(0, 500);
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.manifestoProduto.deleteMany({ where: { manifestoId: { in: uniqueIds } } });
+      return tx.manifesto.deleteMany({ where: { id: { in: uniqueIds } } });
+    });
+    return { requested: uniqueIds.length, deleted: result.count };
   },
 
   async remove(id: string) {

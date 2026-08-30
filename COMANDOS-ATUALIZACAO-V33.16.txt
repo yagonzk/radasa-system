@@ -1,0 +1,11 @@
+cd C:\Users\yago\Downloads\Radasa-System-Cloudflare-v1.4
+
+pnpm install
+npx prisma generate
+
+# Se o migrate deploy informar que 20260828133500_add_motorista_cnh_emissao falhou anteriormente, rode UMA VEZ:
+# npx prisma migrate resolve --rolled-back 20260828133500_add_motorista_cnh_emissao
+
+npx prisma migrate deploy
+pnpm run build
+npx wrangler deploy

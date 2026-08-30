@@ -1,0 +1,1 @@
+ALTER TYPE "StatusMotorista" ADD VALUE IF NOT EXISTS 'FERIAS';

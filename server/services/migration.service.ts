@@ -8,6 +8,7 @@ export const migrationService = {
       for (const x of data.motoristas) await tx.motorista.upsert({ where: { id: x.id }, update: {}, create: { ...x, status: x.status ?? "ATIVO", createdAt: x.createdAt ? new Date(x.createdAt) : undefined } });
       for (const x of data.chapas) await tx.chapa.upsert({ where: { id: x.id }, update: {}, create: { ...x, createdAt: x.createdAt ? new Date(x.createdAt) : undefined } });
       for (const x of data.clientes) await tx.cliente.upsert({ where: { id: x.id }, update: {}, create: { ...x, createdAt: x.createdAt ? new Date(x.createdAt) : undefined } });
+      for (const x of data.fornecedores ?? []) await tx.fornecedor.upsert({ where: { id: x.id }, update: {}, create: { ...x, createdAt: x.createdAt ? new Date(x.createdAt) : undefined } });
       for (const x of data.produtos) await tx.produto.upsert({ where: { id: x.id }, update: {}, create: { ...x, createdAt: x.createdAt ? new Date(x.createdAt) : undefined } });
       for (const x of data.locais) await tx.local.upsert({ where: { id: x.id }, update: {}, create: { ...x, createdAt: x.createdAt ? new Date(x.createdAt) : undefined } });
       for (const x of data.veiculos) await tx.veiculo.upsert({ where: { id: x.id }, update: {}, create: { ...x, modelo: x.modelo || null, createdAt: x.createdAt ? new Date(x.createdAt) : undefined } });

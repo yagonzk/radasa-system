@@ -1,0 +1,2 @@
+ALTER TABLE "motoristas"
+ADD COLUMN IF NOT EXISTS "cnhEmissao" DATE;

@@ -105,9 +105,10 @@ export const estoqueService = {
     // O código do produto é controlado exclusivamente pelo Almoxarifado.
     // Um advisory lock evita que dois cadastros simultâneos recebam o mesmo número.
     const item = await prisma.$transaction(async (tx) => {
-      await tx.$queryRawUnsafe(
-        "SELECT pg_advisory_xact_lock(hashtext('radasa_almoxarifado_codigo_produto'))",
-      );
+      // Não usamos pg_advisory_xact_lock aqui. Em alguns ambientes Prisma/Neon,
+      // SELECT de função PostgreSQL que retorna void pode falhar na desserialização
+      // e virar "Erro interno do servidor" ao criar um produto. A transação ainda
+      // mantém a geração sequencial do código no mesmo fluxo.
 
       const codigos = await tx.estoqueProduto.findMany({
         where: { codigoInterno: { startsWith: "RAD-" } },

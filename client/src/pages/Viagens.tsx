@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
-import { useViagens, useMotoristas, useVeiculos, useClientes, type Motorista, type Veiculo, type Viagem } from "@/lib/store";
+import { useViagens, useMotoristas, useVeiculos, type Motorista, type Veiculo, type Viagem } from "@/lib/store";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 import { api } from "@/lib/api";
 import { extrairTextoPdf, type PdfTextProgress } from "@/lib/pdfText";
@@ -23,7 +23,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Check, ChevronDown, Plus, Trash2, Edit3, Eye, FileText, LoaderCircle, Search, X } from "lucide-react";
+import { Check, ChevronDown, Plus, Trash2, Edit3, Eye, FileText, LoaderCircle, Search, X, ReceiptText, CircleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 
@@ -83,7 +83,7 @@ const viagemColumns: Array<{
 ];
 
 function viagemTotalCusto(viagem: Viagem) {
-  return viagem.valorAbastecimento + viagem.valorPedagio + viagem.valorDiaria + viagem.valorChapa;
+  return viagem.valorAbastecimento + viagem.valorPedagio + viagem.valorDiaria + viagem.valorChapa + Number(viagem.valorMulta || 0) + Number(viagem.valorCustoExtra || 0);
 }
 
 function viagemCustoPorKm(viagem: Viagem) {
@@ -145,6 +145,16 @@ type RentabilidadeViagem = {
   lancamentos: { id: string; tipo: "RECEITA" | "DESPESA"; descricao: string; categoria: string; valor: number; status: string; dataCompetencia: string }[];
 };
 
+
+type ExtratoPreviewItem = {
+  fingerprint: string; arquivo: string; data: string; hora: string; tipo: "PEDAGIO" | "CHAPA"; valor: number; descricao: string; colaborador: string;
+  motoristaId?: string | null; viagemId?: string | null; viagemCodigo?: string | null; viagemData?: string | null; placa?: string | null; diasDesdeInicio?: number | null; duplicado: boolean; status: "VINCULADO" | "REVISAR" | "DUPLICADO";
+};
+type ExtratoPreview = {
+  items: ExtratoPreviewItem[];
+  resumo: { total: number; ignorados: number; duplicados: number; vinculados: number; revisar: number; pedagios: number; valorPedagios: number; chapas: number; valorChapas: number };
+};
+
 function normalizeLookup(value: string) {
   return String(value ?? "")
     .normalize("NFD")
@@ -204,34 +214,33 @@ export default function Viagens() {
   const [activeColumnFilter, setActiveColumnFilter] = useState<ViagemFilterKey | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState("");
   const { items: veiculos } = useVeiculos();
-  const { items: clientes } = useClientes();
 
   // Form state
   const [placa, setPlaca] = useState("");
   const [motoristaId, setMotoristaId] = useState("");
   const [valorFrete, setValorFrete] = useState("");
   const [dataManifesto, setDataManifesto] = useState("");
-  const [cidadeOrigem, setCidadeOrigem] = useState("");
+  const [cidadeOrigem, setCidadeOrigem] = useState("Ipiranga do Norte, MT");
   const [cidadeEntrega, setCidadeEntrega] = useState("");
-  const [statusViagem, setStatusViagem] = useState<Viagem["status"]>("PLANEJADA");
-  const [dataSaida, setDataSaida] = useState("");
-  const [previsaoChegada, setPrevisaoChegada] = useState("");
-  const [dataChegada, setDataChegada] = useState("");
-  const [kmSaida, setKmSaida] = useState("");
-  const [kmChegada, setKmChegada] = useState("");
   const [observacoes, setObservacoes] = useState("");
-  const [clienteId, setClienteId] = useState("");
   const [rotas, setRotas] = useState<string[]>([]);
   const [novaRota, setNovaRota] = useState("");
   const [distanciaKm, setDistanciaKm] = useState("");
   const [valorPedagio, setValorPedagio] = useState("");
   const [valorDiaria, setValorDiaria] = useState("");
   const [valorChapa, setValorChapa] = useState("");
+  const [valorMulta, setValorMulta] = useState("");
+  const [valorCustoExtra, setValorCustoExtra] = useState("");
   const [saving, setSaving] = useState(false);
   const manifestoInputRef = useRef<HTMLInputElement>(null);
   const [readingManifesto, setReadingManifesto] = useState(false);
   const [readingManifestoLabel, setReadingManifestoLabel] = useState("");
   const [manifestoVinculado, setManifestoVinculado] = useState<ManifestoVinculado | null>(null);
+  const extratoInputRef = useRef<HTMLInputElement>(null);
+  const [extratoOpen, setExtratoOpen] = useState(false);
+  const [extratoPreview, setExtratoPreview] = useState<ExtratoPreview | null>(null);
+  const [extratoLoading, setExtratoLoading] = useState(false);
+  const [extratoSaving, setExtratoSaving] = useState(false);
   const [rentabilidade, setRentabilidade] = useState<RentabilidadeViagem | null>(null);
   const [loadingRentabilidade, setLoadingRentabilidade] = useState(false);
 
@@ -255,10 +264,6 @@ export default function Viagens() {
     [motoristas],
   );
 
-  const clienteById = useMemo(
-    () => new Map(clientes.map((cliente) => [cliente.id, cliente])),
-    [clientes],
-  );
 
   useEffect(() => {
     if (!viewingViagem) {
@@ -365,24 +370,26 @@ export default function Viagens() {
   };
 
   const handlePlacaChange = (novaPlaca: string) => {
+    // A placa e o motorista da viagem são independentes.
+    // Alterar a placa não deve sobrescrever o motorista escolhido manualmente.
     setPlaca(novaPlaca);
-    const vehicle = veiculos.find((item) => normalizePlate(item.placa) === normalizePlate(novaPlaca));
-    setMotoristaId(linkedMotoristaForVehicle(vehicle));
   };
 
   const handleOpenCreate = () => {
-    if (motoristasAtivos.length === 0) {
-      toast.error("Cadastre ou reative pelo menos um motorista antes de criar uma viagem.");
-      return;
-    }
-    if (veiculos.length === 0) {
-      toast.error("Cadastre pelo menos uma placa antes de criar uma viagem.");
-      return;
-    }
+    // O botão de registrar acerto deve sempre abrir a ficha.
+    // Validações de placa/motorista acontecem no salvamento, evitando o clique
+    // parecer "sem funcionar" enquanto os cadastros ainda estão carregando.
     resetForm();
     setManifestoVinculado(null);
     setEditingViagem(null);
     setFormOpen(true);
+
+    if (motoristasAtivos.length === 0) {
+      toast.warning("Nenhum motorista ativo foi carregado. A ficha foi aberta; revise o cadastro antes de salvar.");
+    }
+    if (veiculos.length === 0) {
+      toast.warning("Nenhuma placa foi carregada. A ficha foi aberta; revise o cadastro antes de salvar.");
+    }
   };
 
   const handleOpenEdit = (v: Viagem) => {
@@ -392,22 +399,17 @@ export default function Viagens() {
     setMotoristaId(v.motoristaId);
     setValorFrete(String(v.valorFrete));
     setDataManifesto(v.dataManifesto);
-    setCidadeOrigem(v.cidadeOrigem ?? "");
+    setCidadeOrigem("Ipiranga do Norte, MT");
     setCidadeEntrega(v.cidadeEntrega);
-    setStatusViagem(v.status ?? "PLANEJADA");
-    setDataSaida(v.dataSaida ? v.dataSaida.slice(0,16) : "");
-    setPrevisaoChegada(v.previsaoChegada ? v.previsaoChegada.slice(0,16) : "");
-    setDataChegada(v.dataChegada ? v.dataChegada.slice(0,16) : "");
-    setKmSaida(v.kmSaida == null ? "" : String(v.kmSaida));
-    setKmChegada(v.kmChegada == null ? "" : String(v.kmChegada));
     setObservacoes(v.observacoes ?? "");
-    setClienteId(v.clienteId ?? "");
     setRotas(v.rotas ?? []);
     setNovaRota("");
     setDistanciaKm(String(v.distanciaKm));
-    setValorPedagio(String(v.valorPedagio));
+    setValorPedagio(String(v.valorPedagioManual ?? v.valorPedagio));
     setValorDiaria(String(v.valorDiaria));
-    setValorChapa(String(v.valorChapa));
+    setValorChapa(String(v.valorChapaManual ?? v.valorChapa));
+    setValorMulta(String(v.valorMulta ?? 0));
+    setValorCustoExtra(String(v.valorCustoExtra ?? 0));
     setFormOpen(true);
   };
 
@@ -416,22 +418,17 @@ export default function Viagens() {
     setMotoristaId("");
     setValorFrete("");
     setDataManifesto("");
-    setCidadeOrigem("");
+    setCidadeOrigem("Ipiranga do Norte, MT");
     setCidadeEntrega("");
-    setStatusViagem("PLANEJADA");
-    setDataSaida("");
-    setPrevisaoChegada("");
-    setDataChegada("");
-    setKmSaida("");
-    setKmChegada("");
     setObservacoes("");
-    setClienteId("");
     setRotas([]);
     setNovaRota("");
     setDistanciaKm("");
     setValorPedagio("");
     setValorDiaria("");
     setValorChapa("");
+    setValorMulta("");
+    setValorCustoExtra("");
   };
 
   const handleReadManifesto = async (file?: File) => {
@@ -450,8 +447,10 @@ export default function Viagens() {
       setEditingViagem(null);
       const registeredVehicle = findRegisteredVehicle(parsed.placa, veiculos);
       const registeredPlate = registeredVehicle?.placa ?? "";
+      // Na viagem, o motorista não fica preso ao motorista cadastrado no veículo.
+      // Ao ler manifesto, prioriza o motorista efetivamente identificado no documento.
       const linkedMotoristaId = linkedMotoristaForVehicle(registeredVehicle);
-      const matchedMotoristaId = linkedMotoristaId || findMotoristaId(text, parsed.motoristaNome, motoristas);
+      const matchedMotoristaId = findMotoristaId(text, parsed.motoristaNome, motoristas) || linkedMotoristaId;
       const destination = parsed.cidadeDestino.trim();
       const historicalDistance = !parsed.distanciaKm && destination ? previousDistanceForCity(destination, viagens) : 0;
       const distance = Number(parsed.distanciaKm || historicalDistance || 0);
@@ -459,12 +458,14 @@ export default function Viagens() {
       if (matchedMotoristaId) setMotoristaId(matchedMotoristaId);
       if (parsed.valorFrete > 0) setValorFrete(String(parsed.valorFrete));
       if (parsed.dataManifesto) setDataManifesto(parsed.dataManifesto);
-      if (parsed.origemCidade) setCidadeOrigem(`${parsed.origemCidade}${parsed.origemUf ? `/${parsed.origemUf}` : ""}`);
+      setCidadeOrigem("Ipiranga do Norte, MT");
       if (destination) setCidadeEntrega(destination);
       if (distance > 0) setDistanciaKm(String(distance));
       setValorPedagio("");
       setValorDiaria("");
         setValorChapa("");
+    setValorMulta("");
+    setValorCustoExtra("");
       const preenchidos = [
         registeredPlate && "placa",
         matchedMotoristaId && "motorista",
@@ -475,8 +476,8 @@ export default function Viagens() {
       ].filter((value): value is string => Boolean(value));
       const observacoes: string[] = [];
       if (parsed.placa && !registeredPlate) observacoes.push(`Placa ${parsed.placa} não está cadastrada.`);
-      if (registeredVehicle?.motoristaId && !linkedMotoristaId) observacoes.push("O motorista vinculado à placa não está ativo; foi tentada a identificação pelo manifesto.");
-      if (!matchedMotoristaId) observacoes.push("Motorista não identificado. Vincule um motorista à placa em Cadastros > Veículos.");
+      if (registeredVehicle?.motoristaId && !linkedMotoristaId) observacoes.push("O motorista cadastrado no veículo não está ativo; foi tentada a identificação pelo manifesto.");
+      if (!matchedMotoristaId) observacoes.push("Motorista não identificado. Selecione qualquer motorista ativo para esta viagem.");
       if (!destination) observacoes.push("Município Destino não identificado no bloco Origem/Destino do manifesto.");
       if (!distance) observacoes.push("O DAMDFE não informa KM e não foi possível calcular a rota nem recuperar uma distância do histórico.");
       if (parsed.distanciaFonte === "rota" && parsed.distanciaKm > 0) observacoes.push("A distância foi calculada automaticamente entre a origem e o destino do manifesto.");
@@ -526,32 +527,28 @@ export default function Viagens() {
       motoristaId,
       valorFrete: parseFloat(valorFrete) || 0,
       dataManifesto,
-      cidadeOrigem,
+      cidadeOrigem: "Ipiranga do Norte, MT",
       cidadeEntrega,
-      status: statusViagem ?? "PLANEJADA",
-      dataSaida: dataSaida || null,
-      previsaoChegada: previsaoChegada || null,
-      dataChegada: dataChegada || null,
-      kmSaida: kmSaida ? parseFloat(kmSaida) : null,
-      kmChegada: kmChegada ? parseFloat(kmChegada) : null,
       observacoes,
-      clienteId: clienteId || null,
       rotas,
       distanciaKm: parseFloat(distanciaKm) || 0,
       valorPedagio: parseFloat(valorPedagio) || 0,
       valorDiaria: parseFloat(valorDiaria) || 0,
       valorAbastecimento: 0,
       valorChapa: parseFloat(valorChapa) || 0,
+      valorMulta: parseFloat(valorMulta) || 0,
+      custoExtraTag: "",
+      valorCustoExtra: parseFloat(valorCustoExtra) || 0,
     };
 
     setSaving(true);
     try {
       if (editingViagem) {
         await update(editingViagem.id, data);
-        toast.success("Viagem atualizada com sucesso!");
+        toast.success("Acerto atualizado com sucesso!");
       } else {
         await create(data);
-        toast.success("Viagem registrada com sucesso!");
+        toast.success("Acerto registrado com sucesso!");
       }
       setFormOpen(false);
     } catch (error: any) {
@@ -565,6 +562,34 @@ export default function Viagens() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const decodeExtratoFile = async (file:File) => {
+    const buffer=await file.arrayBuffer(); const bytes=new Uint8Array(buffer);
+    const encoding=bytes[0]===0xff&&bytes[1]===0xfe?"utf-16le":"utf-8";
+    return new TextDecoder(encoding).decode(buffer);
+  };
+
+  const handleExtratoFiles = async (files:FileList|null) => {
+    if(!files?.length)return; setExtratoLoading(true);
+    try {
+      const arquivos=await Promise.all(Array.from(files).map(async(file)=>({nome:file.name,texto:await decodeExtratoFile(file)})));
+      const response=await api.post<ExtratoPreview>("/viagens/extrato/preview",{arquivos});
+      setExtratoPreview(response.data); setExtratoOpen(true);
+    } catch(error:any){ toast.error(error?.response?.data?.message??"Não foi possível ler o extrato TruckPag."); }
+    finally { setExtratoLoading(false); if(extratoInputRef.current)extratoInputRef.current.value=""; }
+  };
+
+  const setExtratoViagem = (fingerprint:string,viagemId:string) => {
+    setExtratoPreview(current=>current?{...current,items:current.items.map(item=>item.fingerprint===fingerprint?{...item,viagemId,viagemCodigo:viagens.find(v=>v.id===viagemId)?.codigo||null,viagemData:viagens.find(v=>v.id===viagemId)?.dataManifesto||null,placa:viagens.find(v=>v.id===viagemId)?.placa||null,status:"VINCULADO" as const}:item)}:current);
+  };
+
+  const importarExtrato = async () => {
+    if(!extratoPreview)return; const items=extratoPreview.items.filter(x=>x.viagemId&&!x.duplicado);
+    if(!items.length){toast.error("Nenhum lançamento está vinculado a uma viagem.");return}
+    setExtratoSaving(true);
+    try { const response=await api.post("/viagens/extrato/importar",{items}); toast.success(`${response.data.importados||0} lançamento(s) importado(s) para as viagens.`); setExtratoOpen(false); setExtratoPreview(null); window.dispatchEvent(new CustomEvent("radasa-api-change:viagens")); }
+    catch(error:any){toast.error(error?.response?.data?.message??"Não foi possível importar os lançamentos.")} finally {setExtratoSaving(false)}
   };
 
   const handleDelete = async (v: Viagem) => {
@@ -586,7 +611,7 @@ export default function Viagens() {
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="font-display text-2xl font-bold text-foreground">
-              Viagens
+              Acerto de Viagem
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Registre frete, rota e custos em uma única ficha. Use Ler manifesto para preencher automaticamente os dados do DAMDFE/MDF-e.
@@ -598,7 +623,7 @@ export default function Viagens() {
               {readingManifesto ? <LoaderCircle className="mr-1.5 h-4 w-4 animate-spin" /> : <FileText className="mr-1.5 h-4 w-4" />}
               {readingManifesto ? readingManifestoLabel || "Lendo manifesto..." : "Ler manifesto"}
             </Button>
-            <Button onClick={handleOpenCreate}><Plus className="mr-1.5 h-4 w-4" />Registrar viagem</Button>
+            <Button type="button" onClick={handleOpenCreate}><Plus className="mr-1.5 h-4 w-4" />Registrar acerto</Button>
           </div>
         </div>
 
@@ -629,7 +654,7 @@ export default function Viagens() {
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Viagens Exibidas
+              Acertos Exibidos
             </p>
             <p className="mt-2 text-2xl font-bold text-foreground">
               {filteredViagens.length}
@@ -656,13 +681,6 @@ export default function Viagens() {
                 : "—"}
             </p>
           </div>
-        </div>
-
-        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[ ["Planejadas", "PLANEJADA"], ["Carregando", "CARREGANDO"], ["Em trânsito", "EM_TRANSITO"], ["Entregues/Finalizadas", "FINAL"] ].map(([label, key]) => {
-            const count = key === "FINAL" ? viagens.filter(v => v.status === "ENTREGUE" || v.status === "FINALIZADA").length : viagens.filter(v => (v.status ?? "PLANEJADA") === key).length;
-            return <div key={key} className="rounded-xl border bg-card p-3"><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 text-xl font-bold">{count}</div></div>;
-          })}
         </div>
 
         {/* Viagens table */}
@@ -813,7 +831,7 @@ export default function Viagens() {
                     >
                       {search || hasColumnFilters
                         ? "Nenhuma viagem encontrada com os filtros atuais."
-                        : 'Nenhuma viagem encontrada. Clique em "Registrar viagem" para começar.'}
+                        : 'Nenhuma viagem encontrada. Clique em "Registrar acerto" para começar.'}
                     </td>
                   </tr>
                 ) : (
@@ -895,11 +913,33 @@ export default function Viagens() {
       </div>
 
       {/* Form dialog */}
+      <Dialog open={extratoOpen} onOpenChange={setExtratoOpen}>
+        <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden">
+          <DialogHeader><DialogTitle>Importar pedágios e chapas do TruckPag</DialogTitle></DialogHeader>
+          {extratoPreview&&<div className="space-y-4 overflow-hidden">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Pedágios</div><div className="text-lg font-bold">{extratoPreview.resumo.pedagios}</div><div className="text-xs">{formatBRL(extratoPreview.resumo.valorPedagios)}</div></div>
+              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Chapas</div><div className="text-lg font-bold">{extratoPreview.resumo.chapas}</div><div className="text-xs">{formatBRL(extratoPreview.resumo.valorChapas)}</div></div>
+              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Vinculados</div><div className="text-lg font-bold">{extratoPreview.items.filter(x=>x.viagemId&&!x.duplicado).length}</div></div>
+              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Revisar</div><div className="text-lg font-bold text-amber-600">{extratoPreview.items.filter(x=>!x.viagemId&&!x.duplicado).length}</div></div>
+              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Ignorados</div><div className="text-lg font-bold">{extratoPreview.resumo.ignorados}</div><div className="text-[11px] text-muted-foreground">Inclui o PIX de R$ 248,00</div></div>
+            </div>
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0"/><span>O sistema vincula pela data do lançamento e pelo motorista, usando a viagem mais recente iniciada até 10 dias antes. Linhas sem vínculo podem ser associadas manualmente abaixo.</span></div>
+            <div className="max-h-[52vh] overflow-auto rounded-lg border">
+              <table className="w-full min-w-[980px] text-xs"><thead className="sticky top-0 bg-muted"><tr><th className="p-2 text-left">Data</th><th className="p-2 text-left">Tipo</th><th className="p-2 text-right">Valor</th><th className="p-2 text-left">Descrição</th><th className="p-2 text-left">Viagem vinculada</th><th className="p-2 text-left">Status</th></tr></thead><tbody>
+                {extratoPreview.items.map(item=><tr key={item.fingerprint} className="border-t"><td className="p-2 whitespace-nowrap">{formatDate(item.data)} {item.hora}</td><td className="p-2"><span className={item.tipo==="CHAPA"?"rounded bg-purple-100 px-2 py-1 font-semibold text-purple-700":"rounded bg-blue-100 px-2 py-1 font-semibold text-blue-700"}>{item.tipo==="CHAPA"?"Chapa":"Pedágio"}</span></td><td className="p-2 text-right font-semibold">{formatBRL(item.valor)}</td><td className="max-w-[340px] truncate p-2" title={item.descricao}>{item.descricao}</td><td className="p-2"><Select value={item.viagemId||""} onValueChange={(value)=>setExtratoViagem(item.fingerprint,value)} disabled={item.duplicado}><SelectTrigger className="h-8 min-w-[210px]"><SelectValue placeholder="Selecionar viagem"/></SelectTrigger><SelectContent>{viagens.filter(v=>Math.abs((new Date(v.dataManifesto+'T00:00:00').getTime()-new Date(item.data+'T00:00:00').getTime())/86400000)<=14).map(v=><SelectItem key={v.id} value={v.id}>{v.codigo||'Viagem'} · {formatDate(v.dataManifesto)} · {v.placa}</SelectItem>)}</SelectContent></Select></td><td className="p-2">{item.duplicado?<span className="text-muted-foreground">Já importado</span>:item.viagemId?<span className="text-green-600">Vinculado</span>:<span className="text-amber-600">Revisar</span>}</td></tr>)}
+              </tbody></table>
+            </div>
+            <div className="flex justify-end gap-2"><Button variant="outline" onClick={()=>setExtratoOpen(false)}>Cancelar</Button><Button disabled={extratoSaving} onClick={()=>void importarExtrato()}>{extratoSaving?<LoaderCircle className="mr-2 h-4 w-4 animate-spin"/>:<ReceiptText className="mr-2 h-4 w-4"/>}Importar vinculados</Button></div>
+          </div>}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingViagem ? "Editar Viagem" : "Registrar Viagem"}
+              {editingViagem ? "Editar Acerto de Viagem" : "Registrar Acerto de Viagem"}
             </DialogTitle>
           </DialogHeader>
 
@@ -972,15 +1012,10 @@ export default function Viagens() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Cidade de Origem</Label>
-                <Input value={cidadeOrigem} onChange={(e) => setCidadeOrigem(e.target.value)} placeholder="Ex.: Ipiranga do Norte, MT" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Status da Viagem</Label>
-                <Select value={statusViagem ?? "PLANEJADA"} onValueChange={(v) => setStatusViagem(v as Viagem["status"])}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="PLANEJADA">Planejada</SelectItem><SelectItem value="CARREGANDO">Carregando</SelectItem><SelectItem value="EM_TRANSITO">Em trânsito</SelectItem><SelectItem value="ENTREGUE">Entregue</SelectItem><SelectItem value="FINALIZADA">Finalizada</SelectItem><SelectItem value="CANCELADA">Cancelada</SelectItem></SelectContent></Select>
-              </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Cidade de Origem</Label>
+              <Input value={cidadeOrigem} readOnly className="bg-muted/40" />
+              <p className="text-xs text-muted-foreground">Origem padrão de todos os acertos: Ipiranga do Norte, MT.</p>
             </div>
 
             <div className="space-y-1.5">
@@ -991,23 +1026,6 @@ export default function Viagens() {
                 onChange={(e) => setCidadeEntrega(e.target.value)}
                 placeholder="Ex.: São Paulo, SP"
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Cliente da Viagem</Label>
-              <Select value={clienteId || "SEM_CLIENTE"} onValueChange={(value) => setClienteId(value === "SEM_CLIENTE" ? "" : value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SEM_CLIENTE">Sem cliente vinculado</SelectItem>
-                  {clientes.map((cliente) => (
-                    <SelectItem key={cliente.id} value={cliente.id}>
-                      {cliente.nomeFantasia || cliente.razaoSocial}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">
@@ -1076,11 +1094,6 @@ export default function Viagens() {
               )}
             </div>
 
-            <div className="rounded-lg border p-3">
-              <p className="mb-3 text-sm font-semibold">Timeline operacional</p>
-              <div className="grid gap-3 sm:grid-cols-3"><div><Label>Saída</Label><Input type="datetime-local" value={dataSaida} onChange={e=>setDataSaida(e.target.value)}/></div><div><Label>Previsão de chegada</Label><Input type="datetime-local" value={previsaoChegada} onChange={e=>setPrevisaoChegada(e.target.value)}/></div><div><Label>Chegada real</Label><Input type="datetime-local" value={dataChegada} onChange={e=>setDataChegada(e.target.value)}/></div><div><Label>KM saída</Label><Input type="number" value={kmSaida} onChange={e=>setKmSaida(e.target.value)}/></div><div><Label>KM chegada</Label><Input type="number" value={kmChegada} onChange={e=>setKmChegada(e.target.value)}/></div></div>
-            </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Distância (KM)</Label>
@@ -1125,6 +1138,14 @@ export default function Viagens() {
                   placeholder="0,00"
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Multas (R$)</Label>
+                <Input type="number" step="0.01" value={valorMulta} onChange={(e) => setValorMulta(e.target.value)} placeholder="0,00" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Custo Extra (R$)</Label>
+                <Input type="number" step="0.01" value={valorCustoExtra} onChange={(e) => setValorCustoExtra(e.target.value)} placeholder="0,00" />
+              </div>
             </div>
 
             <div className="space-y-1.5"><Label>Observações da viagem</Label><Input value={observacoes} onChange={e=>setObservacoes(e.target.value)} placeholder="Ocorrências, instruções, observações..."/></div>
@@ -1148,7 +1169,7 @@ export default function Viagens() {
                   {formatBRL(
                     parseFloat(valorPedagio || "0") +
                       parseFloat(valorDiaria || "0") +
-                      parseFloat(valorChapa || "0")
+                      parseFloat(valorChapa || "0") + parseFloat(valorMulta || "0") + parseFloat(valorCustoExtra || "0")
                   )}
                 </span>
               </div>
@@ -1162,7 +1183,7 @@ export default function Viagens() {
                     {formatBRL(
                       (parseFloat(valorPedagio || "0") +
                         parseFloat(valorDiaria || "0") +
-                        parseFloat(valorChapa || "0")) /
+                        parseFloat(valorChapa || "0") + parseFloat(valorMulta || "0") + parseFloat(valorCustoExtra || "0")) /
                         parseFloat(distanciaKm || "1")
                     )}
                   </span>
@@ -1170,7 +1191,7 @@ export default function Viagens() {
               )}
 
               <div className={`flex items-center justify-between border-t border-border pt-2 ${
-                (parseFloat(valorFrete || "0") - (parseFloat(valorPedagio || "0") + parseFloat(valorDiaria || "0") + parseFloat(valorChapa || "0"))) >= 0
+                (parseFloat(valorFrete || "0") - (parseFloat(valorPedagio || "0") + parseFloat(valorDiaria || "0") + parseFloat(valorChapa || "0") + parseFloat(valorMulta || "0") + parseFloat(valorCustoExtra || "0"))) >= 0
                   ? 'text-green-600 dark:text-green-400'
                   : 'text-red-600 dark:text-red-400'
               }`}>
@@ -1182,7 +1203,7 @@ export default function Viagens() {
                     parseFloat(valorFrete || "0") - (
                       parseFloat(valorPedagio || "0") +
                       parseFloat(valorDiaria || "0") +
-                      parseFloat(valorChapa || "0")
+                      parseFloat(valorChapa || "0") + parseFloat(valorMulta || "0") + parseFloat(valorCustoExtra || "0")
                     )
                   )}
                 </span>
@@ -1199,7 +1220,7 @@ export default function Viagens() {
                 ? "Salvando..."
                 : editingViagem
                   ? "Salvar alterações"
-                  : "Registrar viagem"}
+                  : "Registrar acerto"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1221,11 +1242,10 @@ export default function Viagens() {
             const lucroBruto = rentabilidade?.lucro ?? (receitaTotal - totalCusto);
             const margem = rentabilidade?.margem ?? (receitaTotal > 0 ? (lucroBruto / receitaTotal) * 100 : 0);
             const lucroKm = rentabilidade?.lucroKm ?? (viewingViagem.distanciaKm > 0 ? lucroBruto / viewingViagem.distanciaKm : 0);
-            const cliente = viewingViagem.clienteId ? clienteById.get(viewingViagem.clienteId) : null;
 
             return (
               <div className="space-y-4">
-                <div className="flex items-center justify-between rounded-lg border p-3"><div><div className="text-xs text-muted-foreground">Código da viagem</div><div className="font-semibold">{viewingViagem.codigo || "Sem código"}</div></div><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{viewingViagem.status || "PLANEJADA"}</span></div>
+                <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Código do acerto</div><div className="font-semibold">{viewingViagem.codigo || "Sem código"}</div></div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Manifesto</p>
@@ -1248,13 +1268,7 @@ export default function Viagens() {
                   </div>
                 </div>
 
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cliente</p>
-                  <p className="mt-1 text-sm font-medium">{cliente?.nomeFantasia || cliente?.razaoSocial || "—"}</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4"><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Origem</p><p className="mt-1 text-sm font-medium">{viewingViagem.cidadeOrigem || "—"}</p></div><div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">ETA</p><p className="mt-1 text-sm font-medium">{viewingViagem.previsaoChegada ? new Date(viewingViagem.previsaoChegada).toLocaleString("pt-BR") : "—"}</p></div></div>
-                {(viewingViagem.dataSaida || viewingViagem.dataChegada) && <div className="rounded-lg border p-3"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Timeline</p><div className="grid grid-cols-2 gap-3 text-sm"><div>Saída: <strong>{viewingViagem.dataSaida ? new Date(viewingViagem.dataSaida).toLocaleString("pt-BR") : "—"}</strong></div><div>Chegada: <strong>{viewingViagem.dataChegada ? new Date(viewingViagem.dataChegada).toLocaleString("pt-BR") : "—"}</strong></div><div>KM saída: <strong>{viewingViagem.kmSaida ?? "—"}</strong></div><div>KM chegada: <strong>{viewingViagem.kmChegada ?? "—"}</strong></div></div></div>}
+                <div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Origem</p><p className="mt-1 text-sm font-medium">{viewingViagem.cidadeOrigem || "—"}</p></div>
 
                 {(viewingViagem.rotas ?? []).length > 0 && (
                   <div>
@@ -1292,6 +1306,7 @@ export default function Viagens() {
                       <span>Pedágio</span>
                       <span className="font-medium">{formatBRL(viewingViagem.valorPedagio)}</span>
                     </div>
+                    {(viewingViagem.valorPedagioImportado??0)>0&&<div className="-mt-1 flex justify-end text-[11px] text-muted-foreground">TruckPag: {formatBRL(viewingViagem.valorPedagioImportado??0)}</div>}
                     <div className="flex justify-between">
                       <span>Diária</span>
                       <span className="font-medium">{formatBRL(viewingViagem.valorDiaria)}</span>
@@ -1300,8 +1315,19 @@ export default function Viagens() {
                       <span>Chapa</span>
                       <span className="font-medium">{formatBRL(viewingViagem.valorChapa)}</span>
                     </div>
+                    {(viewingViagem.valorChapaImportado??0)>0&&<div className="-mt-1 flex justify-end text-[11px] text-muted-foreground">TruckPag: {formatBRL(viewingViagem.valorChapaImportado??0)}</div>}
+                    <div className="flex justify-between">
+                      <span>Multas</span>
+                      <span className="font-medium">{formatBRL(viewingViagem.valorMulta ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Custo Extra</span>
+                      <span className="font-medium">{formatBRL(viewingViagem.valorCustoExtra ?? 0)}</span>
+                    </div>
                   </div>
                 </div>
+
+                {(viewingViagem.despesasExtrato?.length??0)>0&&<div className="border-t border-border pt-4"><div className="mb-3 flex items-center gap-2"><ReceiptText className="h-4 w-4 text-primary"/><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Lançamentos TruckPag</p></div><div className="max-h-44 space-y-2 overflow-y-auto">{(viewingViagem.despesasExtrato??[]).map(item=><div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border p-2 text-xs"><div className="min-w-0"><div className="font-medium">{item.tipo==="CHAPA"?"Chapa":"Pedágio"} · {formatDate(item.data)} {item.hora}</div><div className="truncate text-muted-foreground" title={item.descricao}>{item.descricao}</div></div><div className="shrink-0 font-semibold">{formatBRL(item.valor)}</div></div>)}</div></div>}
 
                 {(loadingRentabilidade || (rentabilidade?.lancamentos.length ?? 0) > 0) && (
                   <div className="border-t border-border pt-4">

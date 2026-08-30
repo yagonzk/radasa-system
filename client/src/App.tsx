@@ -27,7 +27,6 @@ import Financeiro from "./pages/Financeiro";
 import Manutencao from "./pages/Manutencao";
 import BIGerencial from "./pages/BIGerencial";
 import Administracao from "./pages/Administracao";
-import ComercialCRM from "./pages/ComercialCRM";
 import CiotGerar from "./pages/CiotGerar";
 import CiotGerados from "./pages/CiotGerados";
 import CiotConfiguracao from "./pages/CiotConfiguracao";
@@ -48,7 +47,6 @@ function Router() {
       <Route path="/manutencao" component={Manutencao} />
       <Route path="/bi" component={BIGerencial} />
       <Route path="/administracao" component={Administracao} />
-      <Route path="/comercial" component={ComercialCRM} />
       <Route path="/manifestos" component={Romaneios} />
       <Route path="/fechamentos" component={Fechamentos} />
       <Route path="/abastecimentos" component={Abastecimentos} />
