@@ -28,7 +28,7 @@ import {
 } from "@/lib/store";
 import { api } from "@/lib/api";
 import { extrairTextoPdf, type PdfTextProgress } from "@/lib/pdfText";
-import { isVasilhameName, orderRomaneioItemsByClient } from "@/lib/romaneioGrouping";
+import { buildBulkPaymentTargets, isVasilhameName, orderRomaneioItemsByClient } from "@/lib/romaneioGrouping";
 const EXPECTED_ROMANEIO_PARSER_VERSION = "2026.08.11.07";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 import {
@@ -401,6 +401,7 @@ export default function Romaneios() {
   const [page, setPage] = useState(1);
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<string>>(new Set());
   const [deletingMany, setDeletingMany] = useState(false);
+  const [markingPaidMany, setMarkingPaidMany] = useState(false);
   const paymentRequestRevision = useRef<Record<string, number>>({});
 
   const clienteById = (id?: string | null) => clientes.find((item) => item.id === id);
@@ -703,6 +704,54 @@ export default function Romaneios() {
       toast.error(error?.response?.data?.message ?? "Não foi possível excluir os romaneios selecionados.");
     } finally {
       setDeletingMany(false);
+    }
+  };
+
+  const handleMarkSelectedAsPaid = async () => {
+    const selectedCount = selectedDeleteIds.size;
+    if (!selectedCount) return;
+
+    const targets = buildBulkPaymentTargets(romaneios, selectedDeleteIds);
+    if (!targets.length) {
+      toast.info("Os romaneios selecionados não possuem cobranças de cliente pendentes.");
+      return;
+    }
+
+    if (!window.confirm(`Marcar como pagas ${targets.length} cobrança(s) de cliente em ${selectedCount} romaneio(s) selecionado(s)?`)) return;
+
+    setMarkingPaidMany(true);
+    let updated = 0;
+    let failed = 0;
+
+    try {
+      const chunkSize = 8;
+      for (let index = 0; index < targets.length; index += chunkSize) {
+        const chunk = targets.slice(index, index + chunkSize);
+        const results = await Promise.allSettled(
+          chunk.map(({ manifestoId, produtoId }) =>
+            api.patch(`/manifestos/${manifestoId}/produtos/${produtoId}/pagamento`, { pago: true }),
+          ),
+        );
+        results.forEach((result) => {
+          if (result.status === "fulfilled") updated += 1;
+          else failed += 1;
+        });
+      }
+
+      await refreshRomaneios();
+
+      if (failed === 0) {
+        setSelectedDeleteIds(new Set());
+        toast.success(`${updated} cobrança(s) marcada(s) como paga(s).`);
+      } else {
+        toast.error(`${updated} cobrança(s) atualizada(s), mas ${failed} falharam. Tente novamente.`);
+      }
+    } catch (error: any) {
+      console.error("Falha ao marcar romaneios como pagos em lote.", error);
+      await refreshRomaneios().catch(() => undefined);
+      toast.error(error?.response?.data?.message ?? "Não foi possível marcar os romaneios selecionados como pagos.");
+    } finally {
+      setMarkingPaidMany(false);
     }
   };
 
@@ -2035,9 +2084,19 @@ export default function Romaneios() {
         {selectedDeleteIds.size > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
             <span className="text-sm font-medium">{selectedDeleteIds.size} romaneio(s) selecionado(s)</span>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedDeleteIds(new Set())} disabled={deletingMany}>Cancelar seleção</Button>
-              <Button type="button" variant="destructive" size="sm" onClick={() => void handleDeleteMany()} disabled={deletingMany}>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedDeleteIds(new Set())} disabled={deletingMany || markingPaidMany}>Cancelar seleção</Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void handleMarkSelectedAsPaid()}
+                disabled={deletingMany || markingPaidMany}
+                className="bg-emerald-600 text-white hover:bg-emerald-700"
+              >
+                {markingPaidMany ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                Marcar como pagos
+              </Button>
+              <Button type="button" variant="destructive" size="sm" onClick={() => void handleDeleteMany()} disabled={deletingMany || markingPaidMany}>
                 {deletingMany ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
                 Excluir selecionados
               </Button>

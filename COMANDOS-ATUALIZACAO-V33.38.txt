@@ -1,0 +1,9 @@
+cd C:\Users\yago\Downloads\Radasa-System-Cloudflare-v1.4
+pnpm install
+pnpm exec prisma generate
+pnpm exec vitest run client/src/lib/romaneioGrouping.test.ts
+pnpm run check
+git add .
+git commit -m "feat: marcar romaneios selecionados como pagos"
+git push origin main
+pnpm run deploy

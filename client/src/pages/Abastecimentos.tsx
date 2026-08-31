@@ -397,6 +397,16 @@ function abastecimentoFuelBreakdown(
   };
 }
 
+function valorDieselComDesconto(item: Abastecimento, dieselValor: number) {
+  const desconto = Math.max(0, Number(item.valorDesconto || 0));
+  return Math.max(0, dieselValor - desconto);
+}
+
+function valorUnitarioDieselComDesconto(item: Abastecimento, dieselLitros: number, dieselValor: number) {
+  if (dieselLitros <= 0) return 0;
+  return valorDieselComDesconto(item, dieselValor) / dieselLitros;
+}
+
 function batchFuelKind(product: BatchXmlRow["produtos"][number]): FuelKind {
   return classifyFuelLabel(
     [
@@ -3324,7 +3334,7 @@ export default function Abastecimentos() {
       valor,
       descontos,
       media: combustiveis.dieselLitros > 0
-        ? combustiveis.dieselValor / combustiveis.dieselLitros
+        ? valorUnitarioDieselComDesconto(item, combustiveis.dieselLitros, combustiveis.dieselValor)
         : 0,
     };
   }, [filteredItems, produtos]);
@@ -3563,7 +3573,7 @@ export default function Abastecimentos() {
         sourceItems
           .map((item) => abastecimentoFuelBreakdown(item, produtos))
           .filter((combustiveis) => combustiveis.dieselLitros > 0)
-          .map((combustiveis) => formatBRL(combustiveis.dieselValor / combustiveis.dieselLitros)),
+          .map((combustiveis) => formatBRL(valorUnitarioDieselComDesconto(item, combustiveis.dieselLitros, combustiveis.dieselValor))),
       ),
     );
     if (key === "valorDesconto") return Array.from(new Set<string>(sourceItems.map((item) => formatBRL(item.valorDesconto))));
@@ -3736,7 +3746,7 @@ export default function Abastecimentos() {
       const veiculo = resolveAbastecimentoVehicle(item, veiculos);
       const combustiveis = abastecimentoFuelBreakdown(item, produtos);
       const valorUnitarioDiesel = combustiveis.dieselLitros > 0
-        ? combustiveis.dieselValor / combustiveis.dieselLitros
+        ? valorUnitarioDieselComDesconto(item, combustiveis.dieselLitros, combustiveis.dieselValor)
         : null;
       const placa = veiculo?.placa || item.placaXml || "—";
       return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia ?? "Não identificado")}</td><td>${escapeReportText(placa)}</td><td>${escapeReportText(formatLitros(combustiveis.dieselLitros))}</td><td>${escapeReportText(valorUnitarioDiesel !== null ? formatBRL(valorUnitarioDiesel) : "—")}</td><td>${escapeReportText(formatOdometro(Number(item.hodometro)))}</td><td>${escapeReportText(formatBRL(combustiveis.dieselValor))}</td></tr>`;
@@ -3849,7 +3859,7 @@ export default function Abastecimentos() {
             veiculo?.placa || item.placaXml || "—",
             combustiveis.dieselLitros,
             combustiveis.dieselLitros > 0
-              ? combustiveis.dieselValor / combustiveis.dieselLitros
+              ? valorUnitarioDieselComDesconto(item, combustiveis.dieselLitros, combustiveis.dieselValor)
               : 0,
             Number(item.hodometro) > 0 ? Number(item.hodometro) : null,
             combustiveis.dieselValor,
@@ -3983,7 +3993,7 @@ export default function Abastecimentos() {
           veiculo?.placa || item.placaXml || "—",
           combustiveis.dieselLitros,
           combustiveis.dieselLitros > 0
-            ? combustiveis.dieselValor / combustiveis.dieselLitros
+            ? valorUnitarioDieselComDesconto(item, combustiveis.dieselLitros, combustiveis.dieselValor)
             : 0,
           Number(item.hodometro) > 0 ? Number(item.hodometro) : null,
           combustiveis.dieselValor,
@@ -4407,7 +4417,7 @@ export default function Abastecimentos() {
                           <span className="block whitespace-nowrap text-[11px] text-muted-foreground">ARLA {formatLitros(combustiveis.arlaLitros)}</span>
                         )}
                       </td>
-                      <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums"><span className="block whitespace-nowrap">{litros > 0 ? formatBRL(bruto / litros) : "—"}</span></td>
+                      <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums"><span className="block whitespace-nowrap">{litros > 0 ? formatBRL(valorUnitarioDieselComDesconto(item, litros, bruto)) : "—"}</span></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle tabular-nums text-muted-foreground"><span className="block whitespace-nowrap">{formatBRL(item.valorDesconto)}</span></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle font-bold tabular-nums text-primary"><span className="block whitespace-nowrap">{formatBRL(item.valorTotal)}</span></td>
                       <td className="overflow-hidden px-3 py-3 text-center align-middle font-medium">

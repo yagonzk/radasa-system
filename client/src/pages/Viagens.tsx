@@ -164,6 +164,119 @@ function normalizeLookup(value: string) {
     .replace(/\s+/g, " ")
     .trim();
 }
+type CidadeOpcao = { id: number; nome: string; uf: string };
+type TrechoRota = { de: string; para: string; km: number };
+
+let cidadesIbgeCache: CidadeOpcao[] | null = null;
+let cidadesIbgePromise: Promise<CidadeOpcao[]> | null = null;
+const geocodeCidadeCache = new Map<string, { lat: number; lon: number }>();
+
+function carregarCidadesIbge() {
+  if (cidadesIbgeCache) return Promise.resolve(cidadesIbgeCache);
+  if (cidadesIbgePromise) return cidadesIbgePromise;
+  cidadesIbgePromise = fetch("https://servicodados.ibge.gov.br/api/v1/localidades/municipios?orderBy=nome")
+    .then((response) => {
+      if (!response.ok) throw new Error("Falha ao carregar cidades do IBGE.");
+      return response.json();
+    })
+    .then((rows: any[]) => {
+      cidadesIbgeCache = rows
+        .map((row) => ({
+          id: Number(row.id),
+          nome: String(row.nome || ""),
+          uf: String(row.microrregiao?.mesorregiao?.UF?.sigla || row["regiao-imediata"]?.["regiao-intermediaria"]?.UF?.sigla || ""),
+        }))
+        .filter((cidade) => cidade.nome && cidade.uf);
+      return cidadesIbgeCache;
+    })
+    .finally(() => { cidadesIbgePromise = null; });
+  return cidadesIbgePromise;
+}
+
+function CidadeAutocomplete({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value);
+  const [cidades, setCidades] = useState<CidadeOpcao[]>(cidadesIbgeCache ?? []);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => { setQuery(value); }, [value]);
+  useEffect(() => {
+    if (!open || cidades.length) return;
+    let active = true;
+    setLoading(true);
+    carregarCidadesIbge()
+      .then((items) => { if (active) setCidades(items); })
+      .catch(() => { if (active) toast.error("Não foi possível carregar a lista de cidades."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [open, cidades.length]);
+
+  const options = useMemo(() => {
+    const q = normalizeLookup(query.replace(/\s*[-,]\s*[A-Z]{2}$/i, ""));
+    if (q.length < 2) return [];
+    return cidades
+      .filter((cidade) => normalizeLookup(`${cidade.nome} ${cidade.uf}`).includes(q))
+      .sort((a, b) => {
+        const aStarts = normalizeLookup(a.nome).startsWith(q) ? 0 : 1;
+        const bStarts = normalizeLookup(b.nome).startsWith(q) ? 0 : 1;
+        return aStarts - bStarts || a.nome.localeCompare(b.nome, "pt-BR");
+      })
+      .slice(0, 15);
+  }, [cidades, query]);
+
+  return (
+    <div className="relative">
+      <Input
+        type="text"
+        value={query}
+        autoComplete="off"
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
+        placeholder={placeholder}
+      />
+      {open && query.trim().length >= 2 && (
+        <div className="absolute left-0 right-0 top-full z-[2200] mt-1 max-h-64 overflow-auto rounded-md border border-border bg-popover shadow-xl">
+          {loading ? (
+            <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando cidades...</div>
+          ) : options.length ? options.map((cidade) => (
+            <button
+              type="button"
+              key={cidade.id}
+              className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-accent"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                const selected = `${cidade.nome}, ${cidade.uf}`;
+                setQuery(selected);
+                onChange(selected);
+                setOpen(false);
+              }}
+            >
+              <span className="font-medium">{cidade.nome}</span>
+              <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold">{cidade.uf}</span>
+            </button>
+          )) : (
+            <div className="px-3 py-3 text-sm text-muted-foreground">Nenhuma cidade encontrada.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+async function geocodeCidade(label: string) {
+  const key = normalizeLookup(label);
+  const cached = geocodeCidadeCache.get(key);
+  if (cached) return cached;
+  const query = encodeURIComponent(`${label}, Brasil`);
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${query}`, { headers: { "Accept-Language": "pt-BR" } });
+  const rows = await response.json();
+  if (!response.ok || !rows?.[0]) throw new Error(`Não foi possível localizar ${label}.`);
+  const point = { lat: Number(rows[0].lat), lon: Number(rows[0].lon) };
+  geocodeCidadeCache.set(key, point);
+  return point;
+}
+
 function normalizePlate(value: string) {
   return String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -226,6 +339,9 @@ export default function Viagens() {
   const [rotas, setRotas] = useState<string[]>([]);
   const [novaRota, setNovaRota] = useState("");
   const [distanciaKm, setDistanciaKm] = useState("");
+  const [calculandoDistancia, setCalculandoDistancia] = useState(false);
+  const [trechosRota, setTrechosRota] = useState<TrechoRota[]>([]);
+  const rotaCalculationRun = useRef(0);
   const [valorPedagio, setValorPedagio] = useState("");
   const [valorDiaria, setValorDiaria] = useState("");
   const [valorChapa, setValorChapa] = useState("");
@@ -424,6 +540,7 @@ export default function Viagens() {
     setRotas([]);
     setNovaRota("");
     setDistanciaKm("");
+    setTrechosRota([]);
     setValorPedagio("");
     setValorDiaria("");
     setValorChapa("");
@@ -502,6 +619,49 @@ export default function Viagens() {
       if (manifestoInputRef.current) manifestoInputRef.current.value = "";
     }
   };
+
+  useEffect(() => {
+    if (!formOpen) return;
+    const orderedStops = ["Ipiranga do Norte, MT", ...rotas, ...(cidadeEntrega.trim() ? [cidadeEntrega.trim()] : [])]
+      .filter((cidade, index, list) => index === 0 || normalizeLookup(cidade) !== normalizeLookup(list[index - 1]));
+    if (orderedStops.length < 2) {
+      setTrechosRota([]);
+      if (!editingViagem) setDistanciaKm("");
+      return;
+    }
+
+    const runId = ++rotaCalculationRun.current;
+    const timer = window.setTimeout(async () => {
+      setCalculandoDistancia(true);
+      try {
+        const points = await Promise.all(orderedStops.map(geocodeCidade));
+        if (runId !== rotaCalculationRun.current) return;
+        const coordinates = points.map((point) => `${point.lon},${point.lat}`).join(";");
+        const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=false&steps=false`);
+        const data = await response.json();
+        const route = data?.routes?.[0];
+        if (!response.ok || !route) throw new Error("Não foi possível calcular a distância rodoviária da rota.");
+        const legs = Array.isArray(route.legs) ? route.legs : [];
+        const segments: TrechoRota[] = orderedStops.slice(1).map((to, index) => ({
+          de: orderedStops[index],
+          para: to,
+          km: Number(((Number(legs[index]?.distance || 0)) / 1000).toFixed(1)),
+        }));
+        const totalKm = Number((Number(route.distance || 0) / 1000).toFixed(1));
+        if (runId !== rotaCalculationRun.current) return;
+        setTrechosRota(segments);
+        setDistanciaKm(totalKm > 0 ? String(totalKm) : "");
+      } catch (error: any) {
+        if (runId !== rotaCalculationRun.current) return;
+        setTrechosRota([]);
+        toast.error(error?.message || "Não foi possível calcular a distância da rota.");
+      } finally {
+        if (runId === rotaCalculationRun.current) setCalculandoDistancia(false);
+      }
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [formOpen, rotas, cidadeEntrega, editingViagem]);
 
   const handleSave = async () => {
     if (saving) return;
@@ -1020,11 +1180,10 @@ export default function Viagens() {
 
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Cidade de Entrega</Label>
-              <Input
-                type="text"
+              <CidadeAutocomplete
                 value={cidadeEntrega}
-                onChange={(e) => setCidadeEntrega(e.target.value)}
-                placeholder="Ex.: São Paulo, SP"
+                onChange={setCidadeEntrega}
+                placeholder="Digite para pesquisar a cidade"
               />
             </div>
 
@@ -1034,22 +1193,13 @@ export default function Viagens() {
                 <span className="text-xs text-muted-foreground">Cidades de passagem na ordem do trajeto</span>
               </div>
               <div className="flex gap-2">
-                <Input
-                  type="text"
-                  value={novaRota}
-                  onChange={(e) => setNovaRota(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const cidade = novaRota.trim();
-                      if (cidade && !rotas.some((item) => item.toLowerCase() === cidade.toLowerCase())) {
-                        setRotas((prev) => [...prev, cidade]);
-                      }
-                      setNovaRota("");
-                    }
-                  }}
-                  placeholder="Ex.: Sinop, MT"
-                />
+                <div className="min-w-0 flex-1">
+                  <CidadeAutocomplete
+                    value={novaRota}
+                    onChange={setNovaRota}
+                    placeholder="Digite para pesquisar a próxima cidade"
+                  />
+                </div>
                 <Button
                   type="button"
                   variant="outline"
@@ -1097,13 +1247,18 @@ export default function Viagens() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Distância (KM)</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  value={distanciaKm}
-                  onChange={(e) => setDistanciaKm(e.target.value)}
-                  placeholder="0"
-                />
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={distanciaKm}
+                    readOnly
+                    className="bg-muted/40 pr-9"
+                    placeholder="0"
+                  />
+                  {calculandoDistancia && <LoaderCircle className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
+                </div>
+                <p className="text-xs text-muted-foreground">Calculado automaticamente seguindo a ordem das cidades.</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Pedágio (R$)</Label>
@@ -1116,6 +1271,21 @@ export default function Viagens() {
                 />
               </div>
             </div>
+
+            {trechosRota.length > 0 && (
+              <div className="rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
+                <div className="font-medium text-foreground">Distância por ordem do trajeto</div>
+                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1">
+                  {trechosRota.map((trecho, index) => (
+                    <span key={`${trecho.de}-${trecho.para}-${index}`}>
+                      {index > 0 && <span className="mr-2">+</span>}
+                      {trecho.de} → {trecho.para}: <strong className="text-foreground">{formatKm(trecho.km)} km</strong>
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-1 font-semibold text-foreground">Total: {formatKm(Number(distanciaKm || 0))} km</div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">

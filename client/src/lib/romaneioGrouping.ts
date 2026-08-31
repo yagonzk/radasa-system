@@ -67,3 +67,44 @@ export function orderRomaneioItemsByClient<T>(
 
   return result;
 }
+
+
+export type BulkPaymentTarget = {
+  manifestoId: string;
+  produtoId: string;
+};
+
+type BulkPaymentRomaneio = {
+  id?: string | null;
+  tipoManifesto?: unknown;
+  produtos?: readonly {
+    id?: string | null;
+    tipoManifesto?: unknown;
+    pagoCliente?: boolean | null;
+  }[];
+};
+
+/**
+ * Monta a lista de cobranças de cliente pendentes dos romaneios selecionados.
+ * Itens já pagos e cobranças que não são "Receber c/ Cliente" ficam de fora.
+ */
+export function buildBulkPaymentTargets(
+  romaneios: readonly BulkPaymentRomaneio[],
+  selectedIds: ReadonlySet<string>,
+): BulkPaymentTarget[] {
+  const targets: BulkPaymentTarget[] = [];
+
+  for (const romaneio of romaneios) {
+    const manifestoId = String(romaneio.id ?? "").trim();
+    if (!manifestoId || !selectedIds.has(manifestoId)) continue;
+
+    for (const item of romaneio.produtos ?? []) {
+      const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
+      const produtoId = String(item.id ?? "").trim();
+      if (tipo !== "Receber c/ Cliente" || !produtoId || item.pagoCliente === true) continue;
+      targets.push({ manifestoId, produtoId });
+    }
+  }
+
+  return targets;
+}
