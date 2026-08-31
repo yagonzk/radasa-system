@@ -3315,11 +3315,12 @@ export default function Abastecimentos() {
         const atual = abastecimentoFuelBreakdown(item, produtos);
         acc.dieselLitros += atual.dieselLitros;
         acc.dieselValor += atual.dieselValor;
+        acc.dieselValorLiquido += valorDieselComDesconto(item, atual.dieselValor);
         acc.arlaLitros += atual.arlaLitros;
         acc.arlaValor += atual.arlaValor;
         return acc;
       },
-      { dieselLitros: 0, dieselValor: 0, arlaLitros: 0, arlaValor: 0 },
+      { dieselLitros: 0, dieselValor: 0, dieselValorLiquido: 0, arlaLitros: 0, arlaValor: 0 },
     );
     const valor = filteredItems.reduce((sum, item) => sum + item.valorTotal, 0);
     const descontos = filteredItems.reduce(
@@ -3334,7 +3335,7 @@ export default function Abastecimentos() {
       valor,
       descontos,
       media: combustiveis.dieselLitros > 0
-        ? valorUnitarioDieselComDesconto(item, combustiveis.dieselLitros, combustiveis.dieselValor)
+        ? combustiveis.dieselValorLiquido / combustiveis.dieselLitros
         : 0,
     };
   }, [filteredItems, produtos]);
@@ -3571,9 +3572,14 @@ export default function Abastecimentos() {
     if (key === "valorUnitario") return Array.from(
       new Set<string>(
         sourceItems
-          .map((item) => abastecimentoFuelBreakdown(item, produtos))
-          .filter((combustiveis) => combustiveis.dieselLitros > 0)
-          .map((combustiveis) => formatBRL(valorUnitarioDieselComDesconto(item, combustiveis.dieselLitros, combustiveis.dieselValor))),
+          .map((item) => {
+            const combustiveis = abastecimentoFuelBreakdown(item, produtos);
+            if (combustiveis.dieselLitros <= 0) return null;
+            return formatBRL(
+              valorUnitarioDieselComDesconto(item, combustiveis.dieselLitros, combustiveis.dieselValor),
+            );
+          })
+          .filter((value): value is string => Boolean(value)),
       ),
     );
     if (key === "valorDesconto") return Array.from(new Set<string>(sourceItems.map((item) => formatBRL(item.valorDesconto))));
