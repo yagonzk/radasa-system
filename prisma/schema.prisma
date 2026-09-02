@@ -287,6 +287,7 @@ model EstoqueProduto {
   nome           String
   codigoInterno  String
   categoria      String                 @default("Produtos de Piscina")
+  subcategoria   String                 @default("")
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
   movimentacoes  EstoqueMovimentacao[]
@@ -296,6 +297,18 @@ model EstoqueProduto {
   @@index([codigoInterno])
   @@index([categoria])
   @@map("estoque_produtos")
+}
+
+model EstoqueSubcategoria {
+  id        String   @id @default(cuid())
+  nome      String
+  categoria String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([categoria, nome])
+  @@index([categoria])
+  @@map("estoque_subcategorias")
 }
 
 model EstoqueTipoProduto {
@@ -698,6 +711,8 @@ model EstoqueMovimentacao {
   observacoes   String?
   pdfUrl        String?                 @db.Text
   pdfName       String?
+  xmlUrl        String?                 @db.Text
+  xmlName       String?
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
   produto       EstoqueProduto          @relation(fields: [produtoId], references: [id], onDelete: Restrict)

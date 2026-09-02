@@ -1,6 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
 import { prisma } from "../lib/prisma.js";
-import { resolveOrCreatePostoFromEmitente } from "./abastecimento-posto.service.js";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -433,6 +432,36 @@ export interface AbastecimentoXmlInterpretado {
   informacoesComplementares: string;
 }
 
+function xmlProductGroupingKey(product: AbastecimentoXmlProduto) {
+  return [
+    normalizeSearch(product.codigo),
+    normalizeSearch(product.nome),
+    normalizeSearch(product.unidade),
+    normalizeSearch(product.combustivel?.codigoAnp),
+    normalizeSearch(product.combustivel?.descricaoAnp),
+  ].join("|");
+}
+
+function consolidarProdutosXml(produtos: AbastecimentoXmlProduto[]) {
+  const agrupados = new Map<string, AbastecimentoXmlProduto>();
+
+  for (const produto of produtos) {
+    const key = xmlProductGroupingKey(produto);
+    const atual = agrupados.get(key);
+    if (!atual) {
+      agrupados.set(key, { ...produto, combustivel: produto.combustivel ? { ...produto.combustivel } : null });
+      continue;
+    }
+
+    atual.quantidade += produto.quantidade;
+    atual.valorTotal += produto.valorTotal;
+    atual.desconto += produto.desconto;
+    atual.valorUnitario = atual.quantidade > 0 ? atual.valorTotal / atual.quantidade : produto.valorUnitario;
+  }
+
+  return Array.from(agrupados.values());
+}
+
 export function interpretarAbastecimentoXml(
   xml: string,
 ): AbastecimentoXmlInterpretado {
@@ -450,7 +479,7 @@ export function interpretarAbastecimentoXml(
   const texts = noteTexts(infNfe);
   const odometer = extrairHodometro(texts);
 
-  const produtos = asArray(infNfe.det).map((det: any) => {
+  const produtos = consolidarProdutosXml(asArray(infNfe.det).map((det: any) => {
     const prod = det?.prod ?? {};
     const imposto = det?.imposto ?? {};
     const comb = prod?.comb ?? null;
@@ -474,7 +503,7 @@ export function interpretarAbastecimentoXml(
           }
         : null,
     };
-  });
+  }));
 
   const chaveNfe = onlyDigits(
     infNfe?.["@_Id"] ??
@@ -1049,37 +1078,9 @@ export async function sugerirVinculosAbastecimento(
     ? findVehicleSuggestionFromContext(document.placa, context)
     : await findVehicleSuggestion(document.placa);
 
-  // Quando o emitente ainda não existe no cadastro, cria o posto pelo CNPJ e
-  // dados oficiais da NF-e. Assim a importação já nasce vinculada ao posto
-  // correto e não exige escolher manualmente um cliente aproximado.
-  if (!cliente && (document.emitente.cnpj || document.emitente.razaoSocial || document.emitente.nomeFantasia)) {
-    const clienteId = await prisma.$transaction((tx) =>
-      resolveOrCreatePostoFromEmitente(
-        tx,
-        {
-          emitenteCnpj: document.emitente.cnpj,
-          emitenteRazaoSocial: document.emitente.razaoSocial,
-          emitenteNomeFantasia: document.emitente.nomeFantasia,
-          emitenteEndereco: document.emitente.endereco,
-          emitenteCidade: document.emitente.cidade,
-          emitenteUf: document.emitente.uf,
-        },
-        null,
-      ),
-    );
-
-    if (clienteId) {
-      cliente = await prisma.cliente.findUnique({
-        where: { id: clienteId },
-        select: {
-          id: true,
-          nomeFantasia: true,
-          razaoSocial: true,
-          cnpj: true,
-        },
-      });
-    }
-  }
+  // A conferência deve ser somente leitura. Se o posto ainda não existe,
+  // mantemos cliente=null e deixamos a criação para a transação de importação.
+  // Assim uma falha de banco/cadastro nunca transforma um XML válido em INVÁLIDO.
 
   // Nesta etapa apenas tenta associar produtos já existentes. Produtos novos
   // são cadastrados automaticamente somente ao confirmar o lançamento.

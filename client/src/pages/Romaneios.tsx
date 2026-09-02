@@ -1134,21 +1134,21 @@ export default function Romaneios() {
               <tr class="plate-start">
                 <td rowspan="3" class="plate"><span class="plate-pill">${formatPlate(plate)}</span></td>
                 <td><span class="type-dot lebrinha"></span>LEBRINHA</td>
-                <td>${money(values.lebrinhaPrimeira)}</td>
-                <td>${money(values.lebrinhaSegunda)}</td>
-                <td class="strong">${money(lebrinhaTotal)}</td>
+                <td class="amount-cell">${money(values.lebrinhaPrimeira)}</td>
+                <td class="amount-cell">${money(values.lebrinhaSegunda)}</td>
+                <td class="amount-cell strong">${money(lebrinhaTotal)}</td>
               </tr>
               <tr>
                 <td><span class="type-dot cliente"></span>CLIENTE</td>
-                <td>${money(values.clientePrimeira)}</td>
-                <td>${money(values.clienteSegunda)}</td>
-                <td class="strong">${money(clienteTotal)}</td>
+                <td class="amount-cell">${money(values.clientePrimeira)}</td>
+                <td class="amount-cell">${money(values.clienteSegunda)}</td>
+                <td class="amount-cell strong">${money(clienteTotal)}</td>
               </tr>
               <tr class="total-row">
                 <td>TOTAL</td>
-                <td>${money(primeiraTotal)}</td>
-                <td>${money(segundaTotal)}</td>
-                <td>${money(geral)}</td>
+                <td class="amount-cell">${money(primeiraTotal)}</td>
+                <td class="amount-cell">${money(segundaTotal)}</td>
+                <td class="amount-cell">${money(geral)}</td>
               </tr>`);
           });
 
@@ -1159,6 +1159,13 @@ export default function Romaneios() {
               <div class="month-total"><span>Total do período</span><strong>${money(monthTotal)}</strong></div>
             </div>
             <table>
+              <colgroup>
+                <col class="col-placa" />
+                <col class="col-tipo" />
+                <col class="col-primeira" />
+                <col class="col-segunda" />
+                <col class="col-total" />
+              </colgroup>
               <thead>
                 <tr><th>Placa</th><th>Tipo de cobrança</th><th>1ª quinzena</th><th>2ª quinzena</th><th>Total</th></tr>
               </thead>
@@ -1211,14 +1218,20 @@ export default function Romaneios() {
             .month-total { display: flex; align-items: baseline; gap: 7px; }
             .month-total span { color: #8793a6; font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
             .month-total strong { color: #123e69; font-size: 13px; }
-            table { width: 100%; margin-top: 7px; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid #dbe4ee; border-radius: 10px; font-size: 9.2px; }
+            table { width: 100%; margin-top: 7px; table-layout: fixed; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid #dbe4ee; border-radius: 10px; font-size: 9.2px; }
             th { padding: 8px 9px; color: #5d6b7f; background: #f4f7fb; border-bottom: 1px solid #dbe4ee; text-align: left; font-size: 8px; text-transform: uppercase; letter-spacing: .55px; }
-            th:nth-child(n+3), td:nth-child(n+3) { text-align: right; }
+            th:nth-child(n+3) { text-align: right; }
+            .amount-cell { text-align: right; }
             td { padding: 7px 9px; border-bottom: 1px solid #e6ecf3; background: #fff; }
             tr:last-child td { border-bottom: 0; }
             .plate-start td { border-top: 1px solid #ccd8e5; }
             tbody tr:first-child td { border-top: 0; }
-            .plate { width: 104px; vertical-align: middle; text-align: left !important; background: #fbfcfe; }
+            .col-placa { width: 9%; }
+            .col-tipo { width: 29%; }
+            .col-primeira { width: 20%; }
+            .col-segunda { width: 20%; }
+            .col-total { width: 22%; }
+            .plate { vertical-align: middle; text-align: left !important; background: #fbfcfe; }
             .plate-pill { display: inline-block; min-width: 74px; padding: 5px 7px; color: #154c7d; background: #e8f2fb; border: 1px solid #c8ddf1; border-radius: 7px; font-weight: 900; text-align: center; letter-spacing: .7px; }
             .type-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; }
             .type-dot.lebrinha { background: #1970bb; }

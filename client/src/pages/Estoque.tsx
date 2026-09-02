@@ -4,6 +4,7 @@ import {
   useEstoque,
   useEstoqueProdutos,
   useEstoqueTipos,
+  useEstoqueSubcategorias,
   type CategoriaEstoque,
   type EstoqueMovimentacao,
   type EstoqueProduto,
@@ -31,15 +32,16 @@ import {
   Pencil,
   Plus,
   Printer,
+  Search,
   Trash2,
   Upload,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
+import { matchesEstoqueGlobalSearch, normalizeEstoqueFilterText } from "@/lib/estoque-filters";
 
 type ViewMode = "ESTOQUE" | "ENTRADAS" | "SAIDAS";
-type CategoriaFiltro = "TODOS" | CategoriaEstoque;
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyMovementForm = () => ({
@@ -52,9 +54,7 @@ const emptyMovementForm = () => ({
 });
 
 const emptyProductForm = (categoria: CategoriaEstoque) => ({
-  nome: "",
-  codigoInterno: "",
-  categoria,
+  nome: "", codigoInterno: "", categoria, subcategoria: "", quantidade: "1", valorUnitario: "", dataCompra: today(), observacoes: "",
 });
 
 const fileToDataUrl = (file: File) =>
@@ -65,12 +65,84 @@ const fileToDataUrl = (file: File) =>
     reader.readAsDataURL(file);
   });
 
+function ProductFileDropzone({
+  title,
+  description,
+  accept,
+  file,
+  onFile,
+}: {
+  title: string;
+  description: string;
+  accept: string;
+  file: File | null;
+  onFile: (file: File) => void | Promise<void>;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleFile = async (selected?: File) => {
+    if (!selected) return;
+    await onFile(selected);
+  };
+
+  return (
+    <div
+      className={`flex min-h-[220px] flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-7 text-center transition-colors ${
+        dragActive ? "border-primary bg-primary/10" : "border-border/80 bg-muted/15 hover:border-primary/60 hover:bg-muted/25"
+      }`}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragActive(true);
+      }}
+      onDragLeave={(event) => {
+        event.preventDefault();
+        setDragActive(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragActive(false);
+        void handleFile(event.dataTransfer.files?.[0]);
+      }}
+    >
+      <input
+        ref={inputRef}
+        className="hidden"
+        type="file"
+        accept={accept}
+        onChange={(event) => {
+          void handleFile(event.target.files?.[0]);
+          event.currentTarget.value = "";
+        }}
+      />
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <FileText className="h-6 w-6" />
+      </div>
+      <p className="text-base font-semibold">{title}</p>
+      <p className="mt-3 text-sm text-muted-foreground">{description}</p>
+      <p className="mt-1 text-xs text-muted-foreground">ou</p>
+      <Button type="button" variant="default" className="mt-3" onClick={() => inputRef.current?.click()}>
+        <Upload className="mr-2 h-4 w-4" />
+        Selecionar arquivo
+      </Button>
+      <p className="mt-3 max-w-full truncate text-xs text-muted-foreground">
+        {file ? file.name : accept.includes("xml") ? "Formato aceito: .xml" : "Formato aceito: .pdf"}
+      </p>
+    </div>
+  );
+}
+
 export default function Estoque() {
   const {
     items: tiposProduto,
     create: createTipoProduto,
     remove: removeTipoProduto,
   } = useEstoqueTipos();
+  const {
+    items: subcategorias,
+    create: createSubcategoria,
+    remove: removeSubcategoria,
+  } = useEstoqueSubcategorias();
   const {
     items: produtos,
     create: createProduto,
@@ -79,13 +151,14 @@ export default function Estoque() {
   } = useEstoqueProdutos();
   const { movimentacoes, resumo, create, remove, refresh: refreshEstoque } = useEstoque();
 
-  const [categoriaFiltro, setCategoriaFiltro] = useState<CategoriaFiltro>("TODOS");
   const [viewMode, setViewMode] = useState<ViewMode>("ESTOQUE");
 
   const [open, setOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [form, setForm] = useState(emptyMovementForm);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [viewing, setViewing] = useState<EstoqueMovimentacao | null>(null);
+  const [viewingProduct, setViewingProduct] = useState<(typeof resumo)[number] | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -93,6 +166,11 @@ export default function Estoque() {
   const [editingProduct, setEditingProduct] = useState<EstoqueProduto | null>(null);
   const [productForm, setProductForm] = useState(() => emptyProductForm(""));
   const [savingProduct, setSavingProduct] = useState(false);
+  const [productPdfFile, setProductPdfFile] = useState<File | null>(null);
+  const [productXmlFile, setProductXmlFile] = useState<File | null>(null);
+  const [subManagerOpen, setSubManagerOpen] = useState(false);
+  const [newSubName, setNewSubName] = useState("");
+  const [savingSubcategoria, setSavingSubcategoria] = useState(false);
 
   const [typeManagerOpen, setTypeManagerOpen] = useState(false);
   const [newTypeName, setNewTypeName] = useState("");
@@ -103,17 +181,13 @@ export default function Estoque() {
     [tiposProduto],
   );
 
-  const produtosFiltrados = useMemo(
-    () => categoriaFiltro === "TODOS" ? produtos : produtos.filter((produto) => produto.categoria === categoriaFiltro),
-    [produtos, categoriaFiltro],
-  );
-  const resumoFiltrado = useMemo(
-    () => categoriaFiltro === "TODOS" ? resumo : resumo.filter((item) => item.produto.categoria === categoriaFiltro),
-    [resumo, categoriaFiltro],
-  );
-  const movimentosFiltrados = useMemo(
-    () => categoriaFiltro === "TODOS" ? movimentacoes : movimentacoes.filter((movimento) => movimento.produto.categoria === categoriaFiltro),
-    [movimentacoes, categoriaFiltro],
+  const resumoFiltrado = resumo;
+  const movimentosFiltrados = movimentacoes;
+  const viewingProductMovements = useMemo(
+    () => viewingProduct
+      ? movimentacoes.filter((movimento) => movimento.produtoId === viewingProduct.produto.id)
+      : [],
+    [movimentacoes, viewingProduct],
   );
   const entradas = useMemo(
     () => movimentosFiltrados.filter((movimento) => movimento.tipo === "ENTRADA"),
@@ -135,9 +209,7 @@ export default function Estoque() {
   };
 
   const openCreateProduct = () => {
-    const categoriaInicial = categoriaFiltro !== "TODOS" && categoriasEstoque.includes(categoriaFiltro)
-      ? categoriaFiltro
-      : categoriasEstoque[0];
+    const categoriaInicial = categoriasEstoque[0];
 
     if (!categoriaInicial) {
       toast.error("Cadastre um tipo de produto antes de criar um produto no almoxarifado.");
@@ -155,9 +227,53 @@ export default function Estoque() {
     setProductForm({
       nome: produto.nome,
       codigoInterno: produto.codigoInterno,
-      categoria: produto.categoria,
+      categoria: produto.categoria, subcategoria: produto.subcategoria || "", quantidade: "1", valorUnitario: "", dataCompra: today(), observacoes: "",
     });
     setProductOpen(true);
+  };
+
+  const readProductXml = async (file: File) => {
+    const text = await file.text();
+    const doc = new DOMParser().parseFromString(text, "application/xml");
+    if (doc.querySelector("parsererror")) throw new Error("XML inválido.");
+    const det = doc.getElementsByTagNameNS("*", "det")[0];
+    const get = (root: Element | Document, tag: string) => root.getElementsByTagNameNS("*", tag)[0]?.textContent?.trim() || "";
+    if (!det) throw new Error("Nenhum produto encontrado na NF-e.");
+    const dh = get(doc, "dhEmi") || get(doc, "dEmi");
+    setProductForm(current => ({ ...current, nome: get(det, "xProd") || current.nome, quantidade: get(det, "qCom") || current.quantidade, valorUnitario: get(det, "vUnCom") || current.valorUnitario, dataCompra: dh ? dh.slice(0,10) : current.dataCompra }));
+    setProductXmlFile(file);
+    toast.success("XML da NF-e lido. Confira os dados antes de cadastrar.");
+  };
+
+  const submitSubcategoria = async (event?: FormEvent) => {
+    event?.preventDefault();
+    const nome = newSubName.trim();
+    if (!nome || !productForm.categoria || savingSubcategoria) return;
+
+    setSavingSubcategoria(true);
+    try {
+      const item = await createSubcategoria({ nome, categoria: productForm.categoria } as any);
+      setProductForm((current) => ({ ...current, subcategoria: item.nome }));
+      setNewSubName("");
+      toast.success("Subcategoria criada no almoxarifado.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível criar a subcategoria.");
+    } finally {
+      setSavingSubcategoria(false);
+    }
+  };
+
+  const deleteSubcategoria = async (item: { id: string; nome: string; categoria: string }) => {
+    if (!window.confirm(`Remover a subcategoria "${item.nome}"?`)) return;
+    try {
+      await removeSubcategoria(item.id);
+      if (productForm.categoria === item.categoria && productForm.subcategoria === item.nome) {
+        setProductForm((current) => ({ ...current, subcategoria: "" }));
+      }
+      toast.success("Subcategoria removida.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível remover a subcategoria.");
+    }
   };
 
   const submitProduct = async (event: FormEvent) => {
@@ -170,11 +286,13 @@ export default function Estoque() {
         await updateProduto(editingProduct.id, productForm);
         toast.success("Produto do almoxarifado atualizado.");
       } else {
-        const novoProduto = await createProduto(productForm);
+        const pdfUrl = productPdfFile ? await fileToDataUrl(productPdfFile) : null;
+        const xmlUrl = productXmlFile ? await fileToDataUrl(productXmlFile) : null;
+        const novoProduto = await createProduto({ ...productForm, quantidade: Number(productForm.quantidade), valorUnitario: Number(productForm.valorUnitario || 0), pdfUrl, pdfName: productPdfFile?.name || null, xmlUrl, xmlName: productXmlFile?.name || null } as any);
         toast.success(`Produto criado com o código ${novoProduto.codigoInterno}.`);
       }
       setProductOpen(false);
-      setEditingProduct(null);
+      setEditingProduct(null); setProductPdfFile(null); setProductXmlFile(null);
       await refreshEstoque();
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Não foi possível salvar o produto do almoxarifado.");
@@ -203,7 +321,6 @@ export default function Estoque() {
     try {
       const criado = await createTipoProduto({ nome });
       setNewTypeName("");
-      setCategoriaFiltro(criado.nome);
       if (productOpen) {
         setProductForm((current) => ({ ...current, categoria: criado.nome }));
       }
@@ -219,7 +336,6 @@ export default function Estoque() {
     if (!window.confirm(`Remover o tipo de produto "${tipo.nome}"?`)) return;
     try {
       await removeTipoProduto(tipo.id);
-      if (categoriaFiltro === tipo.nome) setCategoriaFiltro("TODOS");
       if (productForm.categoria === tipo.nome) {
         setProductForm((current) => ({ ...current, categoria: "" }));
       }
@@ -235,10 +351,6 @@ export default function Estoque() {
       return;
     }
 
-    if (!produtosFiltrados.length) {
-      toast.error(`Nenhum produto do tipo ${categoriaFiltro} está cadastrado. Altere o filtro de tipo de produto ou cadastre um novo produto.`);
-      return;
-    }
 
     resetForm();
     setOpen(true);
@@ -267,7 +379,7 @@ export default function Estoque() {
   };
 
   const exportRows = viewMode === "ENTRADAS" ? entradas : viewMode === "SAIDAS" ? saidas : movimentosFiltrados;
-  const categoryLabel = categoriaFiltro === "TODOS" ? "Todos os tipos" : categoriaFiltro;
+  const categoryLabel = "Todos os tipos";
 
   const exportCsv = () => {
     const headers = ["Data", "Produto", "Código", "Tipo", "Quantidade", "Valor unitário", "Valor total", "Observações", "NF PDF"];
@@ -323,11 +435,12 @@ export default function Estoque() {
               Produtos do almoxarifado são cadastrados aqui e são independentes dos produtos da aba Cadastros.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={exportCsv}><FileDown className="mr-2 h-4 w-4" />Exportar CSV</Button>
-            <Button variant="outline" onClick={exportPdf}><Printer className="mr-2 h-4 w-4" />Exportar PDF</Button>
-            <Button onClick={openCreateProduct}><PackagePlus className="mr-2 h-4 w-4" />Novo produto</Button>
-            <Button variant="outline" onClick={openMovement}><Plus className="mr-2 h-4 w-4" />Nova movimentação</Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="outline" onClick={openCreateProduct}><PackagePlus className="mr-2 h-4 w-4" />Novo produto</Button>
+            <Button variant="outline" onClick={() => setReportOpen(true)}>
+              <FileText className="mr-2 h-4 w-4" />Relatório
+            </Button>
+            <Button onClick={openMovement}><Plus className="mr-2 h-4 w-4" />Nova movimentação</Button>
           </div>
         </div>
 
@@ -338,33 +451,6 @@ export default function Estoque() {
               <TabsTrigger value="ENTRADAS">Entrada</TabsTrigger>
               <TabsTrigger value="SAIDAS">Saída</TabsTrigger>
             </TabsList>
-
-            <div className="w-full sm:w-[330px]">
-              <Label className="mb-1.5 block text-xs text-muted-foreground">Tipo de produto</Label>
-              <div className="flex gap-2">
-                <Select value={categoriaFiltro} onValueChange={(value) => setCategoriaFiltro(value as CategoriaFiltro)}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="TODOS">Todos os tipos</SelectItem>
-                    {categoriasEstoque.map((category) => (
-                      <SelectItem key={category} value={category}>{category}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="outline"
-                  onClick={() => setTypeManagerOpen(true)}
-                  title="Criar ou remover tipos de produto"
-                  aria-label="Gerenciar tipos de produto"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 xl:gap-4">
@@ -375,8 +461,8 @@ export default function Estoque() {
 
           <TabsContent value="ESTOQUE" className="mt-4">
             <ResumoTable
-              key={categoriaFiltro}
               rows={resumoFiltrado}
+              onViewProduct={setViewingProduct}
               onEditProduct={openEditProduct}
               onDeleteProduct={deleteProduct}
             />
@@ -389,69 +475,364 @@ export default function Estoque() {
           </TabsContent>
         </Tabs>
 
-        <Dialog open={productOpen} onOpenChange={(value) => { setProductOpen(value); if (!value) setEditingProduct(null); }}>
-          <DialogContent className="sm:max-w-[520px]">
-            <DialogHeader><DialogTitle>{editingProduct ? "Editar produto do almoxarifado" : "Novo produto do almoxarifado"}</DialogTitle></DialogHeader>
-            <form onSubmit={submitProduct} className="space-y-4">
-              <Field label="Nome do produto">
-                <Input
-                  required
-                  value={productForm.nome}
-                  onChange={(event) => setProductForm({ ...productForm, nome: event.target.value })}
-                  placeholder="Ex: Cloro granulado"
-                />
-              </Field>
-              <Field label="Código interno">
-                <Input
-                  value={editingProduct ? productForm.codigoInterno : ""}
-                  disabled
-                  placeholder={editingProduct ? undefined : "Gerado automaticamente: RAD-00001, RAD-00002..."}
-                />
-                {!editingProduct && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    O código será criado automaticamente ao cadastrar o produto.
-                  </p>
-                )}
-              </Field>
-              <Field label="Tipo de produto">
-                <div className="flex gap-2">
-                  <Select
-                    value={productForm.categoria}
-                    onValueChange={(value) => setProductForm({ ...productForm, categoria: value as CategoriaEstoque })}
-                  >
-                    <SelectTrigger className="flex-1"><SelectValue placeholder="Selecione o tipo" /></SelectTrigger>
-                    <SelectContent>
-                      {categoriasEstoque.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    onClick={() => setTypeManagerOpen(true)}
-                    title="Criar ou remover tipos de produto"
-                    aria-label="Gerenciar tipos de produto"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
+        <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+          <DialogContent className="sm:max-w-[460px]">
+            <DialogHeader>
+              <DialogTitle>Relatório do almoxarifado</DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                Selecione o formato que deseja exportar.
+              </p>
+            </DialogHeader>
+
+            <div className="grid gap-3 py-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto justify-start gap-3 px-4 py-4 text-left"
+                onClick={() => {
+                  setReportOpen(false);
+                  exportCsv();
+                }}
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+                  <FileDown className="h-5 w-5" />
+                </span>
+                <span>
+                  <span className="block font-semibold">Exportar CSV</span>
+                  <span className="block text-xs font-normal text-muted-foreground">Baixar relatório em formato CSV.</span>
+                </span>
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto justify-start gap-3 px-4 py-4 text-left"
+                onClick={() => {
+                  setReportOpen(false);
+                  exportPdf();
+                }}
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+                  <Printer className="h-5 w-5" />
+                </span>
+                <span>
+                  <span className="block font-semibold">Exportar PDF</span>
+                  <span className="block text-xs font-normal text-muted-foreground">Abrir relatório para salvar ou imprimir em PDF.</span>
+                </span>
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={productOpen} onOpenChange={(value) => {
+          setProductOpen(value);
+          if (!value) {
+            setEditingProduct(null);
+            setProductPdfFile(null);
+            setProductXmlFile(null);
+          }
+        }}>
+          <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[1040px]">
+            <DialogHeader className="border-b pb-5">
+              <div className="flex items-start gap-4 pr-8">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500">
+                  <PackagePlus className="h-6 w-6" />
                 </div>
-              </Field>
-              <DialogFooter>
+                <div className="space-y-1">
+                  <DialogTitle className="text-2xl">
+                    {editingProduct ? "Editar produto do almoxarifado" : "Novo produto do almoxarifado"}
+                  </DialogTitle>
+                  {!editingProduct && (
+                    <p className="text-sm text-muted-foreground">
+                      Cadastre um novo produto para controle de estoque e integração com o financeiro (DRE).
+                    </p>
+                  )}
+                </div>
+              </div>
+            </DialogHeader>
+
+            <form onSubmit={submitProduct} className="space-y-5 pt-1">
+              {editingProduct ? (
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <Field label="Nome do produto">
+                    <Input
+                      required
+                      value={productForm.nome}
+                      onChange={(event) => setProductForm({ ...productForm, nome: event.target.value })}
+                      placeholder="Ex: Cloro granulado"
+                    />
+                  </Field>
+                  <Field label="Código interno">
+                    <Input value={productForm.codigoInterno} disabled />
+                  </Field>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-xl border bg-muted/10 p-5">
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      <Field label="Nome do produto">
+                        <Input
+                          required
+                          value={productForm.nome}
+                          onChange={(event) => setProductForm({ ...productForm, nome: event.target.value })}
+                          placeholder="Ex: Cloro granulado"
+                          className="h-11"
+                        />
+                      </Field>
+                      <Field label="Valor unitário (R$)">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          required
+                          value={productForm.valorUnitario}
+                          onChange={(event) => setProductForm({ ...productForm, valorUnitario: event.target.value })}
+                          placeholder="0,00"
+                          className="h-11"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/10 p-5">
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      <Field label="Categoria">
+                        <div className="flex gap-2">
+                          <Select
+                            value={productForm.categoria}
+                            onValueChange={(value) => setProductForm({ ...productForm, categoria: value as CategoriaEstoque, subcategoria: "" })}
+                          >
+                            <SelectTrigger className="h-11 flex-1"><SelectValue placeholder="Selecione a categoria" /></SelectTrigger>
+                            <SelectContent>
+                              {categoriasEstoque.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="h-11 w-11 shrink-0"
+                            onClick={() => setTypeManagerOpen(true)}
+                            title="Criar ou remover categorias"
+                            aria-label="Gerenciar categorias"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </Field>
+
+                      <Field label="Subcategoria">
+                        <div className="flex gap-2">
+                          <Select
+                            value={productForm.subcategoria}
+                            onValueChange={(value) => setProductForm({ ...productForm, subcategoria: value })}
+                          >
+                            <SelectTrigger className="h-11 flex-1"><SelectValue placeholder="Selecione a subcategoria" /></SelectTrigger>
+                            <SelectContent>
+                              {subcategorias.filter((item) => item.categoria === productForm.categoria).map((item) => (
+                                <SelectItem key={item.id} value={item.nome}>{item.nome}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="h-11 w-11 shrink-0"
+                            onClick={() => setSubManagerOpen(true)}
+                            disabled={!productForm.categoria}
+                            title="Adicionar subcategoria"
+                            aria-label="Adicionar subcategoria"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </Field>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/10 p-5">
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                      <Field label="Quantidade">
+                        <Input
+                          type="number"
+                          step="0.001"
+                          min="0.001"
+                          required
+                          value={productForm.quantidade}
+                          onChange={(event) => setProductForm({ ...productForm, quantidade: event.target.value })}
+                          className="h-11"
+                        />
+                      </Field>
+                      <Field label="Data de compra">
+                        <DatePicker value={productForm.dataCompra} onChange={(value) => setProductForm({ ...productForm, dataCompra: value })} />
+                      </Field>
+                      <Field label="Código interno">
+                        <Input
+                          value=""
+                          disabled
+                          placeholder="Gerado automaticamente"
+                          className="h-11"
+                        />
+                        <p className="mt-1 text-xs text-muted-foreground">Ex: RAD-00001, RAD-00002...</p>
+                      </Field>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/10 p-5">
+                    <Field label="Observação">
+                      <textarea
+                        value={productForm.observacoes}
+                        onChange={(event) => setProductForm({ ...productForm, observacoes: event.target.value })}
+                        placeholder="Digite observações sobre o produto, fornecedor, finalidade, etc."
+                        maxLength={500}
+                        className="min-h-[150px] w-full resize-y rounded-md border border-input bg-background px-3 py-3 text-sm shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      />
+                      <div className="mt-1 text-right text-xs text-muted-foreground">
+                        {productForm.observacoes.length}/500
+                      </div>
+                    </Field>
+
+                    <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                      <ProductFileDropzone
+                        title="XML da NF-e"
+                        description="Arraste e solte o arquivo XML da NF-e aqui"
+                        accept=".xml,text/xml,application/xml"
+                        file={productXmlFile}
+                        onFile={async (file) => {
+                          try {
+                            await readProductXml(file);
+                          } catch (error: any) {
+                            toast.error(error?.message || "Não foi possível ler o XML.");
+                          }
+                        }}
+                      />
+                      <ProductFileDropzone
+                        title="PDF da NF-e (ou comprovante)"
+                        description="Arraste e solte o arquivo PDF aqui"
+                        accept="application/pdf,.pdf"
+                        file={productPdfFile}
+                        onFile={(file) => {
+                          const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+                          if (!isPdf) {
+                            toast.error("Selecione um arquivo PDF válido.");
+                            return;
+                          }
+                          setProductPdfFile(file);
+                        }}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {editingProduct && (
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <Field label="Categoria">
+                    <div className="flex gap-2">
+                      <Select value={productForm.categoria} onValueChange={(value) => setProductForm({ ...productForm, categoria: value as CategoriaEstoque, subcategoria: "" })}>
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Selecione a categoria" /></SelectTrigger>
+                        <SelectContent>{categoriasEstoque.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Button type="button" size="icon" variant="outline" onClick={() => setTypeManagerOpen(true)}><Plus className="h-4 w-4" /></Button>
+                    </div>
+                  </Field>
+                  <Field label="Subcategoria">
+                    <div className="flex gap-2">
+                      <Select value={productForm.subcategoria} onValueChange={(value) => setProductForm({ ...productForm, subcategoria: value })}>
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Selecione a subcategoria" /></SelectTrigger>
+                        <SelectContent>{subcategorias.filter((item) => item.categoria === productForm.categoria).map((item) => <SelectItem key={item.id} value={item.nome}>{item.nome}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Button type="button" size="icon" variant="outline" onClick={() => setSubManagerOpen(true)}><Plus className="h-4 w-4" /></Button>
+                    </div>
+                  </Field>
+                </div>
+              )}
+
+              <DialogFooter className="border-t pt-5">
                 <Button type="button" variant="outline" onClick={() => setProductOpen(false)}>Cancelar</Button>
-                <Button type="submit" disabled={savingProduct || !productForm.categoria}>{savingProduct ? "Salvando..." : editingProduct ? "Salvar alterações" : "Cadastrar produto"}</Button>
+                <Button type="submit" disabled={savingProduct || !productForm.categoria}>
+                  {savingProduct ? "Salvando..." : editingProduct ? "Salvar alterações" : "Cadastrar produto"}
+                </Button>
               </DialogFooter>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={subManagerOpen} onOpenChange={(value) => { setSubManagerOpen(value); if (!value) setNewSubName(""); }}>
+          <DialogContent className="sm:max-w-[540px]">
+            <DialogHeader>
+              <DialogTitle>Subcategorias do almoxarifado</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-5">
+              <form onSubmit={submitSubcategoria} className="space-y-2">
+                <Label htmlFor="nova-subcategoria">Nova subcategoria</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="nova-subcategoria"
+                    value={newSubName}
+                    onChange={(event) => setNewSubName(event.target.value)}
+                    placeholder={`Ex: subcategoria de ${productForm.categoria || "categoria"}`}
+                    maxLength={80}
+                  />
+                  <Button type="submit" disabled={savingSubcategoria || !newSubName.trim() || !productForm.categoria}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    {savingSubcategoria ? "Adicionando..." : "Adicionar"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Categoria atual: <span className="font-medium text-foreground">{productForm.categoria || "Nenhuma selecionada"}</span>
+                </p>
+              </form>
+
+              <div className="space-y-2">
+                <Label>Subcategorias cadastradas</Label>
+                <div className="max-h-[300px] space-y-2 overflow-y-auto rounded-lg border p-2">
+                  {subcategorias
+                    .filter((item) => item.categoria === productForm.categoria)
+                    .map((item) => {
+                      const quantidadeProdutos = produtos.filter(
+                        (produto) => produto.categoria === item.categoria && produto.subcategoria === item.nome,
+                      ).length;
+                      return (
+                        <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{item.nome}</p>
+                            <p className="text-xs text-muted-foreground">{quantidadeProdutos} produto(s) vinculado(s)</p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="shrink-0 text-destructive hover:text-destructive"
+                            onClick={() => void deleteSubcategoria(item)}
+                            title={quantidadeProdutos > 0 ? "Remova ou altere os produtos vinculados antes de excluir esta subcategoria" : "Remover subcategoria"}
+                            aria-label={`Remover subcategoria ${item.nome}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  {!subcategorias.some((item) => item.categoria === productForm.categoria) && (
+                    <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+                      Nenhuma subcategoria cadastrada para esta categoria.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 
         <Dialog open={typeManagerOpen} onOpenChange={(value) => { setTypeManagerOpen(value); if (!value) setNewTypeName(""); }}>
           <DialogContent className="sm:max-w-[540px]">
             <DialogHeader>
-              <DialogTitle>Tipos de produto do almoxarifado</DialogTitle>
+              <DialogTitle>Categorias do almoxarifado</DialogTitle>
             </DialogHeader>
             <div className="space-y-5">
               <form onSubmit={submitTipoProduto} className="space-y-2">
-                <Label htmlFor="novo-tipo-produto">Novo tipo de produto</Label>
+                <Label htmlFor="novo-tipo-produto">Nova categoria</Label>
                 <div className="flex gap-2">
                   <Input
                     id="novo-tipo-produto"
@@ -519,11 +900,11 @@ export default function Estoque() {
                 </Field>
                 <Field label="Data"><DatePicker value={form.data} onChange={(value) => setForm({ ...form, data: value })} placeholder="Selecione uma data" /></Field>
               </div>
-              <Field label={categoriaFiltro === "TODOS" ? "Produto" : `Produto — ${categoriaFiltro}`}>
+              <Field label="Produto">
                 <Select value={form.produtoId} onValueChange={(value) => setForm({ ...form, produtoId: value })}>
                   <SelectTrigger><SelectValue placeholder="Selecione o produto" /></SelectTrigger>
                   <SelectContent>
-                    {produtosFiltrados.map((produto) => <SelectItem key={produto.id} value={produto.id}>{produto.nome} - {produto.codigoInterno}</SelectItem>)}
+                    {produtos.map((produto) => <SelectItem key={produto.id} value={produto.id}>{produto.nome} - {produto.codigoInterno}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </Field>
@@ -550,6 +931,82 @@ export default function Estoque() {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={!!viewingProduct} onOpenChange={(value) => !value && setViewingProduct(null)}>
+          <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[900px]">
+            <DialogHeader>
+              <DialogTitle>Detalhes do produto em estoque</DialogTitle>
+            </DialogHeader>
+            {viewingProduct && (
+              <div className="space-y-6">
+                <div className="grid gap-3 rounded-xl border bg-muted/10 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <Detail label="Produto" value={viewingProduct.produto.nome} />
+                  <Detail label="Código" value={viewingProduct.produto.codigoInterno} />
+                  <Detail label="Categoria" value={viewingProduct.produto.categoria || "—"} />
+                  <Detail label="Subcategoria" value={viewingProduct.produto.subcategoria || "—"} />
+                  <Detail label="Entradas" value={viewingProduct.entradas.toLocaleString("pt-BR")} />
+                  <Detail label="Saídas" value={viewingProduct.saidas.toLocaleString("pt-BR")} />
+                  <Detail label="Saldo atual" value={viewingProduct.estoque.toLocaleString("pt-BR")} />
+                  <Detail label="Valor das saídas" value={formatBRL(viewingProduct.valorSaidas)} />
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="font-semibold">Documentos fiscais</h3>
+                    <p className="text-xs text-muted-foreground">Notas e arquivos vinculados às entradas e movimentações deste produto.</p>
+                  </div>
+                  <div className="space-y-2">
+                    {viewingProductMovements.filter((movimento) => movimento.pdfUrl || movimento.xmlUrl).map((movimento) => (
+                      <div key={`docs-${movimento.id}`} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 text-sm">
+                          <p className="font-medium">{movimento.tipo === "ENTRADA" ? "Entrada" : "Saída"} de {formatDate(movimento.data)}</p>
+                          <p className="truncate text-xs text-muted-foreground">{movimento.pdfName || movimento.xmlName || "Documento fiscal"}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {movimento.pdfUrl && (
+                            <Button type="button" size="sm" variant="outline" onClick={() => setPdfPreview({ url: movimento.pdfUrl!, title: movimento.pdfName || "Nota fiscal" })}>
+                              <Eye className="mr-2 h-4 w-4" />Visualizar PDF
+                            </Button>
+                          )}
+                          {movimento.xmlUrl && (
+                            <Button type="button" size="sm" variant="outline" onClick={() => downloadDocument(movimento.xmlUrl!, movimento.xmlName || `nf_${movimento.id}.xml`)}>
+                              <Download className="mr-2 h-4 w-4" />Baixar XML
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {!viewingProductMovements.some((movimento) => movimento.pdfUrl || movimento.xmlUrl) && (
+                      <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Nenhum XML ou PDF vinculado a este produto.</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-semibold">Histórico de movimentações</h3>
+                  <div className="overflow-x-auto rounded-lg border">
+                    <table className="w-full min-w-[720px] text-sm">
+                      <thead className="bg-muted/30"><tr><th className="px-3 py-2 text-left">Data</th><th className="px-3 py-2 text-left">Tipo</th><th className="px-3 py-2 text-right">Quantidade</th><th className="px-3 py-2 text-right">Valor unitário</th><th className="px-3 py-2 text-right">Valor total</th><th className="px-3 py-2 text-left">Observação</th></tr></thead>
+                      <tbody>
+                        {viewingProductMovements.map((movimento) => (
+                          <tr key={movimento.id} className="border-t">
+                            <td className="px-3 py-2">{formatDate(movimento.data)}</td>
+                            <td className="px-3 py-2">{movimento.tipo === "ENTRADA" ? "Entrada" : "Saída"}</td>
+                            <td className="px-3 py-2 text-right">{movimento.quantidade.toLocaleString("pt-BR")}</td>
+                            <td className="px-3 py-2 text-right">{formatBRL(movimento.valorUnitario)}</td>
+                            <td className="px-3 py-2 text-right">{formatBRL(movimento.valorTotal)}</td>
+                            <td className="max-w-[260px] truncate px-3 py-2" title={movimento.observacoes || ""}>{movimento.observacoes || "—"}</td>
+                          </tr>
+                        ))}
+                        {!viewingProductMovements.length && <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">Nenhuma movimentação registrada.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={!!viewing} onOpenChange={(value) => !value && setViewing(null)}>
           <DialogContent className="sm:max-w-[620px]">
             <DialogHeader><DialogTitle>Detalhes da movimentação</DialogTitle></DialogHeader>
@@ -572,13 +1029,15 @@ export default function Estoque() {
   );
 }
 
-type EstoqueResumoFilterKey = "produto" | "codigo" | "entradas" | "saidas" | "saldo" | "valorSaidas";
+type EstoqueResumoFilterKey = "produto" | "codigo" | "categoria" | "subcategoria" | "entradas" | "saidas" | "saldo" | "valorSaidas";
 
 type EstoqueResumoFilters = Record<EstoqueResumoFilterKey, string>;
 
 const emptyEstoqueResumoFilters: EstoqueResumoFilters = {
   produto: "",
   codigo: "",
+  categoria: "",
+  subcategoria: "",
   entradas: "",
   saidas: "",
   saldo: "",
@@ -588,35 +1047,35 @@ const emptyEstoqueResumoFilters: EstoqueResumoFilters = {
 const estoqueResumoColumns: Array<{ key: EstoqueResumoFilterKey; label: string }> = [
   { key: "produto", label: "Produto" },
   { key: "codigo", label: "Código" },
+  { key: "categoria", label: "Tipo de produto" },
+  { key: "subcategoria", label: "Subcategoria" },
   { key: "entradas", label: "Entradas" },
   { key: "saidas", label: "Saídas" },
   { key: "saldo", label: "Saldo" },
   { key: "valorSaidas", label: "Valor das saídas" },
 ];
 
-const normalizeFilterText = (value: unknown) =>
-  String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("pt-BR")
-    .trim();
-
 function ResumoTable({
   rows,
+  onViewProduct,
   onEditProduct,
   onDeleteProduct,
 }: {
   rows: ReturnType<typeof useEstoque>["resumo"];
+  onViewProduct: (row: ReturnType<typeof useEstoque>["resumo"][number]) => void;
   onEditProduct: (produto: EstoqueProduto) => void;
   onDeleteProduct: (produto: EstoqueProduto) => Promise<void>;
 }) {
   const [columnFilters, setColumnFilters] = useState<EstoqueResumoFilters>(emptyEstoqueResumoFilters);
   const [activeColumnFilter, setActiveColumnFilter] = useState<EstoqueResumoFilterKey | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState("");
+  const [globalSearch, setGlobalSearch] = useState("");
 
   const displayValue = (row: (typeof rows)[number], key: EstoqueResumoFilterKey) => {
     if (key === "produto") return row.produto.nome;
     if (key === "codigo") return row.produto.codigoInterno;
+    if (key === "categoria") return row.produto.categoria || "—";
+    if (key === "subcategoria") return row.produto.subcategoria || "—";
     if (key === "entradas") return row.entradas.toLocaleString("pt-BR");
     if (key === "saidas") return row.saidas.toLocaleString("pt-BR");
     if (key === "saldo") return row.estoque.toLocaleString("pt-BR");
@@ -625,15 +1084,16 @@ function ResumoTable({
 
   const filteredRows = useMemo(
     () => rows.filter((row) =>
+      matchesEstoqueGlobalSearch(row.produto, globalSearch) &&
       estoqueResumoColumns.every(({ key }) => !columnFilters[key] || displayValue(row, key) === columnFilters[key]),
     ),
-    [rows, columnFilters],
+    [rows, columnFilters, globalSearch],
   );
 
   const optionsFor = (key: EstoqueResumoFilterKey) =>
     Array.from(new Set(rows.map((row) => displayValue(row, key))))
       .filter(Boolean)
-      .filter((option) => normalizeFilterText(option).includes(normalizeFilterText(columnFilterSearch)))
+      .filter((option) => normalizeEstoqueFilterText(option).includes(normalizeEstoqueFilterText(columnFilterSearch)))
       .sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
 
   const hasFilters = estoqueResumoColumns.some(({ key }) => Boolean(columnFilters[key]));
@@ -653,8 +1113,20 @@ function ResumoTable({
         </div>
       )}
 
+      <div className="flex justify-start py-1">
+        <div className="relative w-full max-w-[430px]">
+          <Input
+            value={globalSearch}
+            onChange={(event) => setGlobalSearch(event.target.value)}
+            placeholder="Buscar por nome ou código"
+            className="pl-9"
+          />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        </div>
+      </div>
+
       <div className="overflow-x-auto rounded-xl border bg-card">
-        <table className="w-full min-w-[760px] text-sm">
+        <table className="w-full min-w-[980px] text-sm">
           <thead className="bg-muted/30">
             <tr>
               {estoqueResumoColumns.map((column) => {
@@ -734,12 +1206,15 @@ function ResumoTable({
               <tr key={row.produto.id} className="border-t">
                 <td className="px-4 py-3 font-medium">{row.produto.nome}</td>
                 <td className="px-4 py-3">{row.produto.codigoInterno}</td>
+                <td className="px-4 py-3">{row.produto.categoria || "—"}</td>
+                <td className="px-4 py-3">{row.produto.subcategoria || "—"}</td>
                 <td className="px-4 py-3 text-emerald-500">{row.entradas.toLocaleString("pt-BR")}</td>
                 <td className="px-4 py-3 text-amber-500">{row.saidas.toLocaleString("pt-BR")}</td>
                 <td className="px-4 py-3 font-bold text-primary">{row.estoque.toLocaleString("pt-BR")}</td>
                 <td className="px-4 py-3">{formatBRL(row.valorSaidas)}</td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1">
+                    <Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onViewProduct(row)} title="Visualizar produto" aria-label={`Visualizar produto ${row.produto.nome}`}><Eye className="h-4 w-4" /></Button>
                     <Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onEditProduct(row.produto)} title="Editar produto"><Pencil className="h-4 w-4" /></Button>
                     <Button size="icon" variant="ghost" className="text-destructive" onClick={() => void onDeleteProduct(row.produto)} title="Excluir produto"><Trash2 className="h-4 w-4" /></Button>
                   </div>
@@ -748,7 +1223,7 @@ function ResumoTable({
             ))}
             {!filteredRows.length && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">
                   {hasFilters ? "Nenhum produto corresponde aos filtros da tabela." : "Nenhum produto cadastrado para o filtro selecionado."}
                 </td>
               </tr>
@@ -762,6 +1237,13 @@ function ResumoTable({
 
 function MovimentacoesTable({ rows, onView, onPdf, onRemove }: { rows: EstoqueMovimentacao[]; onView: (item: EstoqueMovimentacao) => void; onPdf: (item: { url: string; title: string }) => void; onRemove: (id: string) => Promise<void> }) {
   return <div className="overflow-x-auto rounded-xl border bg-card"><table className="w-full min-w-[840px] text-sm"><thead className="bg-muted/30"><tr>{["Data", "Produto", "Quantidade", "Valor unitário", "Valor total", "NF", "Ações"].map((header) => <th key={header} className="px-4 py-3 text-left text-muted-foreground">{header}</th>)}</tr></thead><tbody>{rows.map((item) => <tr key={item.id} className="border-t"><td className="px-4 py-3">{formatDate(item.data)}</td><td className="px-4 py-3 font-medium">{item.produto.nome} - {item.produto.codigoInterno}</td><td className="px-4 py-3">{item.quantidade.toLocaleString("pt-BR")}</td><td className="px-4 py-3">{formatBRL(item.valorUnitario)}</td><td className="px-4 py-3">{formatBRL(item.valorTotal)}</td><td className="px-4 py-3">{item.pdfUrl ? <button className="text-blue-600 hover:underline" onClick={() => onPdf({ url: item.pdfUrl!, title: item.pdfName || "Nota fiscal" })}>Visualizar</button> : <span className="text-muted-foreground">—</span>}</td><td className="px-4 py-3"><div className="flex gap-1"><Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onView(item)}><Eye className="h-4 w-4" /></Button>{item.pdfUrl && <Button size="icon" variant="ghost" className="text-emerald-600" onClick={() => downloadPdf(item.pdfUrl!, item.pdfName || `nf_${item.id}.pdf`)}><Download className="h-4 w-4" /></Button>}<Button size="icon" variant="ghost" className="text-destructive" onClick={async () => { try { await onRemove(item.id); toast.success("Movimentação removida."); } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível remover."); } }}><Trash2 className="h-4 w-4" /></Button></div></td></tr>)}{!rows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Nenhuma movimentação registrada.</td></tr>}</tbody></table></div>;
+}
+
+function downloadDocument(url: string, filename: string) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
 }
 
 function downloadPdf(url: string, filename: string) {

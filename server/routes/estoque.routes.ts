@@ -5,6 +5,7 @@ import {
   bodySchema,
   estoqueMovimentacaoBody,
   estoqueProdutoBody,
+  estoqueSubcategoriaBody,
   estoqueTipoProdutoBody,
   idParamsSchema,
 } from "../validators/schemas.js";
@@ -16,6 +17,10 @@ export const estoqueRoutes = Router();
 estoqueRoutes.get("/tipos", asyncHandler(estoqueController.listTiposProduto));
 estoqueRoutes.post("/tipos", validate(bodySchema(estoqueTipoProdutoBody)), asyncHandler(estoqueController.createTipoProduto));
 estoqueRoutes.delete("/tipos/:id", validate(idParamsSchema), asyncHandler(estoqueController.removeTipoProduto));
+
+estoqueRoutes.get("/subcategorias", asyncHandler(estoqueController.listSubcategorias));
+estoqueRoutes.post("/subcategorias", validate(bodySchema(estoqueSubcategoriaBody)), asyncHandler(estoqueController.createSubcategoria));
+estoqueRoutes.delete("/subcategorias/:id", validate(idParamsSchema), asyncHandler(estoqueController.removeSubcategoria));
 
 // Cadastro próprio do estoque: não usa /produtos (aba Cadastros).
 estoqueRoutes.get("/produtos", asyncHandler(estoqueController.listProdutos));

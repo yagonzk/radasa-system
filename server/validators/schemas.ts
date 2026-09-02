@@ -138,6 +138,10 @@ export const estoqueTipoProdutoBody = z.object({
   createdAt: z.string().optional(),
 });
 
+export const estoqueSubcategoriaBody = z.object({
+  id: id.optional(), nome: z.string().trim().min(1).max(80), categoria: z.string().trim().min(1).max(80), createdAt: z.string().optional(),
+});
+
 export const estoqueProdutoBody = z.object({
   id: id.optional(),
   nome: text(),
@@ -145,6 +149,13 @@ export const estoqueProdutoBody = z.object({
   // Mantido opcional para compatibilidade com versões anteriores do frontend.
   codigoInterno: z.string().trim().max(100).optional().default(""),
   categoria: z.string().trim().min(1).max(80),
+  subcategoria: z.string().trim().max(80).optional().default(""),
+  quantidade: z.coerce.number().finite().positive().optional(),
+  valorUnitario: z.coerce.number().finite().min(0).optional(),
+  dataCompra: dateOnly.optional(),
+  observacoes: z.string().trim().max(2000).optional().or(z.literal("")),
+  pdfUrl: z.string().optional().nullable(), pdfName: z.string().trim().max(255).optional().nullable(),
+  xmlUrl: z.string().optional().nullable(), xmlName: z.string().trim().max(255).optional().nullable(),
   createdAt: z.string().optional(),
 });
 
@@ -154,6 +165,7 @@ export const estoqueMovimentacaoBody = z.object({
   valorUnitario: z.coerce.number().finite().min(0).optional().default(0),
   data: dateOnly, observacoes: z.string().trim().max(2000).optional().or(z.literal("")),
   pdfUrl: z.string().optional().nullable(), pdfName: z.string().trim().max(255).optional().nullable(),
+  xmlUrl: z.string().optional().nullable(), xmlName: z.string().trim().max(255).optional().nullable(),
   createdAt: z.string().optional(),
 });
 export const localBody = z.object({

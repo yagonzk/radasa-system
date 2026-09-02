@@ -3,6 +3,9 @@ import { estoqueService } from "../services/estoque.service.js";
 import { requestParam } from "../utils/request-param.js";
 
 export const estoqueController = {
+  listSubcategorias: async (_req: Request, res: Response) => res.json(await estoqueService.listSubcategorias()),
+  createSubcategoria: async (req: Request, res: Response) => res.status(201).json(await estoqueService.createSubcategoria(req.body)),
+  removeSubcategoria: async (req: Request, res: Response) => { await estoqueService.removeSubcategoria(requestParam(req.params.id)); res.status(204).send(); },
   listTiposProduto: async (_req: Request, res: Response) => res.json(await estoqueService.listTiposProduto()),
   createTipoProduto: async (req: Request, res: Response) => res.status(201).json(await estoqueService.createTipoProduto(req.body)),
   removeTipoProduto: async (req: Request, res: Response) => {

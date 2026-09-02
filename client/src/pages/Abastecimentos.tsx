@@ -771,7 +771,13 @@ function BatchXmlDialog({
     if (!item.documento) return item;
 
     const pendencias: string[] = [];
-    if (!item.clienteId) pendencias.push("Selecione o posto/cliente");
+    const postoPodeSerResolvidoNaImportacao = Boolean(
+      String(item.documento.emitente?.cnpj ?? "").replace(/\D/g, "").length === 14 ||
+      String(item.documento.emitente?.nomeFantasia ?? item.documento.emitente?.razaoSocial ?? "").trim(),
+    );
+    if (!item.clienteId && !postoPodeSerResolvidoNaImportacao) {
+      pendencias.push("Selecione o posto/cliente");
+    }
     if (!item.veiculoId) pendencias.push("Selecione o veículo");
     if (!item.documento.dataEmissao) pendencias.push("Data não encontrada");
     if (!item.documento.chaveNfe) pendencias.push("Chave da NF-e não encontrada");
@@ -3744,7 +3750,7 @@ export default function Abastecimentos() {
     ].filter(Boolean) as Array<[string, string]>;
 
     const comparativoHtml = relatorioOpcoes.comparativoPorPlaca && comparativoPorPlaca.length > 0
-      ? `<section class="comparativo"><h2>Comparativo Diesel por placa</h2><table class="comparativo-table"><thead><tr><th>Placa</th><th>Notas</th><th>Diesel</th><th>Custo médio Diesel/L</th><th>KM rodado</th><th>Média KM/L</th><th>Valor Diesel</th></tr></thead><tbody>${comparativoPorPlaca.map((item) => `<tr><td>${escapeReportText(item.placa)}</td><td>${escapeReportText(item.notas)}</td><td>${escapeReportText(formatLitros(item.dieselLitros))}</td><td>${escapeReportText(item.dieselLitros > 0 ? formatBRL(item.custoMedioDiesel) : "—")}</td><td>${escapeReportText(item.kmRodado > 0 ? `${item.kmRodado.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km` : "—")}</td><td>${escapeReportText(item.mediaKmLitro > 0 ? `${item.mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L` : "—")}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`).join("")}</tbody></table></section>`
+      ? `<section class="comparativo"><h2>Comparativo Diesel por placa</h2><table class="report-table comparativo-table"><thead><tr><th>Placa</th><th>Notas</th><th>Diesel</th><th>Custo médio Diesel/L</th><th>KM rodado</th><th>Média KM/L</th><th>Valor Diesel</th></tr></thead><tbody>${comparativoPorPlaca.map((item) => `<tr><td>${escapeReportText(item.placa)}</td><td>${escapeReportText(item.notas)}</td><td>${escapeReportText(formatLitros(item.dieselLitros))}</td><td>${escapeReportText(item.dieselLitros > 0 ? formatBRL(item.custoMedioDiesel) : "—")}</td><td>${escapeReportText(item.kmRodado > 0 ? `${item.kmRodado.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km` : "—")}</td><td>${escapeReportText(item.mediaKmLitro > 0 ? `${item.mediaKmLitro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km/L` : "—")}</td><td>${escapeReportText(formatBRL(item.valorTotal))}</td></tr>`).join("")}</tbody></table></section>`
       : "";
 
     const linhasDiesel = itensDieselRelatorio.map((item) => {
@@ -3783,12 +3789,127 @@ export default function Abastecimentos() {
       return `<tr><td>${escapeReportText(item.numeroNfe || "-")}</td><td>${escapeReportText(formatDate(item.dataEmissao))}</td><td>${escapeReportText(cliente?.nomeFantasia || cliente?.razaoSocial || "Não identificado")}</td><td>${escapeReportText(placa)}</td><td>${escapeReportText(formatLitros(combustiveis.arlaLitros))}</td><td>${escapeReportText(valorUnitarioArla !== null ? formatBRL(valorUnitarioArla) : "—")}</td><td>${escapeReportText(formatOdometro(Number(item.hodometro)))}</td><td>${escapeReportText(formatBRL(combustiveis.arlaValor))}</td></tr>`;
     }).join("");
 
+    const generatedAt = new Date();
+    const generatedDate = generatedAt.toLocaleDateString("pt-BR");
+    const generatedTime = generatedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+    const renderHero = (title: string, subtitle: string, count: number) => `
+      <header class="hero">
+        <div class="brand">
+          <div class="brand-mark">
+            <div class="logo-box">R</div>
+            <div>
+              <p class="eyebrow">RADASA • GESTÃO DE TRANSPORTES</p>
+              <h1>${escapeReportText(title)}</h1>
+            </div>
+          </div>
+          <div class="generated">
+            <strong>${escapeReportText(subtitle)}</strong><br />
+            ${count.toLocaleString("pt-BR")} nota(s) nos filtros atuais<br />
+            Gerado em ${escapeReportText(generatedDate)} às ${escapeReportText(generatedTime)}
+          </div>
+        </div>
+      </header>`;
+
     const paginaArla = itensArlaRelatorio.length > 0
-      ? `<section class="report-page arla-page"><h1>Comparativo ARLA</h1><p class="sub">Separado do combustível Diesel - ${itensArlaRelatorio.length} nota(s) com ARLA conforme os filtros ativos.</p><div class="cards">${arlaMetricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div><h2>Comparativo ARLA por placa</h2><table class="arla-table"><thead><tr><th>Placa</th><th>Notas</th><th>ARLA</th><th>Custo médio ARLA/L</th><th>Valor ARLA</th></tr></thead><tbody>${linhasComparativoArla}</tbody></table><h2>Notas fiscais — ARLA</h2><table class="arla-notas"><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>ARLA</th><th>Valor unitário ARLA</th><th>Odômetro</th><th>Valor ARLA</th></tr></thead><tbody>${linhasArla}</tbody></table></section>`
+      ? `<section class="report-page arla-page">
+          ${renderHero("Comparativo ARLA", "Relatório operacional", itensArlaRelatorio.length)}
+          <section class="summary-grid arla-summary">${arlaMetricas.map(([label, value], index) => `<div class="card${index === 1 ? " green" : index === 2 ? " primary" : ""}"><span>${escapeReportText(label)}</span><strong>${escapeReportText(value)}</strong></div>`).join("")}</section>
+          <section class="content-section">
+            <div class="section-heading"><div><span class="section-kicker">ANÁLISE POR VEÍCULO</span><h2>Comparativo ARLA por placa</h2></div><span class="section-count">${comparativoArlaPorPlaca.length} placa(s)</span></div>
+            <table class="report-table arla-table"><thead><tr><th>Placa</th><th>Notas</th><th>ARLA</th><th>Custo médio ARLA/L</th><th>Valor ARLA</th></tr></thead><tbody>${linhasComparativoArla}</tbody></table>
+          </section>
+          <section class="content-section">
+            <div class="section-heading"><div><span class="section-kicker">DOCUMENTOS</span><h2>Notas fiscais — ARLA</h2></div><span class="section-count">${itensArlaRelatorio.length} nota(s)</span></div>
+            <table class="report-table arla-notas"><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>ARLA</th><th>Valor unitário ARLA</th><th>Odômetro</th><th>Valor ARLA</th></tr></thead><tbody>${linhasArla}</tbody></table>
+          </section>
+          <div class="notes"><div><strong>Critério:</strong> ARLA permanece separado do combustível Diesel e não interfere na média de KM/L.</div><div><strong>Observação:</strong> todos os valores respeitam os filtros ativos da tela.</div></div>
+          <div class="footer"><span>RADASA • Resumo de Abastecimentos</span><span>Total ARLA: ${escapeReportText(formatBRL(totals.valorArla))}</span></div>
+        </section>`
       : "";
 
-    reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Combustível</title><style>body{font-family:Arial,sans-serif;color:#17213f;margin:36px}h1{margin:0;font-size:24px}h2{margin-top:24px}.sub{color:#5f6b85;margin:7px 0 24px}.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}.card{border:1px solid #dbe3f0;border-radius:8px;padding:12px;min-width:165px}.card small{display:block;color:#68738a;margin-bottom:5px}.card strong{font-size:18px}.comparativo{margin:0 0 26px}.comparativo h2{margin-bottom:10px}.comparativo-table td:nth-child(n+2),.arla-table td:nth-child(n+2){text-align:right}table{border-collapse:collapse;width:100%;font-size:11px}th{background:#17213f;color:#fff;text-align:left}th,td{padding:8px;border:1px solid #dbe3f0}.diesel-notas td:nth-child(n+5),.arla-notas td:nth-child(n+5){text-align:right}.empty{text-align:center!important;color:#68738a;padding:20px}.report-page+.report-page{break-before:page;page-break-before:always}tr{break-inside:avoid}@media print{body{margin:18px}thead{display:table-header-group}.report-page+.report-page{break-before:page;page-break-before:always}}</style></head><body><section class="report-page diesel-page"><h1>Relatório de Combustível — Diesel</h1><p class="sub">Gerado em ${escapeReportText(new Date().toLocaleString("pt-BR"))} - ${itensDieselRelatorio.length} nota(s) com Diesel conforme os filtros ativos. ARLA não está incluída nesta parte.</p><div class="cards">${metricas.map(([label, value]) => `<div class="card"><small>${escapeReportText(label)}</small><strong>${escapeReportText(value)}</strong></div>`).join("")}</div>${comparativoHtml}<h2>Notas fiscais — Diesel</h2><table class="diesel-notas"><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>Diesel</th><th>Valor unitário Diesel</th><th>Odômetro</th><th>Valor Diesel</th></tr></thead><tbody>${linhasDiesel}</tbody></table></section>${paginaArla}<script>window.onload=()=>window.print();<\/script></body></html>`);
+    reportWindow.document.write(`<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Resumo de Abastecimentos - RADASA</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm; }
+    * { box-sizing: border-box; }
+    html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { margin: 0; color: #172033; background: #eef3f8; font-family: Inter, "Segoe UI", Arial, sans-serif; }
+    .page { width: 100%; max-width: 1200px; margin: 0 auto; background: #fff; }
+    .report-page { width: 100%; }
+    .report-page + .report-page { break-before: page; page-break-before: always; }
+    .hero { position: relative; overflow: hidden; padding: 22px 26px 20px; color: white; background: linear-gradient(120deg, #0c356a 0%, #0f5ca8 62%, #168268 100%); border-radius: 18px; }
+    .hero:after { content: ""; position: absolute; width: 240px; height: 240px; right: -75px; top: -100px; border: 38px solid rgba(255,255,255,.09); border-radius: 50%; }
+    .brand { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .brand-mark { display: flex; align-items: center; gap: 12px; }
+    .logo-box { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28); font-size: 18px; font-weight: 900; letter-spacing: -.5px; }
+    .eyebrow { margin: 0 0 3px; font-size: 10px; font-weight: 800; letter-spacing: 1.6px; opacity: .78; }
+    h1 { margin: 0; font-size: 24px; line-height: 1.05; letter-spacing: -.5px; }
+    .generated { position: relative; z-index: 1; min-width: 220px; text-align: right; font-size: 10px; line-height: 1.5; opacity: .9; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 9px; margin: 13px 0 17px; }
+    .card { padding: 11px 12px; border: 1px solid #dce5ef; border-radius: 12px; background: #fff; box-shadow: 0 2px 8px rgba(15,56,99,.055); }
+    .card span { display: block; margin-bottom: 4px; color: #758299; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .7px; }
+    .card strong { display: block; color: #14243a; font-size: 14px; line-height: 1.15; }
+    .card.primary { border-color: #b9d7f4; background: #eef7ff; }
+    .card.primary strong { color: #0c5aa6; }
+    .card.green { border-color: #c6e6d9; background: #f0faf5; }
+    .card.green strong { color: #117057; }
+    .content-section { margin: 0 0 17px; }
+    .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 0 2px 7px; border-bottom: 2px solid #1b66a8; }
+    .section-kicker { display: block; margin-bottom: 2px; color: #8793a6; font-size: 8px; font-weight: 800; letter-spacing: .8px; }
+    h2 { margin: 0; color: #103d70; font-size: 15px; font-weight: 900; letter-spacing: .2px; }
+    .section-count { color: #8793a6; font-size: 9px; font-weight: 700; white-space: nowrap; }
+    .report-table { width: 100%; margin-top: 7px; table-layout: fixed; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid #dbe4ee; border-radius: 10px; font-size: 8.6px; }
+    .report-table th { padding: 8px 8px; color: #5d6b7f; background: #f4f7fb; border-bottom: 1px solid #dbe4ee; text-align: left; font-size: 7.7px; text-transform: uppercase; letter-spacing: .45px; }
+    .report-table td { padding: 7px 8px; border-bottom: 1px solid #e6ecf3; background: #fff; vertical-align: middle; }
+    .report-table tbody tr:last-child td { border-bottom: 0; }
+    .report-table tbody tr:nth-child(even) td { background: #fbfcfe; }
+    .comparativo-table th:nth-child(n+2), .comparativo-table td:nth-child(n+2), .arla-table th:nth-child(n+2), .arla-table td:nth-child(n+2), .diesel-notas th:nth-child(n+5), .diesel-notas td:nth-child(n+5), .arla-notas th:nth-child(n+5), .arla-notas td:nth-child(n+5) { text-align: right; }
+    .comparativo-table td:first-child, .arla-table td:first-child, .diesel-notas td:nth-child(4), .arla-notas td:nth-child(4) { color: #154c7d; font-weight: 800; }
+    .empty { text-align: center !important; color: #68738a; padding: 20px !important; }
+    .notes { display: flex; justify-content: space-between; gap: 20px; margin-top: 12px; padding: 10px 12px; color: #748095; background: #f7f9fc; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 8.5px; line-height: 1.45; }
+    .notes strong { color: #415169; }
+    .footer { display: flex; justify-content: space-between; margin-top: 11px; padding-top: 8px; border-top: 1px solid #dfe6ee; color: #8994a5; font-size: 8px; }
+    .no-print { margin: 18px 0; text-align: center; }
+    .no-print button { padding: 10px 18px; color: #fff; background: #0f5ca8; border: 0; border-radius: 9px; font-weight: 700; cursor: pointer; }
+    tr { break-inside: avoid; }
+    @media print {
+      body { background: #fff; }
+      .page { max-width: none; }
+      .hero { border-radius: 14px; }
+      .no-print { display: none; }
+      .content-section { break-inside: auto; }
+      thead { display: table-header-group; }
+      .report-page + .report-page { break-before: page; page-break-before: always; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="report-page diesel-page">
+      ${renderHero("Resumo de Abastecimentos", "Relatório operacional • Diesel", itensDieselRelatorio.length)}
+      <section class="summary-grid">
+        ${metricas.map(([label, value], index) => `<div class="card${index === 1 ? " green" : index === 2 ? " primary" : ""}"><span>${escapeReportText(label)}</span><strong>${escapeReportText(value)}</strong></div>`).join("")}
+      </section>
+      ${comparativoHtml ? `<section class="content-section"><div class="section-heading"><div><span class="section-kicker">ANÁLISE POR VEÍCULO</span><h2>Comparativo Diesel por placa</h2></div><span class="section-count">${comparativoPorPlaca.length} placa(s)</span></div>${comparativoHtml.replace('<section class="comparativo"><h2>Comparativo Diesel por placa</h2>', '').replace('</section>', '')}</section>` : ""}
+      <section class="content-section">
+        <div class="section-heading"><div><span class="section-kicker">DOCUMENTOS</span><h2>Notas fiscais — Diesel</h2></div><span class="section-count">${itensDieselRelatorio.length} nota(s)</span></div>
+        <table class="report-table diesel-notas"><thead><tr><th>NF</th><th>Emissão</th><th>Posto</th><th>Placa</th><th>Diesel</th><th>Valor unitário Diesel</th><th>Odômetro</th><th>Valor Diesel</th></tr></thead><tbody>${linhasDiesel || `<tr><td colspan="8" class="empty">Nenhum abastecimento Diesel encontrado conforme os filtros ativos.</td></tr>`}</tbody></table>
+      </section>
+      <div class="notes"><div><strong>Critério:</strong> esta parte considera exclusivamente Diesel/Diesel S10 para totais, custo médio e média de KM/L.</div><div><strong>Observação:</strong> ARLA é apresentado separadamente e o relatório respeita todos os filtros ativos.</div></div>
+      <div class="footer"><span>RADASA • Resumo de Abastecimentos</span><span>Total Diesel: ${escapeReportText(formatBRL(totals.valorDiesel))}</span></div>
+    </section>
+    ${paginaArla}
+    <div class="no-print"><button onclick="window.print()">Salvar como PDF / Imprimir</button></div>
+  </main>
+</body>
+</html>`);
     reportWindow.document.close();
+    reportWindow.focus();
+    window.setTimeout(() => reportWindow.print(), 300);
     setRelatorioOpen(false);
   };
 
@@ -4231,6 +4352,10 @@ export default function Abastecimentos() {
               <DropdownMenuItem onSelect={() => setRelatorioOpen(true)}>
                 <FileText className="mr-2 h-4 w-4" />
                 Gerar relatório PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => gerarRelatorioXlsx()}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Gerar relatório XLSX
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={filters.placa.length < 2}

@@ -21,6 +21,8 @@ const serialize = (item: any) => ({
   data: dateOnly(item.data),
   pdfUrl: item.pdfUrl ?? null,
   pdfName: item.pdfName ?? null,
+  xmlUrl: item.xmlUrl ?? null,
+  xmlName: item.xmlName ?? null,
   createdAt: created(item.createdAt),
 });
 
@@ -47,6 +49,27 @@ async function saldoProduto(produtoId: string, excludeId?: string) {
 }
 
 export const estoqueService = {
+
+  async listSubcategorias() {
+    return prisma.estoqueSubcategoria.findMany({ orderBy: [{ categoria: "asc" }, { nome: "asc" }] });
+  },
+
+  async createSubcategoria(data: any) {
+    const nome = String(data.nome ?? "").trim();
+    const categoria = await resolveCategoria(data.categoria);
+    if (!nome) throw new AppError(400, "Informe o nome da subcategoria.");
+    const existente = await prisma.estoqueSubcategoria.findFirst({ where: { categoria, nome: { equals: nome, mode: "insensitive" } } });
+    if (existente) throw new AppError(409, "Esta subcategoria já existe nesta categoria.");
+    return prisma.estoqueSubcategoria.create({ data: { nome, categoria } });
+  },
+
+  async removeSubcategoria(id: string) {
+    const item = await prisma.estoqueSubcategoria.findUnique({ where: { id } });
+    if (!item) throw new AppError(404, "Subcategoria não encontrada.");
+    const usados = await prisma.estoqueProduto.count({ where: { categoria: item.categoria, subcategoria: item.nome } });
+    if (usados) throw new AppError(409, "Subcategoria em uso por produtos do almoxarifado.");
+    await prisma.estoqueSubcategoria.delete({ where: { id } });
+  },
   async listTiposProduto() {
     return (
       await prisma.estoqueTipoProduto.findMany({ orderBy: { nome: "asc" } })
@@ -100,41 +123,23 @@ export const estoqueService = {
   async createProduto(data: any) {
     const categoria = await resolveCategoria(data.categoria);
     const nome = String(data.nome ?? "").trim();
-    const { createdAt, codigoInterno: _codigoIgnorado, ...rest } = data;
-
-    // O código do produto é controlado exclusivamente pelo Almoxarifado.
-    // Um advisory lock evita que dois cadastros simultâneos recebam o mesmo número.
+    const subcategoria = String(data.subcategoria ?? "").trim();
+    if (subcategoria) {
+      const sub = await prisma.estoqueSubcategoria.findFirst({ where: { categoria, nome: { equals: subcategoria, mode: "insensitive" } } });
+      if (!sub) throw new AppError(400, "Subcategoria não cadastrada para esta categoria.");
+    }
+    const quantidade = data.quantidade === undefined ? null : Number(data.quantidade);
+    const valorUnitario = Number(data.valorUnitario || 0);
     const item = await prisma.$transaction(async (tx) => {
-      // Não usamos pg_advisory_xact_lock aqui. Em alguns ambientes Prisma/Neon,
-      // SELECT de função PostgreSQL que retorna void pode falhar na desserialização
-      // e virar "Erro interno do servidor" ao criar um produto. A transação ainda
-      // mantém a geração sequencial do código no mesmo fluxo.
-
-      const codigos = await tx.estoqueProduto.findMany({
-        where: { codigoInterno: { startsWith: "RAD-" } },
-        select: { codigoInterno: true },
-      });
-
-      const maiorNumero = codigos.reduce((maior: number, produto: { codigoInterno: string }) => {
-        const match = /^RAD-(\d+)$/.exec(produto.codigoInterno.trim().toUpperCase());
-        if (!match) return maior;
-        const numero = Number(match[1]);
-        return Number.isFinite(numero) ? Math.max(maior, numero) : maior;
-      }, 0);
-
+      const codigos = await tx.estoqueProduto.findMany({ where: { codigoInterno: { startsWith: "RAD-" } }, select: { codigoInterno: true } });
+      const maiorNumero = codigos.reduce((maior: number, produto: { codigoInterno: string }) => { const m=/^RAD-(\d+)$/.exec(produto.codigoInterno.trim().toUpperCase()); return m ? Math.max(maior, Number(m[1]) || 0) : maior; }, 0);
       const codigoInterno = `RAD-${String(maiorNumero + 1).padStart(5, "0")}`;
-
-      return tx.estoqueProduto.create({
-        data: {
-          ...rest,
-          nome,
-          codigoInterno,
-          categoria,
-          ...(createdAt ? { createdAt: new Date(createdAt) } : {}),
-        },
-      });
+      const produto = await tx.estoqueProduto.create({ data: { nome, codigoInterno, categoria, subcategoria } });
+      if (quantidade && data.dataCompra) {
+        await tx.estoqueMovimentacao.create({ data: { produtoId: produto.id, tipo: "ENTRADA", quantidade, valorUnitario, valorTotal: quantidade * valorUnitario, data: new Date(`${data.dataCompra}T12:00:00.000Z`), observacoes: data.observacoes || "", pdfUrl: data.pdfUrl || null, pdfName: data.pdfName || null, xmlUrl: data.xmlUrl || null, xmlName: data.xmlName || null } });
+      }
+      return produto;
     });
-
     return serializeProduto(item);
   },
 
@@ -143,7 +148,7 @@ export const estoqueService = {
     if (!atual) throw new AppError(404, "Produto do almoxarifado não encontrado.");
 
     const categoria = data.categoria === undefined ? atual.categoria : await resolveCategoria(data.categoria);
-    const { createdAt: _createdAt, codigoInterno: _codigoIgnorado, ...rest } = data;
+    const { createdAt: _createdAt, codigoInterno: _codigoIgnorado, quantidade: _quantidade, valorUnitario: _valorUnitario, dataCompra: _dataCompra, observacoes: _observacoes, pdfUrl: _pdfUrl, pdfName: _pdfName, xmlUrl: _xmlUrl, xmlName: _xmlName, ...rest } = data;
     const item = await prisma.estoqueProduto.update({
       where: { id },
       data: {

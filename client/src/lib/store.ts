@@ -60,9 +60,10 @@ export interface Empresa {
 export interface Produto { id: string; nome: string; codigoInterno: string; categoriaEstoque: string; createdAt: string; }
 export type CategoriaEstoque = string;
 export interface EstoqueTipoProduto { id: string; nome: string; createdAt: string; }
-export interface EstoqueProduto { id: string; nome: string; codigoInterno: string; categoria: CategoriaEstoque; createdAt: string; }
+export interface EstoqueSubcategoria { id: string; nome: string; categoria: string; createdAt: string; }
+export interface EstoqueProduto { id: string; nome: string; codigoInterno: string; categoria: CategoriaEstoque; subcategoria?: string; createdAt: string; }
 export type TipoMovimentacaoEstoque = "ENTRADA" | "SAIDA";
-export interface EstoqueMovimentacao { id:string; produtoId:string; tipo:TipoMovimentacaoEstoque; quantidade:number; valorUnitario:number; valorTotal:number; data:string; observacoes?:string|null; pdfUrl?:string|null; pdfName?:string|null; produto:EstoqueProduto; createdAt:string; }
+export interface EstoqueMovimentacao { id:string; produtoId:string; tipo:TipoMovimentacaoEstoque; quantidade:number; valorUnitario:number; valorTotal:number; data:string; observacoes?:string|null; pdfUrl?:string|null; pdfName?:string|null; xmlUrl?:string|null; xmlName?:string|null; produto:EstoqueProduto; createdAt:string; }
 export interface EstoqueResumo { produto:EstoqueProduto; entradas:number; saidas:number; estoque:number; valorSaidas:number; }
 export interface Local { id: string; cidade: string; uf?: string | null; valorComissao: number; createdAt: string; }
 export interface ViagemFechamento { localId: string; quantidade: number; }
@@ -435,6 +436,7 @@ export const useFornecedores = () => useApiCrud<Fornecedor>("fornecedores", "For
 export const useEmpresa = () => useApiCrud<Empresa>("empresa", "Empresa");
 export const useProdutos = () => useApiCrud<Produto>("produtos", "Produto");
 export const useEstoqueTipos = () => useApiCrud<EstoqueTipoProduto>("estoque/tipos", "Tipo de produto do almoxarifado");
+export const useEstoqueSubcategorias = () => useApiCrud<EstoqueSubcategoria>("estoque/subcategorias", "Subcategoria do almoxarifado");
 export const useEstoqueProdutos = () => useApiCrud<EstoqueProduto>("estoque/produtos", "Produto do almoxarifado");
 export const useLocais = () => useApiCrud<Local>("locais", "Local");
 export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");

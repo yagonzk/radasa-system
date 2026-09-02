@@ -203,19 +203,33 @@ abastecimentosXmlRoutes.post(
                 };base64,${file.buffer.toString("base64")}`,
               };
             } catch (error) {
+              // O XML já foi interpretado com sucesso acima. Uma falha ao consultar
+              // vínculos/cadastros não torna o arquivo inválido: preservamos os dados
+              // lidos e deixamos o documento como pendente para conferência/importação.
               results[index] = {
                 indiceArquivo: index,
                 fileName: file.originalname,
-                status: "INVALIDO",
+                status: "PENDENTE",
                 erros: [
                   error instanceof Error
                     ? error.message
                     : "Não foi possível sugerir os vínculos do XML.",
                 ],
-                pendencias: [],
-                documento: null,
+                pendencias: ["vínculos"],
+                documento: document,
                 sugestoes: null,
-                xmlUrl: null,
+                jaCadastrado: Boolean(existente),
+                existente: existente
+                  ? {
+                      id: existente.id,
+                      clienteId: existente.clienteId,
+                      veiculoId: existente.veiculoId,
+                      hodometro: Number(existente.hodometro),
+                    }
+                  : null,
+                xmlUrl: `data:${
+                  file.mimetype || "application/xml"
+                };base64,${file.buffer.toString("base64")}`,
               };
             }
           }
