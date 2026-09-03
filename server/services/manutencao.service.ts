@@ -197,7 +197,6 @@ export const manutencaoService = {
   async obterOs(id: string) { return getOsDetail(id); },
   async criarOs(i: any) {
     const veiculoId = await ensureVehicle(i.veiculoId);
-    if (!String(i.descricao ?? "").trim()) throw new AppError(400, "Informe o problema ou motivo da manutenção.");
     const items = normalizeItems(i.itens);
     await validateStock(items);
     const supplier = await resolveFornecedor(i);

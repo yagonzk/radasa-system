@@ -9,9 +9,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   Download,
   Eye,
@@ -48,12 +52,12 @@ type PendingNota = { key: string; numero: string; serie: string; chaveAcesso: st
 type PendingAnexo = { key: string; tipo: string; descricao: string; file: File | null };
 type OsForm = {
   veiculoId: string; tipo: string; status: string; dataAbertura: string; numeroFornecedor: string; fornecedorId: string; responsavel: string; kmAbertura: string;
-  descricao: string; servicoRealizado: string; valorPecas: string; valorMaoObra: string; valorOutros: string; desconto: string; observacoes: string; itens: OsItem[];
+  descricao: string; servicoRealizado: string; desconto: string; observacoes: string; itens: OsItem[];
 };
 
 const emptyOsForm = (): OsForm => ({
   veiculoId: "", tipo: "CORRETIVA", status: "ABERTA", dataAbertura: today(), numeroFornecedor: "", fornecedorId: "", responsavel: "", kmAbertura: "",
-  descricao: "", servicoRealizado: "", valorPecas: "", valorMaoObra: "", valorOutros: "", desconto: "", observacoes: "", itens: [],
+  descricao: "", servicoRealizado: "", desconto: "", observacoes: "", itens: [],
 });
 const newItem = (): OsItem => ({ tipo: "SERVICO", descricao: "", produtoId: null, quantidade: 1, valorUnitario: 0 });
 const newNota = (): PendingNota => ({ key: crypto.randomUUID(), numero: "", serie: "", chaveAcesso: "", dataEmissao: today(), valor: "", file: null });
@@ -102,9 +106,11 @@ export default function Manutencao() {
   const [detailNota, setDetailNota] = useState<PendingNota>(newNota());
   const [detailAnexo, setDetailAnexo] = useState<PendingAnexo>(newAnexo());
   const [detailUploading, setDetailUploading] = useState(false);
+  const [supplierOpen, setSupplierOpen] = useState(false);
 
   const placa = (id: string) => veiculos.find((v) => v.id === id)?.placa || "—";
   const activeSuppliers = fornecedores.filter((f) => f.ativo !== false);
+  const selectedSupplier = activeSuppliers.find((f) => f.id === osForm.fornecedorId);
 
   const load = async () => {
     try {
@@ -133,13 +139,12 @@ export default function Manutencao() {
   const itensPecas = osForm.itens.filter((i) => i.tipo === "PECA").reduce((a, i) => a + numberValue(i.quantidade) * numberValue(i.valorUnitario), 0);
   const itensServicos = osForm.itens.filter((i) => i.tipo === "SERVICO").reduce((a, i) => a + numberValue(i.quantidade) * numberValue(i.valorUnitario), 0);
   const itensOutros = osForm.itens.filter((i) => i.tipo === "OUTRO").reduce((a, i) => a + numberValue(i.quantidade) * numberValue(i.valorUnitario), 0);
-  const formTotal = Math.max(0,
-    itensPecas + itensServicos + itensOutros + numberValue(osForm.valorPecas) + numberValue(osForm.valorMaoObra) + numberValue(osForm.valorOutros) - numberValue(osForm.desconto),
-  );
+  const formTotal = Math.max(0, itensPecas + itensServicos + itensOutros - numberValue(osForm.desconto));
 
   const abrir = (x: "OS" | "PLANO" | "DOC") => {
     if (x === "OS") {
       setOsForm(emptyOsForm());
+      setSupplierOpen(false);
       setPendingNotas([]);
       setPendingAnexos([]);
     } else setSimpleForm({ dataAbertura: today(), categoria: "PREVENTIVA", tipo: "PREVENTIVA" });
@@ -184,7 +189,6 @@ export default function Manutencao() {
 
   const salvarOs = async () => {
     if (!osForm.veiculoId) return toast.error("Selecione o veículo.");
-    if (!osForm.descricao.trim()) return toast.error("Informe o problema relatado ou motivo da manutenção.");
     const invalidItem = osForm.itens.find((item) => !item.descricao.trim() && !item.produtoId);
     if (invalidItem) return toast.error("Preencha a descrição dos itens da OS.");
     const invalidNota = pendingNotas.find((nota) => !nota.file);
@@ -197,9 +201,6 @@ export default function Manutencao() {
       const payload = {
         ...osForm,
         kmAbertura: osForm.kmAbertura === "" ? null : Number(osForm.kmAbertura),
-        valorPecas: numberValue(osForm.valorPecas),
-        valorMaoObra: numberValue(osForm.valorMaoObra),
-        valorOutros: numberValue(osForm.valorOutros),
         desconto: numberValue(osForm.desconto),
         itens: osForm.itens.map((item) => ({ ...item, quantidade: numberValue(item.quantidade), valorUnitario: numberValue(item.valorUnitario) })),
       };
@@ -311,26 +312,26 @@ export default function Manutencao() {
               <div><Label>Tipo</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={osForm.tipo} onChange={(e) => setOsForm({ ...osForm, tipo: e.target.value })}><option value="PREVENTIVA">Preventiva</option><option value="CORRETIVA">Corretiva</option><option value="EMERGENCIAL">Emergencial</option><option value="OUTRA">Outra</option></select></div>
               <div><Label>Data de abertura</Label><Input className="mt-1" type="date" value={osForm.dataAbertura} onChange={(e) => setOsForm({ ...osForm, dataAbertura: e.target.value })} /></div>
               <div><Label>Nº OS da oficina</Label><Input className="mt-1" placeholder="Ex.: 465" value={osForm.numeroFornecedor} onChange={(e) => setOsForm({ ...osForm, numeroFornecedor: e.target.value })} /></div>
-              <div className="lg:col-span-2"><Label>Fornecedor / Oficina</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={osForm.fornecedorId} onChange={(e) => setOsForm({ ...osForm, fornecedorId: e.target.value })}><option value="">Selecione um fornecedor cadastrado</option>{activeSuppliers.map((f) => <option key={f.id} value={f.id}>{f.nomeFantasia || f.razaoSocial}{f.cidade ? ` · ${f.cidade}/${f.uf}` : ""}</option>)}</select><p className="mt-1 text-xs text-muted-foreground">Cadastre oficinas e prestadores em Cadastros → Fornecedores.</p></div>
+              <div className="lg:col-span-2"><Label>Fornecedor / Oficina</Label><Popover open={supplierOpen} onOpenChange={setSupplierOpen}><PopoverTrigger asChild><Button type="button" variant="outline" role="combobox" aria-expanded={supplierOpen} className="mt-1 h-10 w-full justify-between px-3 font-normal"><span className="truncate text-left">{selectedSupplier ? `${selectedSupplier.nomeFantasia || selectedSupplier.razaoSocial}${selectedSupplier.cidade ? ` · ${selectedSupplier.cidade}/${selectedSupplier.uf}` : ""}` : "Selecione um fornecedor cadastrado"}</span><ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" /></Button></PopoverTrigger><PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0"><Command><CommandInput placeholder="Pesquisar fornecedor ou oficina..." autoFocus /><CommandList><CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty><CommandItem value="sem fornecedor oficina" onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: "" })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${!osForm.fornecedorId ? "opacity-100" : "opacity-0"}`} /><span>Sem fornecedor / oficina</span></CommandItem>{activeSuppliers.map((f) => { const label = `${f.nomeFantasia || f.razaoSocial}${f.cidade ? ` · ${f.cidade}/${f.uf}` : ""}`; return <CommandItem key={f.id} value={`${f.nomeFantasia || ""} ${f.razaoSocial || ""} ${f.cidade || ""} ${f.uf || ""}`} onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: f.id })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${osForm.fornecedorId === f.id ? "opacity-100" : "opacity-0"}`} /><span className="truncate">{label}</span></CommandItem>; })}</CommandList></Command></PopoverContent></Popover><p className="mt-1 text-xs text-muted-foreground">Cadastre oficinas e prestadores em Cadastros → Fornecedores.</p></div>
               <div><Label>Responsável</Label><Input className="mt-1" placeholder="Motorista ou responsável" value={osForm.responsavel} onChange={(e) => setOsForm({ ...osForm, responsavel: e.target.value })} /></div>
               <div><Label>KM de entrada</Label><Input className="mt-1" type="number" min="0" value={osForm.kmAbertura} onChange={(e) => setOsForm({ ...osForm, kmAbertura: e.target.value })} /></div>
             </div>
           </section>
 
-          <section className="grid gap-3 md:grid-cols-2"><div><Label>Problema relatado / motivo *</Label><Textarea className="mt-1 min-h-28" placeholder="Descreva o defeito, sintoma ou motivo da manutenção." value={osForm.descricao} onChange={(e) => setOsForm({ ...osForm, descricao: e.target.value })} /></div><div><Label>Serviço realizado</Label><Textarea className="mt-1 min-h-28" placeholder="Pode ser preenchido na abertura ou ao concluir a OS." value={osForm.servicoRealizado} onChange={(e) => setOsForm({ ...osForm, servicoRealizado: e.target.value })} /></div></section>
+          <section className="grid gap-3 md:grid-cols-2"><div><Label>Problema relatado / motivo</Label><Textarea className="mt-1 min-h-28" placeholder="Descreva o defeito, sintoma ou motivo da manutenção." value={osForm.descricao} onChange={(e) => setOsForm({ ...osForm, descricao: e.target.value })} /></div><div><Label>Serviço realizado</Label><Textarea className="mt-1 min-h-28" placeholder="Pode ser preenchido na abertura ou ao concluir a OS." value={osForm.servicoRealizado} onChange={(e) => setOsForm({ ...osForm, servicoRealizado: e.target.value })} /></div></section>
 
           <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Serviços e peças</h3><p className="text-xs text-muted-foreground">Inclua quantos itens forem necessários. Peças do Almoxarifado fazem baixa automática.</p></div><Button type="button" variant="outline" onClick={() => setOsForm((f) => ({ ...f, itens: [...f.itens, newItem()] }))}><Plus className="mr-1 h-4 w-4" />Adicionar item</Button></div>
-            {osForm.itens.length === 0 ? <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Nenhum item adicionado. A OS também pode ser salva apenas com mão de obra/outros valores.</div> : <div className="space-y-2">{osForm.itens.map((item, index) => <div key={index} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12">
+            {osForm.itens.length === 0 ? <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Nenhum item adicionado. Adicione os serviços, peças ou outros itens que compõem a OS.</div> : <div className="space-y-2">{osForm.itens.map((item, index) => <div key={index} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12">
               <div className="sm:col-span-2"><Label>Tipo</Label><select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={item.tipo} onChange={(e) => updateItem(index, { tipo: e.target.value as OsItem["tipo"], produtoId: e.target.value === "PECA" ? item.produtoId : null })}><option value="SERVICO">Serviço</option><option value="PECA">Peça</option><option value="OUTRO">Outro</option></select></div>
               <div className="sm:col-span-4"><Label>{item.tipo === "PECA" ? "Descrição / peça" : "Descrição"}</Label><Input className="mt-1 h-9" value={item.descricao} onChange={(e) => updateItem(index, { descricao: e.target.value })} placeholder={item.tipo === "SERVICO" ? "Ex.: Troca do reparador" : "Ex.: Flexível do freio"} /></div>
               <div className="sm:col-span-3"><Label>Almoxarifado</Label><select disabled={item.tipo !== "PECA"} className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm disabled:opacity-50" value={item.produtoId || ""} onChange={(e) => { const product = produtosEstoque.find((p) => p.id === e.target.value); updateItem(index, { produtoId: e.target.value || null, descricao: item.descricao || product?.nome || "" }); }}><option value="">Peça externa / não vinculada</option>{produtosEstoque.map((p) => <option key={p.id} value={p.id}>{p.codigoInterno} · {p.nome}</option>)}</select></div>
               <div className="sm:col-span-1"><Label>Qtd.</Label><Input className="mt-1 h-9" type="number" min="0" step="0.001" value={item.quantidade} onChange={(e) => updateItem(index, { quantidade: Number(e.target.value) })} /></div>
-              <div className="sm:col-span-1"><Label>Unit.</Label><Input className="mt-1 h-9" type="number" min="0" step="0.01" value={item.valorUnitario} onChange={(e) => updateItem(index, { valorUnitario: Number(e.target.value) })} /></div>
+              <div className="sm:col-span-1"><Label>Valor unit.</Label><Input className="mt-1 h-9" type="number" min="0" step="0.01" value={item.valorUnitario} onChange={(e) => updateItem(index, { valorUnitario: Number(e.target.value) })} /></div>
               <div className="flex items-end justify-between gap-2 sm:col-span-1"><div className="pb-2 text-xs font-semibold">{money(numberValue(item.quantidade) * numberValue(item.valorUnitario))}</div><Button type="button" variant="ghost" size="icon" onClick={() => setOsForm((f) => ({ ...f, itens: f.itens.filter((_, i) => i !== index) }))}><X className="h-4 w-4" /></Button></div>
             </div>)}</div>}
           </section>
 
-          <section className="space-y-3"><div><h3 className="font-semibold">Custos</h3><p className="text-xs text-muted-foreground">Os valores dos itens acima entram automaticamente no total. Use os campos abaixo para valores adicionais.</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><div><Label>Peças adicionais</Label><Input className="mt-1" type="number" min="0" step="0.01" value={osForm.valorPecas} onChange={(e) => setOsForm({ ...osForm, valorPecas: e.target.value })} /></div><div><Label>Mão de obra adicional</Label><Input className="mt-1" type="number" min="0" step="0.01" value={osForm.valorMaoObra} onChange={(e) => setOsForm({ ...osForm, valorMaoObra: e.target.value })} /></div><div><Label>Outros custos</Label><Input className="mt-1" type="number" min="0" step="0.01" value={osForm.valorOutros} onChange={(e) => setOsForm({ ...osForm, valorOutros: e.target.value })} /></div><div><Label>Desconto</Label><Input className="mt-1" type="number" min="0" step="0.01" value={osForm.desconto} onChange={(e) => setOsForm({ ...osForm, desconto: e.target.value })} /></div><div className="rounded-lg border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">Total da OS</div><div className="mt-1 text-lg font-bold">{money(formTotal)}</div></div></div></section>
+          <section className="space-y-3"><div><h3 className="font-semibold">Custos</h3><p className="text-xs text-muted-foreground">Os valores dos itens acima entram automaticamente no total da OS.</p></div><div className="grid gap-3 sm:grid-cols-2"><div><Label>Desconto</Label><Input className="mt-1" type="number" min="0" step="0.01" value={osForm.desconto} onChange={(e) => setOsForm({ ...osForm, desconto: e.target.value })} /></div><div className="rounded-lg border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">Total da OS</div><div className="mt-1 text-lg font-bold">{money(formTotal)}</div></div></div></section>
 
           <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Notas Fiscais</h3><p className="text-xs text-muted-foreground">Anexe PDF, XML ou imagem e informe o valor. Uma OS pode ter várias notas.</p></div><Button type="button" variant="outline" onClick={() => setPendingNotas((n) => [...n, newNota()])}><FilePlus2 className="mr-1 h-4 w-4" />Adicionar NF</Button></div>{pendingNotas.map((nota, index) => <div key={nota.key} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12"><div className="sm:col-span-2"><Label>Número</Label><Input className="mt-1 h-9" value={nota.numero} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, numero: e.target.value } : r))} /></div><div className="sm:col-span-1"><Label>Série</Label><Input className="mt-1 h-9" value={nota.serie} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, serie: e.target.value } : r))} /></div><div className="sm:col-span-2"><Label>Data emissão</Label><Input className="mt-1 h-9" type="date" value={nota.dataEmissao} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, dataEmissao: e.target.value } : r))} /></div><div className="sm:col-span-2"><Label>Valor da NF</Label><Input className="mt-1 h-9" type="number" min="0" step="0.01" value={nota.valor} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, valor: e.target.value } : r))} /></div><div className="sm:col-span-4"><Label>Arquivo *</Label><Input className="mt-1 h-9" type="file" accept=".pdf,.xml,image/jpeg,image/png,image/webp" onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, file: e.target.files?.[0] || null } : r))} /></div><div className="flex items-end sm:col-span-1"><Button type="button" size="icon" variant="ghost" onClick={() => setPendingNotas((rows) => rows.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button></div><div className="sm:col-span-12"><Label>Chave de acesso</Label><Input className="mt-1 h-9" maxLength={54} value={nota.chaveAcesso} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, chaveAcesso: e.target.value } : r))} placeholder="44 dígitos (opcional)" /></div></div>)}</section>
 
@@ -352,7 +353,7 @@ export default function Manutencao() {
 
         <div><h3 className="mb-2 font-semibold">Serviços e peças</h3><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[650px] text-sm"><thead><tr className="border-b bg-muted/40 text-left text-muted-foreground"><th className="p-3">Tipo</th><th>Descrição</th><th>Qtd.</th><th className="text-right">Unitário</th><th className="pr-3 text-right">Total</th></tr></thead><tbody>{detail.itens?.length ? detail.itens.map((item) => <tr key={item.id} className="border-b last:border-0"><td className="p-3">{item.tipo === "PECA" ? "Peça" : item.tipo === "SERVICO" ? "Serviço" : "Outro"}</td><td>{item.descricao || item.produto?.nome || "—"}{item.produto && <div className="text-xs text-muted-foreground">Almoxarifado: {item.produto.codigoInterno}</div>}</td><td>{item.quantidade}</td><td className="text-right">{money(item.valorUnitario)}</td><td className="pr-3 text-right font-medium">{money(item.valorTotal ?? item.quantidade * item.valorUnitario)}</td></tr>) : <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">Nenhum item detalhado.</td></tr>}</tbody></table></div></div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{[["Peças", detail.valorPecas], ["Mão de obra", detail.valorMaoObra], ["Outros", detail.valorOutros], ["Desconto", -detail.desconto], ["Total OS", detail.valorTotal]].map(([label, value]) => <div key={String(label)} className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 font-bold">{money(Number(value))}</div></div>)}</div>
+        <div className="grid gap-3 sm:grid-cols-2">{[["Desconto", -detail.desconto], ["Total OS", detail.valorTotal]].map(([label, value]) => <div key={String(label)} className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 font-bold">{money(Number(value))}</div></div>)}</div>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div><div className="mb-2 flex items-center justify-between gap-2"><h3 className="font-semibold">Notas Fiscais</h3><Button size="sm" variant="outline" onClick={() => { setDetailNota(newNota()); setDetailDocMode("NF"); }}><Plus className="mr-1 h-4 w-4" />Adicionar NF</Button></div><div className="space-y-2">{detail.notasFiscais?.length ? detail.notasFiscais.map((nota) => <div key={nota.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3"><FileText className="h-5 w-5 text-muted-foreground" /><div className="min-w-0 flex-1"><div className="font-medium">NF {nota.numero || "sem número"}{nota.serie ? ` · Série ${nota.serie}` : ""}</div><div className="text-xs text-muted-foreground">{dateBr(nota.dataEmissao)} · {money(nota.valor)} · {nota.arquivoNome}</div></div><Button size="icon" variant="ghost" title="Baixar" onClick={() => void downloadFile(`/manutencao/ordens/${detail.id}/notas/${nota.id}/arquivo`, nota.arquivoNome)}><Download className="h-4 w-4" /></Button><Button size="icon" variant="ghost" title="Excluir" onClick={async () => { await api.delete(`/manutencao/ordens/${detail.id}/notas/${nota.id}`); await refreshDetail(); }}><Trash2 className="h-4 w-4" /></Button></div>) : <div className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">Nenhuma Nota Fiscal anexada.</div>}</div></div>

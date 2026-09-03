@@ -1,0 +1,11 @@
+cd C:\Users\yago\Downloads\Radasa-System-Cloudflare-v1.4
+
+pnpm install
+pnpm run check
+pnpm run build:cloudflare
+pnpm run deploy
+
+# Git (opcional, depois de validar)
+git add .
+git commit -m "feat: simplifica OS de manutencao e busca de fornecedor"
+git push
