@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { parseDateOnly } from "../utils/date.js";
 import { dateOnly, number, created } from "../utils/serialize.js";
+import { maintenanceDreValue, isGeneratedMaintenanceEntry } from "./financeiro-dre.js";
 const clean=(v:any)=>v?String(v):null;
 const serialize=(x:any)=>({...x,valor:number(x.valor),dataCompetencia:dateOnly(x.dataCompetencia),dataVencimento:x.dataVencimento?dateOnly(x.dataVencimento):null,dataPagamento:x.dataPagamento?dateOnly(x.dataPagamento):null,createdAt:created(x.createdAt)});
 const data=(i:any)=>{
@@ -33,12 +34,12 @@ export const financeiroService={
  },
  async resumo(from?:string,to?:string){
   const range=(from||to)?{...(from?{gte:parseDateOnly(from)}:{}),...(to?{lte:parseDateOnly(to)}:{})}:undefined;
-  const [manual,viagens,romaneios,abastecimentos,fechamentos,estoque,pneus,recapagens,consertos,baixasResumo]=await Promise.all([
+  const [manual,viagens,romaneios,abastecimentos,fechamentos,estoque,pneus,recapagens,consertos,ordensManutencao,baixasResumo]=await Promise.all([
    prisma.lancamentoFinanceiro.findMany({where:range?{dataCompetencia:range}:undefined}),
    prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}),
    prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{produtos:{select:{valorTotal:true}}}}),
    prisma.abastecimento.findMany({where:range?{dataEmissao:range}:undefined,select:{produtos:{select:{valorTotal:true,produto:{select:{nome:true}}}}}}),
-   prisma.fechamento.findMany({where:range?{dataFim:range}:undefined}), prisma.estoqueMovimentacao.findMany({where:{tipo:"ENTRADA",...(range?{data:range}:{})},include:{produto:{select:{categoria:true}}}}), prisma.pneu.findMany({where:range?{dataCompra:range}:undefined}), prisma.pneuRecapagem.findMany({where:range?{dataEnvio:range}:undefined}), prisma.pneuConserto.findMany({where:range?{data:range}:undefined}), prisma.baixaFinanceira.findMany()
+   prisma.fechamento.findMany({where:range?{dataFim:range}:undefined}), prisma.estoqueMovimentacao.findMany({where:{tipo:"ENTRADA",...(range?{data:range}:{})},include:{produto:{select:{categoria:true}}}}), prisma.pneu.findMany({where:range?{dataCompra:range}:undefined}), prisma.pneuRecapagem.findMany({where:range?{dataEnvio:range}:undefined}), prisma.pneuConserto.findMany({where:range?{data:range}:undefined}), prisma.ordemServico.findMany({where:{status:"CONCLUIDA",...(range?{dataConclusao:range}:{})},select:{numero:true,valorPecas:true,valorMaoObra:true,valorOutros:true,desconto:true}}), prisma.baixaFinanceira.findMany()
   ]);
   const categorias:Record<string,number>={}; const add=(k:string,v:any)=>categorias[k]=(categorias[k]||0)+number(v);
   let receitasAutomaticas=0,despesasAutomaticas=0;
@@ -49,8 +50,11 @@ export const financeiroService={
   // Combustível é calculado pelos itens reais dos Abastecimentos: Diesel separado de ARLA.
   for(const x of abastecimentos){for(const p of x.produtos){const tipo=classifyFuelProduct(p.produto.nome);if(tipo==="DIESEL"){despesasAutomaticas+=number(p.valorTotal);add("Abastecimento",p.valorTotal)}else if(tipo==="ARLA"){despesasAutomaticas+=number(p.valorTotal);add("ARLA",p.valorTotal)}}}
   for(const x of fechamentos){despesasAutomaticas+=number(x.valorTotal);add("Comissões",x.valorTotal)} for(const x of estoque){despesasAutomaticas+=number(x.valorTotal);add(x.produto.categoria||"Almoxarifado",x.valorTotal)} for(const x of pneus){despesasAutomaticas+=number(x.valorCompra);add("Pneus",x.valorCompra)} for(const x of recapagens){despesasAutomaticas+=number(x.valor);add("Recapagem",x.valor)} for(const x of consertos){despesasAutomaticas+=number(x.valor);add("Conserto de pneus",x.valor)}
+  // Manutenção no DRE vem diretamente das OS concluídas. Peças continuam separadas pelo Almoxarifado; aqui entram apenas mão de obra/outros, líquido do desconto.
+  for(const os of ordensManutencao){const valor=maintenanceDreValue(os);if(valor>0){despesasAutomaticas+=valor;add("Manutenção",valor)}}
+  const numerosOsManutencao=new Set(ordensManutencao.map(os=>os.numero));
   const pagosResumo=new Map<string,number>();for(const b of baixasResumo)pagosResumo.set(b.lancamentoId,(pagosResumo.get(b.lancamentoId)||0)+number(b.valor));
-  let receitasManuais=0,despesasManuais=0,aReceber=0,aPagar=0; for(const x of manual){if(x.status==="CANCELADO")continue; const v=number(x.valor),saldo=Math.max(0,v-(pagosResumo.get(x.id)||0)); if(x.tipo==="RECEITA"){aReceber+=saldo;if(isFreightRevenueCategory(x.categoria))continue;receitasManuais+=v;add(x.categoria,v)}else{aPagar+=saldo;if(isManualFuelCategory(x.categoria))continue;despesasManuais+=v;add(x.categoria,v)}}
+  let receitasManuais=0,despesasManuais=0,aReceber=0,aPagar=0; for(const x of manual){if(x.status==="CANCELADO")continue; const v=number(x.valor),saldo=Math.max(0,v-(pagosResumo.get(x.id)||0)); if(x.tipo==="RECEITA"){aReceber+=saldo;if(isFreightRevenueCategory(x.categoria))continue;receitasManuais+=v;add(x.categoria,v)}else{aPagar+=saldo;if(isManualFuelCategory(x.categoria)||isGeneratedMaintenanceEntry(x,numerosOsManutencao))continue;despesasManuais+=v;add(x.categoria,v)}}
   const receitas=receitasAutomaticas+receitasManuais, despesas=despesasAutomaticas+despesasManuais, resultado=receitas-despesas; return {receitas,despesas,resultado,margem:receitas?resultado/receitas*100:0,aReceber,aPagar,receitasAutomaticas,despesasAutomaticas,receitasManuais,despesasManuais,categorias:Object.entries(categorias).map(([categoria,valor])=>({categoria,valor})).sort((a,b)=>b.valor-a.valor)};
  },
  async analise(from?:string,to?:string){

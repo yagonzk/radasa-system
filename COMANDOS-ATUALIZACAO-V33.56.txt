@@ -1,0 +1,10 @@
+cd C:\Users\yago\Downloads\Radasa-System-Cloudflare-v1.4
+
+pnpm install
+pnpm run check
+pnpm run build:cloudflare
+pnpm run deploy:cloudflare
+
+git add .
+git commit -m "V33.56 - DRE manutencao por OS sem duplicar pecas"
+git push origin main
