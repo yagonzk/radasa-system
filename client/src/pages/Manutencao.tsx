@@ -22,6 +22,7 @@ import {
   FilePlus2,
   FileText,
   Paperclip,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -29,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { filterMaintenanceOrders, maintenanceOrderToForm, maintenanceStatusLabel, maintenanceTypeLabel, type MaintenanceColumnFilters } from "@/lib/manutencao-view";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (v: number) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -63,12 +65,8 @@ const newItem = (): OsItem => ({ tipo: "SERVICO", descricao: "", produtoId: null
 const newNota = (): PendingNota => ({ key: crypto.randomUUID(), numero: "", serie: "", chaveAcesso: "", dataEmissao: today(), valor: "", file: null });
 const newAnexo = (): PendingAnexo => ({ key: crypto.randomUUID(), tipo: "ORDEM_SERVICO", descricao: "", file: null });
 
-function statusLabel(status: string) {
-  return ({ ABERTA: "Aberta", EM_ANDAMENTO: "Em andamento", AGUARDANDO_PECA: "Aguardando peça", CONCLUIDA: "Concluída", CANCELADA: "Cancelada" } as Record<string, string>)[status] || status;
-}
-function tipoLabel(tipo: string) {
-  return ({ PREVENTIVA: "Preventiva", CORRETIVA: "Corretiva", EMERGENCIAL: "Emergencial", OUTRA: "Outra" } as Record<string, string>)[tipo] || tipo;
-}
+const statusLabel = maintenanceStatusLabel;
+const tipoLabel = maintenanceTypeLabel;
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -97,7 +95,10 @@ export default function Manutencao() {
   const [pendingAnexos, setPendingAnexos] = useState<PendingAnexo[]>([]);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("TODOS");
+  const [columnFilters, setColumnFilters] = useState<MaintenanceColumnFilters>({});
+  const [activeColumnFilter, setActiveColumnFilter] = useState<string | null>(null);
+  const [columnFilterSearch, setColumnFilterSearch] = useState("");
+  const [editingOsId, setEditingOsId] = useState<string | null>(null);
   const [detail, setDetail] = useState<OS | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [concludeOpen, setConcludeOpen] = useState(false);
@@ -127,14 +128,21 @@ export default function Manutencao() {
   };
   useEffect(() => { void load(); }, []);
 
-  const filteredOrdens = useMemo(() => {
-    const q = normalize(query).trim();
-    return ordens.filter((item) => {
-      if (statusFilter !== "TODOS" && item.status !== statusFilter) return false;
-      if (!q) return true;
-      return normalize([item.numero, item.numeroFornecedor, placa(item.veiculoId), item.fornecedor, item.descricao, item.responsavel, item.status].join(" ")).includes(q);
-    });
-  }, [ordens, query, statusFilter, veiculos]);
+  const filteredOrdens = useMemo(
+    () => filterMaintenanceOrders(ordens, placa, query, columnFilters),
+    [ordens, query, columnFilters, veiculos],
+  );
+
+  const filterOptions = useMemo(() => ({
+    os: Array.from(new Set(ordens.map((x) => `${x.numero}${x.numeroFornecedor ? ` · OS forn. ${x.numeroFornecedor}` : ""}`))).sort(),
+    veiculo: Array.from(new Set(ordens.map((x) => placa(x.veiculoId)))).sort(),
+    fornecedor: Array.from(new Set(ordens.map((x) => x.fornecedor || "—"))).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    tipo: Array.from(new Set(ordens.map((x) => tipoLabel(x.tipo)))).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    problema: Array.from(new Set(ordens.map((x) => `${x.descricao}${x.responsavel ? ` · Resp.: ${x.responsavel}` : ""}`))).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    documentos: Array.from(new Set(ordens.map((x) => `${x.itensCount || 0} item(ns) · ${x.notasCount || 0} NF · ${x.anexosCount || 0} anexo(s)`))).sort(),
+    status: Array.from(new Set(ordens.map((x) => statusLabel(x.status)))).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    custo: Array.from(new Set(ordens.map((x) => money(x.valorTotal)))).sort(),
+  }), [ordens, veiculos]);
 
   const itensPecas = osForm.itens.filter((i) => i.tipo === "PECA").reduce((a, i) => a + numberValue(i.quantidade) * numberValue(i.valorUnitario), 0);
   const itensServicos = osForm.itens.filter((i) => i.tipo === "SERVICO").reduce((a, i) => a + numberValue(i.quantidade) * numberValue(i.valorUnitario), 0);
@@ -143,12 +151,42 @@ export default function Manutencao() {
 
   const abrir = (x: "OS" | "PLANO" | "DOC") => {
     if (x === "OS") {
+      setEditingOsId(null);
       setOsForm(emptyOsForm());
       setSupplierOpen(false);
       setPendingNotas([]);
       setPendingAnexos([]);
     } else setSimpleForm({ dataAbertura: today(), categoria: "PREVENTIVA", tipo: "PREVENTIVA" });
     setModal(x);
+  };
+
+  const openEdit = async (id: string) => {
+    setDetailLoading(true);
+    try {
+      const response = await api.get<OS>(`/manutencao/ordens/${id}`);
+      setEditingOsId(id);
+      setOsForm(maintenanceOrderToForm(response.data));
+      setSupplierOpen(false);
+      setPendingNotas([]);
+      setPendingAnexos([]);
+      setModal("OS");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? "Não foi possível editar a OS.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const removeOs = async (item: OS) => {
+    if (!window.confirm(`Deseja excluir a ${item.numero}? Esta ação também remove o lançamento financeiro vinculado e devolve ao estoque as peças utilizadas nesta OS.`)) return;
+    try {
+      await api.delete(`/manutencao/ordens/${item.id}`);
+      if (detail?.id === item.id) setDetail(null);
+      toast.success(`${item.numero} excluída.`);
+      await load();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? "Não foi possível excluir a OS.");
+    }
   };
 
   const updateItem = (index: number, patch: Partial<OsItem>) => {
@@ -204,12 +242,15 @@ export default function Manutencao() {
         desconto: numberValue(osForm.desconto),
         itens: osForm.itens.map((item) => ({ ...item, quantidade: numberValue(item.quantidade), valorUnitario: numberValue(item.valorUnitario) })),
       };
-      const response = await api.post<OS>("/manutencao/ordens", payload);
+      const response = editingOsId
+        ? await api.put<OS>(`/manutencao/ordens/${editingOsId}`, payload)
+        : await api.post<OS>("/manutencao/ordens", payload);
       const osId = response.data.id;
       for (const nota of pendingNotas) await uploadNota(osId, nota);
       for (const anexo of pendingAnexos) await uploadAnexo(osId, anexo);
       setModal("");
-      toast.success(`Ordem de Serviço ${response.data.numero} criada com sucesso.`);
+      setEditingOsId(null);
+      toast.success(editingOsId ? `Ordem de Serviço ${response.data.numero} atualizada.` : `Ordem de Serviço ${response.data.numero} criada com sucesso.`);
       await load();
     } catch (error: any) {
       toast.error(error?.response?.data?.message ?? "Não foi possível salvar a Ordem de Serviço.");
@@ -291,20 +332,62 @@ export default function Manutencao() {
 
     <div className="flex gap-2 border-b">{[["OS", "Ordens de Serviço"], ["PLANOS", "Preventivas"], ["DOCS", "Documentos"]].map(([key, label]) => <Button key={key} variant={tab === key ? "default" : "ghost"} onClick={() => setTab(key as any)}>{label}</Button>)}</div>
 
-    {tab === "OS" && <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_220px]">
-      <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Pesquisar OS, placa, fornecedor, serviço..." /></div>
-      <select className="h-10 rounded-md border bg-background px-3 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="TODOS">Todos os status</option><option value="ABERTA">Abertas</option><option value="EM_ANDAMENTO">Em andamento</option><option value="AGUARDANDO_PECA">Aguardando peça</option><option value="CONCLUIDA">Concluídas</option><option value="CANCELADA">Canceladas</option></select>
+    {tab === "OS" && <div className="flex flex-wrap items-center gap-3">
+      <div className="relative min-w-[260px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Pesquisar OS, placa, fornecedor, serviço..." /></div>
+      {(query || Object.values(columnFilters).some(Boolean)) && <Button variant="outline" onClick={() => { setQuery(""); setColumnFilters({}); }}>Limpar filtros</Button>}
     </div>}
 
     <Card><CardContent className="overflow-x-auto p-4">
-      {tab === "OS" && <table className="w-full min-w-[1050px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">OS</th><th>Data</th><th>Veículo</th><th>Fornecedor</th><th>Tipo</th><th>Problema / serviço</th><th>Documentos</th><th>Status</th><th className="text-right">Custo</th><th /></tr></thead><tbody>{filteredOrdens.length ? filteredOrdens.map((x) => <tr className="border-b align-top" key={x.id}><td className="py-3 font-medium"><div>{x.numero}</div>{x.numeroFornecedor && <div className="text-xs text-muted-foreground">OS forn. {x.numeroFornecedor}</div>}</td><td>{dateBr(x.dataAbertura)}</td><td>{placa(x.veiculoId)}</td><td>{x.fornecedor || "—"}</td><td>{tipoLabel(x.tipo)}</td><td className="max-w-[280px]"><div className="line-clamp-2">{x.descricao}</div>{x.responsavel && <div className="mt-1 text-xs text-muted-foreground">Resp.: {x.responsavel}</div>}</td><td><div className="text-xs">{x.itensCount || 0} item(ns)</div><div className="text-xs text-muted-foreground">{x.notasCount || 0} NF · {x.anexosCount || 0} anexo(s)</div></td><td><Badge variant={x.status === "CONCLUIDA" ? "default" : "secondary"}>{statusLabel(x.status)}</Badge></td><td className="text-right font-medium">{money(x.valorTotal)}</td><td className="text-right"><Button size="sm" variant="outline" onClick={() => void openDetail(x.id)} disabled={detailLoading}><Eye className="mr-1 h-4 w-4" />Abrir</Button></td></tr>) : <tr><td colSpan={10} className="py-12 text-center text-muted-foreground">Nenhuma Ordem de Serviço encontrada.</td></tr>}</tbody></table>}
+      {tab === "OS" && <table className="w-full min-w-[1250px] table-fixed text-sm">
+        <colgroup><col className="w-[120px]" /><col className="w-[110px]" /><col className="w-[120px]" /><col className="w-[170px]" /><col className="w-[120px]" /><col className="w-[260px]" /><col className="w-[160px]" /><col className="w-[140px]" /><col className="w-[120px]" /><col className="w-[132px]" /></colgroup>
+        <thead><tr className="border-b text-muted-foreground">
+          {[
+            { key: "os", label: "OS" },
+            { key: "data", label: "Data", date: true },
+            { key: "veiculo", label: "Veículo" },
+            { key: "fornecedor", label: "Fornecedor" },
+            { key: "tipo", label: "Tipo" },
+            { key: "problema", label: "Problema / serviço" },
+            { key: "documentos", label: "Documentos" },
+            { key: "status", label: "Status" },
+            { key: "custo", label: "Custo", align: "right" },
+          ].map((column) => {
+            const isDate = Boolean(column.date);
+            const valueKey = column.key as keyof MaintenanceColumnFilters;
+            const active = isDate ? Boolean(columnFilters.dataInicio || columnFilters.dataFim) : Boolean(columnFilters[valueKey]);
+            const options = isDate ? [] : ((filterOptions as any)[column.key] || []).filter((option: string) => normalize(option).includes(normalize(columnFilterSearch)));
+            return <th key={column.key} className={`px-4 py-3 align-middle font-medium ${column.align === "right" ? "text-right" : "text-left"}`}>
+              <Popover open={activeColumnFilter === column.key} onOpenChange={(open) => { setActiveColumnFilter(open ? column.key : null); setColumnFilterSearch(""); }}>
+                <PopoverTrigger asChild><button type="button" className={`inline-flex w-full items-center gap-1 rounded-sm outline-none hover:text-foreground ${column.align === "right" ? "justify-end" : "justify-start"} ${active ? "text-primary" : ""}`}><span>{column.label}</span><ChevronDown className="h-4 w-4 shrink-0" /></button></PopoverTrigger>
+                <PopoverContent align={column.align === "right" ? "end" : "start"} className="w-80 p-0">
+                  {isDate ? <div className="space-y-3 p-3"><div><Label className="text-xs">De</Label><Input className="mt-1" type="date" value={columnFilters.dataInicio || ""} onChange={(e) => setColumnFilters((current) => ({ ...current, dataInicio: e.target.value }))} /></div><div><Label className="text-xs">Até</Label><Input className="mt-1" type="date" value={columnFilters.dataFim || ""} onChange={(e) => setColumnFilters((current) => ({ ...current, dataFim: e.target.value }))} /></div></div> : <><div className="border-b p-3"><Input value={columnFilterSearch} onChange={(e) => setColumnFilterSearch(e.target.value)} placeholder={`Pesquisar ${column.label.toLocaleLowerCase("pt-BR")}...`} autoFocus /></div><div className="max-h-60 overflow-y-auto p-2">{options.length ? options.map((option: string) => <button type="button" key={option} onClick={() => { setColumnFilters((current) => ({ ...current, [valueKey]: option })); setActiveColumnFilter(null); }} className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${columnFilters[valueKey] === option ? "bg-primary/10 text-primary" : ""}`}><span className="truncate">{option}</span>{columnFilters[valueKey] === option && <Check className="h-4 w-4" />}</button>) : <p className="py-4 text-center text-xs text-muted-foreground">Nenhuma opção encontrada.</p>}</div></>}
+                  <div className="flex gap-2 border-t p-3"><Button size="sm" variant="outline" className="flex-1" onClick={() => setColumnFilters((current) => isDate ? { ...current, dataInicio: "", dataFim: "" } : { ...current, [valueKey]: "" })}>Limpar</Button><Button size="sm" className="flex-1" onClick={() => setActiveColumnFilter(null)}>OK</Button></div>
+                </PopoverContent>
+              </Popover>
+            </th>;
+          })}
+          <th className="px-4 py-3 text-right align-middle font-medium text-muted-foreground">Ações</th>
+        </tr></thead>
+        <tbody>{filteredOrdens.length ? filteredOrdens.map((x) => <tr className="border-b transition-colors hover:bg-muted/20" key={x.id}>
+          <td className="px-4 py-3 align-middle font-medium"><div className="truncate">{x.numero}</div>{x.numeroFornecedor && <div className="truncate text-xs text-muted-foreground">OS forn. {x.numeroFornecedor}</div>}</td>
+          <td className="whitespace-nowrap px-4 py-3 align-middle">{dateBr(x.dataAbertura)}</td>
+          <td className="px-4 py-3 align-middle font-medium">{placa(x.veiculoId)}</td>
+          <td className="px-4 py-3 align-middle"><div className="truncate" title={x.fornecedor || "—"}>{x.fornecedor || "—"}</div></td>
+          <td className="px-4 py-3 align-middle">{tipoLabel(x.tipo)}</td>
+          <td className="px-4 py-3 align-middle"><div className="line-clamp-2">{x.descricao}</div>{x.responsavel && <div className="mt-1 truncate text-xs text-muted-foreground">Resp.: {x.responsavel}</div>}</td>
+          <td className="px-4 py-3 align-middle"><div className="text-xs">{x.itensCount || 0} item(ns)</div><div className="whitespace-nowrap text-xs text-muted-foreground">{x.notasCount || 0} NF · {x.anexosCount || 0} anexo(s)</div></td>
+          <td className="px-4 py-3 align-middle"><Badge variant={x.status === "CONCLUIDA" ? "default" : "secondary"}>{statusLabel(x.status)}</Badge></td>
+          <td className="whitespace-nowrap px-4 py-3 text-right align-middle font-medium tabular-nums">{money(x.valorTotal)}</td>
+          <td className="px-4 py-3 text-right align-middle"><div className="inline-flex items-center justify-end gap-1"><Button size="icon" variant="ghost" title="Abrir OS" aria-label="Abrir OS" onClick={() => void openDetail(x.id)} disabled={detailLoading}><Eye className="h-4 w-4 text-blue-500" /></Button><Button size="icon" variant="ghost" title="Editar OS" aria-label="Editar OS" onClick={() => void openEdit(x.id)} disabled={detailLoading}><Pencil className="h-4 w-4 text-amber-500" /></Button><Button size="icon" variant="ghost" title="Excluir OS" aria-label="Excluir OS" onClick={() => void removeOs(x)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div></td>
+        </tr>) : <tr><td colSpan={10} className="py-12 text-center text-muted-foreground">Nenhuma Ordem de Serviço encontrada.</td></tr>}</tbody>
+      </table>}
       {tab === "PLANOS" && <table className="w-full min-w-[700px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Veículo</th><th>Serviço</th><th>Intervalo</th><th>Próximo KM</th><th>Próxima data</th><th /></tr></thead><tbody>{planos.map((x) => <tr className="border-b" key={x.id}><td className="py-3">{placa(x.veiculoId)}</td><td className="font-medium">{x.nome}</td><td>{x.intervaloKm ? `${x.intervaloKm} km` : "—"}</td><td>{x.proximoKm ?? "—"}</td><td>{dateBr(x.proximaData)}</td><td className="text-right"><Button size="icon" variant="ghost" onClick={async () => { await api.delete(`/manutencao/planos/${x.id}`); await load(); }}><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table>}
       {tab === "DOCS" && <table className="w-full min-w-[650px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Veículo</th><th>Documento</th><th>Número</th><th>Validade</th><th /></tr></thead><tbody>{docs.map((x) => <tr className="border-b" key={x.id}><td className="py-3">{placa(x.veiculoId)}</td><td className="font-medium">{x.tipo}</td><td>{x.numero || "—"}</td><td>{dateBr(x.validade)}</td><td className="text-right"><Button size="icon" variant="ghost" onClick={async () => { await api.delete(`/manutencao/documentos/${x.id}`); await load(); }}><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table>}
     </CardContent></Card>
 
     <Dialog open={modal === "OS"} onOpenChange={(open) => !open && setModal("")}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
-        <DialogHeader><DialogTitle>Nova Ordem de Serviço</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{editingOsId ? "Editar Ordem de Serviço" : "Nova Ordem de Serviço"}</DialogTitle></DialogHeader>
         <div className="space-y-6">
           <section className="space-y-3"><div><h3 className="font-semibold">Identificação da OS</h3><p className="text-xs text-muted-foreground">Dados da manutenção e da ordem emitida pela oficina, quando houver.</p></div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -339,7 +422,7 @@ export default function Manutencao() {
 
           <div><Label>Observações</Label><Textarea className="mt-1 min-h-24" value={osForm.observacoes} onChange={(e) => setOsForm({ ...osForm, observacoes: e.target.value })} /></div>
         </div>
-        <DialogFooter className="mt-5"><Button variant="outline" onClick={() => setModal("")} disabled={saving}>Cancelar</Button><Button onClick={() => void salvarOs()} disabled={saving}>{saving ? "Salvando OS e anexos..." : `Salvar OS · ${money(formTotal)}`}</Button></DialogFooter>
+        <DialogFooter className="mt-5"><Button variant="outline" onClick={() => setModal("")} disabled={saving}>Cancelar</Button><Button onClick={() => void salvarOs()} disabled={saving}>{saving ? "Salvando OS e anexos..." : `${editingOsId ? "Salvar alterações" : "Salvar OS"} · ${money(formTotal)}`}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
 

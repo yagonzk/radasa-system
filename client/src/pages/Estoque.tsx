@@ -22,6 +22,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Boxes,
+  CircleDollarSign,
   Check,
   ChevronDown,
   Download,
@@ -201,6 +202,7 @@ export default function Estoque() {
   const totalEntradas = resumoFiltrado.reduce((total, item) => total + item.entradas, 0);
   const totalSaidas = resumoFiltrado.reduce((total, item) => total + item.saidas, 0);
   const totalEstoque = resumoFiltrado.reduce((total, item) => total + item.estoque, 0);
+  const valorTotalEstoque = resumoFiltrado.reduce((total, item) => total + item.valorEstoque, 0);
 
   const resetForm = () => {
     setForm(emptyMovementForm());
@@ -453,10 +455,11 @@ export default function Estoque() {
             </TabsList>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 xl:gap-4">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:gap-4">
             <Card title="Entradas" value={totalEntradas} icon={<ArrowDownToLine className="h-4 w-4" />} />
             <Card title="Saídas" value={totalSaidas} icon={<ArrowUpFromLine className="h-4 w-4" />} />
             <Card title="Saldo atual" value={totalEstoque} icon={<Boxes className="h-4 w-4" />} />
+            <Card title="Valor em estoque" value={valorTotalEstoque} icon={<CircleDollarSign className="h-4 w-4" />} currency />
           </div>
 
           <TabsContent value="ESTOQUE" className="mt-4">
@@ -946,7 +949,7 @@ export default function Estoque() {
                   <Detail label="Entradas" value={viewingProduct.entradas.toLocaleString("pt-BR")} />
                   <Detail label="Saídas" value={viewingProduct.saidas.toLocaleString("pt-BR")} />
                   <Detail label="Saldo atual" value={viewingProduct.estoque.toLocaleString("pt-BR")} />
-                  <Detail label="Valor das saídas" value={formatBRL(viewingProduct.valorSaidas)} />
+                  <Detail label="Valor em estoque" value={formatBRL(viewingProduct.valorEstoque)} />
                 </div>
 
                 <div className="space-y-3">
@@ -1029,7 +1032,7 @@ export default function Estoque() {
   );
 }
 
-type EstoqueResumoFilterKey = "produto" | "codigo" | "categoria" | "subcategoria" | "entradas" | "saidas" | "saldo" | "valorSaidas";
+type EstoqueResumoFilterKey = "produto" | "codigo" | "categoria" | "subcategoria" | "entradas" | "saidas" | "saldo" | "valorEstoque";
 
 type EstoqueResumoFilters = Record<EstoqueResumoFilterKey, string>;
 
@@ -1041,7 +1044,7 @@ const emptyEstoqueResumoFilters: EstoqueResumoFilters = {
   entradas: "",
   saidas: "",
   saldo: "",
-  valorSaidas: "",
+  valorEstoque: "",
 };
 
 const estoqueResumoColumns: Array<{ key: EstoqueResumoFilterKey; label: string }> = [
@@ -1052,7 +1055,7 @@ const estoqueResumoColumns: Array<{ key: EstoqueResumoFilterKey; label: string }
   { key: "entradas", label: "Entradas" },
   { key: "saidas", label: "Saídas" },
   { key: "saldo", label: "Saldo" },
-  { key: "valorSaidas", label: "Valor das saídas" },
+  { key: "valorEstoque", label: "Valor em estoque" },
 ];
 
 function ResumoTable({
@@ -1079,7 +1082,7 @@ function ResumoTable({
     if (key === "entradas") return row.entradas.toLocaleString("pt-BR");
     if (key === "saidas") return row.saidas.toLocaleString("pt-BR");
     if (key === "saldo") return row.estoque.toLocaleString("pt-BR");
-    return formatBRL(row.valorSaidas);
+    return formatBRL(row.valorEstoque);
   };
 
   const filteredRows = useMemo(
@@ -1211,7 +1214,7 @@ function ResumoTable({
                 <td className="px-4 py-3 text-emerald-500">{row.entradas.toLocaleString("pt-BR")}</td>
                 <td className="px-4 py-3 text-amber-500">{row.saidas.toLocaleString("pt-BR")}</td>
                 <td className="px-4 py-3 font-bold text-primary">{row.estoque.toLocaleString("pt-BR")}</td>
-                <td className="px-4 py-3">{formatBRL(row.valorSaidas)}</td>
+                <td className="px-4 py-3">{formatBRL(row.valorEstoque)}</td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1">
                     <Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onViewProduct(row)} title="Visualizar produto" aria-label={`Visualizar produto ${row.produto.nome}`}><Eye className="h-4 w-4" /></Button>
@@ -1257,8 +1260,8 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
 }
 
-function Card({ title, value, icon }: { title: string; value: number; icon: ReactNode }) {
-  return <div className="rounded-xl border bg-card p-5"><div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">{icon}{title}</div><div className="mt-2 text-2xl font-bold">{value.toLocaleString("pt-BR")}</div></div>;
+function Card({ title, value, icon, currency = false }: { title: string; value: number; icon: ReactNode; currency?: boolean }) {
+  return <div className="rounded-xl border bg-card p-5"><div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">{icon}{title}</div><div className="mt-2 text-2xl font-bold">{currency ? formatBRL(value) : value.toLocaleString("pt-BR")}</div></div>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

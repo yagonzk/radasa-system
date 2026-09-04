@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
+import { calcularValorAtualEstoque } from "./estoque-valuation.js";
 
 const serializeTipoProduto = (item: any) => ({
   ...item,
@@ -189,22 +190,14 @@ export const estoqueService = {
 
     return produtos.map((produto: any) => {
       const rows = movimentos.filter((row: any) => row.produtoId === produto.id);
-      const entradas = rows
-        .filter((row: any) => row.tipo === "ENTRADA")
-        .reduce((a: number, row: any) => a + number(row.quantidade), 0);
-      const saidas = rows
-        .filter((row: any) => row.tipo === "SAIDA")
-        .reduce((a: number, row: any) => a + number(row.quantidade), 0);
-      const valorSaidas = rows
-        .filter((row: any) => row.tipo === "SAIDA")
-        .reduce((a: number, row: any) => a + number(row.valorTotal), 0);
+      const { entradas, saidas, estoque, valorEstoque } = calcularValorAtualEstoque(rows);
 
       return {
         produto: serializeProduto(produto),
         entradas,
         saidas,
-        estoque: entradas - saidas,
-        valorSaidas,
+        estoque,
+        valorEstoque,
       };
     });
   },

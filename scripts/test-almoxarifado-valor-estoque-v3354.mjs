@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const page = fs.readFileSync(new URL('../client/src/pages/Estoque.tsx', import.meta.url), 'utf8');
+const store = fs.readFileSync(new URL('../client/src/lib/store.ts', import.meta.url), 'utf8');
+const service = fs.readFileSync(new URL('../server/services/estoque.service.ts', import.meta.url), 'utf8');
+assert.match(page, /Card title="Valor em estoque"/);
+assert.match(page, /xl:grid-cols-4/);
+assert.match(page, /label="Valor em estoque" value=\{formatBRL\(viewingProduct\.valorEstoque\)\}/);
+assert.match(page, /\{ key: "valorEstoque", label: "Valor em estoque" \}/);
+assert.doesNotMatch(page, /Valor das saídas|valorSaidas/);
+assert.match(store, /valorEstoque:number/);
+assert.doesNotMatch(store, /valorSaidas/);
+assert.match(service, /calcularValorAtualEstoque\(rows\)/);
+assert.match(service, /valorEstoque/);
+console.log('OK: interface e contrato do valor em estoque validados.');

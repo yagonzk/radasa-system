@@ -238,29 +238,84 @@ export const manutencaoService = {
     return getOsDetail(createdOrder.id);
   },
   async atualizarOs(id: string, i: any) {
-    const current = await prisma.ordemServico.findUnique({ where: { id } });
+    const current = await prisma.ordemServico.findUnique({ where: { id }, include: { itens: true } });
     if (!current) throw new AppError(404, "OS não encontrada.");
     const supplier = ("fornecedorId" in i || "fornecedor" in i) ? await resolveFornecedor({ fornecedorId: i.fornecedorId ?? current.fornecedorId, fornecedor: i.fornecedor ?? current.fornecedor }) : { fornecedorId: current.fornecedorId, fornecedor: current.fornecedor };
-    await prisma.ordemServico.update({ where: { id }, data: {
-      ...(i.numeroFornecedor !== undefined ? { numeroFornecedor: String(i.numeroFornecedor ?? "").trim() } : {}),
-      ...(i.tipo !== undefined ? { tipo: String(i.tipo).trim().toUpperCase() } : {}),
-      ...(i.status !== undefined ? { status: String(i.status).trim().toUpperCase() } : {}),
-      ...(i.descricao !== undefined ? { descricao: String(i.descricao).trim() } : {}),
-      ...(i.servicoRealizado !== undefined ? { servicoRealizado: String(i.servicoRealizado).trim() } : {}),
-      ...(i.responsavel !== undefined ? { responsavel: String(i.responsavel).trim() } : {}),
-      fornecedorId: supplier.fornecedorId,
-      fornecedor: supplier.fornecedor,
-      ...(i.kmAbertura !== undefined ? { kmAbertura: nullableNumber(i.kmAbertura) } : {}),
-      ...(i.kmConclusao !== undefined ? { kmConclusao: nullableNumber(i.kmConclusao) } : {}),
-      ...(i.dataAbertura ? { dataAbertura: parseDateOnly(String(i.dataAbertura)) } : {}),
-      ...(i.dataConclusao !== undefined ? { dataConclusao: d(i.dataConclusao) } : {}),
-      ...(i.valorPecas !== undefined ? { valorPecas: nonNegative(i.valorPecas) } : {}),
-      ...(i.valorMaoObra !== undefined ? { valorMaoObra: nonNegative(i.valorMaoObra) } : {}),
-      ...(i.valorOutros !== undefined ? { valorOutros: nonNegative(i.valorOutros) } : {}),
-      ...(i.desconto !== undefined ? { desconto: nonNegative(i.desconto) } : {}),
-      ...(i.observacoes !== undefined ? { observacoes: String(i.observacoes).trim() } : {}),
-    } });
-    return getOsDetail(id);
+    const nextVeiculoId = i.veiculoId !== undefined ? await ensureVehicle(i.veiculoId) : current.veiculoId;
+    const hasItems = Array.isArray(i.itens);
+    const items = hasItems ? normalizeItems(i.itens) : [];
+    const dataAbertura = i.dataAbertura ? parseDateOnly(String(i.dataAbertura)) : current.dataAbertura;
+
+    if (hasItems) {
+      const oldByProduct = new Map<string, number>();
+      for (const item of current.itens) if (item.produtoId) oldByProduct.set(item.produtoId, (oldByProduct.get(item.produtoId) || 0) + number(item.quantidade));
+      for (const item of items) {
+        if (!item.produtoId) continue;
+        const movimentos = await prisma.estoqueMovimentacao.findMany({ where: { produtoId: item.produtoId }, select: { tipo: true, quantidade: true } });
+        const saldoAtual = movimentos.reduce((acc, mov) => acc + (mov.tipo === "ENTRADA" ? number(mov.quantidade) : -number(mov.quantidade)), 0);
+        const disponivelConsiderandoOsAtual = saldoAtual + (oldByProduct.get(item.produtoId) || 0);
+        if (item.quantidade > disponivelConsiderandoOsAtual) throw new AppError(409, `Saldo insuficiente para uma das peças. Disponível: ${disponivelConsiderandoOsAtual}.`);
+      }
+    }
+
+    const valorPecasItens = hasItems ? items.filter((item) => item.tipo === "PECA").reduce((acc, item) => acc + item.valorTotal, 0) : number(current.valorPecas);
+    const valorServicosItens = hasItems ? items.filter((item) => item.tipo === "SERVICO").reduce((acc, item) => acc + item.valorTotal, 0) : number(current.valorMaoObra);
+    const valorOutrosItens = hasItems ? items.filter((item) => item.tipo === "OUTRO").reduce((acc, item) => acc + item.valorTotal, 0) : number(current.valorOutros);
+
+    await prisma.$transaction(async (tx) => {
+      if (hasItems) {
+        await tx.estoqueMovimentacao.deleteMany({ where: { observacoes: `Utilizado na ${current.numero}` } });
+        await tx.ordemServicoItem.deleteMany({ where: { ordemServicoId: id } });
+        for (const item of items) {
+          await tx.ordemServicoItem.create({ data: { ordemServicoId: id, produtoId: item.produtoId, tipo: item.tipo, descricao: item.descricao, quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal } });
+          if (item.produtoId) await tx.estoqueMovimentacao.create({ data: { produtoId: item.produtoId, tipo: "SAIDA", quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal, data: dataAbertura, observacoes: `Utilizado na ${current.numero}` } });
+        }
+      }
+      await tx.ordemServico.update({ where: { id }, data: {
+        ...(i.veiculoId !== undefined ? { veiculoId: nextVeiculoId } : {}),
+        ...(i.numeroFornecedor !== undefined ? { numeroFornecedor: String(i.numeroFornecedor ?? "").trim() } : {}),
+        ...(i.tipo !== undefined ? { tipo: String(i.tipo).trim().toUpperCase() } : {}),
+        ...(i.status !== undefined ? { status: String(i.status).trim().toUpperCase() } : {}),
+        ...(i.descricao !== undefined ? { descricao: String(i.descricao).trim() } : {}),
+        ...(i.servicoRealizado !== undefined ? { servicoRealizado: String(i.servicoRealizado).trim() } : {}),
+        ...(i.responsavel !== undefined ? { responsavel: String(i.responsavel).trim() } : {}),
+        fornecedorId: supplier.fornecedorId,
+        fornecedor: supplier.fornecedor,
+        ...(i.kmAbertura !== undefined ? { kmAbertura: nullableNumber(i.kmAbertura) } : {}),
+        ...(i.kmConclusao !== undefined ? { kmConclusao: nullableNumber(i.kmConclusao) } : {}),
+        ...(i.dataAbertura ? { dataAbertura } : {}),
+        ...(i.dataConclusao !== undefined ? { dataConclusao: d(i.dataConclusao) } : {}),
+        ...(hasItems ? { valorPecas: valorPecasItens, valorMaoObra: valorServicosItens, valorOutros: valorOutrosItens } : {}),
+        ...(i.desconto !== undefined ? { desconto: nonNegative(i.desconto) } : {}),
+        ...(i.observacoes !== undefined ? { observacoes: String(i.observacoes).trim() } : {}),
+      } });
+    });
+
+    const updated = await getOsDetail(id);
+    if (nextVeiculoId !== current.veiculoId) {
+      if (updated.status !== "CONCLUIDA" && updated.status !== "CANCELADA") await prisma.veiculo.update({ where: { id: nextVeiculoId }, data: { situacaoOperacional: "MANUTENCAO" } }).catch(() => undefined);
+      const oldVehicleHasActiveOrder = await prisma.ordemServico.findFirst({ where: { veiculoId: current.veiculoId, id: { not: id }, status: { notIn: ["CONCLUIDA", "CANCELADA"] } }, select: { id: true } });
+      if (!oldVehicleHasActiveOrder) await prisma.veiculo.update({ where: { id: current.veiculoId }, data: { situacaoOperacional: "DISPONIVEL" } }).catch(() => undefined);
+    }
+    if (updated.status === "CONCLUIDA") {
+      const total = totalOs(updated);
+      const financeData = { tipo: "DESPESA" as const, descricao: `Manutenção ${updated.numero} - ${updated.descricao.slice(0, 120)}`, categoria: "Manutenção", valor: total, dataCompetencia: parseDateOnly(String(updated.dataConclusao || updated.dataAbertura)), status: "PENDENTE" as const, veiculoId: updated.veiculoId, fornecedor: updated.fornecedor, numeroDocumento: updated.numero };
+      const existing = await prisma.lancamentoFinanceiro.findFirst({ where: { numeroDocumento: updated.numero, categoria: "Manutenção" } });
+      if (existing) await prisma.lancamentoFinanceiro.update({ where: { id: existing.id }, data: financeData });
+      else if (total > 0) await prisma.lancamentoFinanceiro.create({ data: financeData });
+    }
+    return updated;
+  },
+  async removerOs(id: string) {
+    const current = await prisma.ordemServico.findUnique({ where: { id } });
+    if (!current) throw new AppError(404, "OS não encontrada.");
+    await prisma.$transaction(async (tx) => {
+      await tx.estoqueMovimentacao.deleteMany({ where: { observacoes: `Utilizado na ${current.numero}` } });
+      await tx.lancamentoFinanceiro.deleteMany({ where: { numeroDocumento: current.numero, categoria: "Manutenção" } });
+      await tx.ordemServico.delete({ where: { id } });
+    });
+    const outraAtiva = await prisma.ordemServico.findFirst({ where: { veiculoId: current.veiculoId, status: { notIn: ["CONCLUIDA", "CANCELADA"] } }, select: { id: true } });
+    if (!outraAtiva) await prisma.veiculo.update({ where: { id: current.veiculoId }, data: { situacaoOperacional: "DISPONIVEL" } }).catch(() => undefined);
   },
   async concluirOs(id: string, i: any) {
     const x = await prisma.ordemServico.findUnique({ where: { id } });

@@ -24,6 +24,7 @@ manutencaoRoutes.get("/ordens", asyncHandler(c.ordens));
 manutencaoRoutes.get("/ordens/:id", asyncHandler(c.obterOs));
 manutencaoRoutes.post("/ordens", asyncHandler(c.criarOs));
 manutencaoRoutes.put("/ordens/:id", asyncHandler(c.atualizarOs));
+manutencaoRoutes.delete("/ordens/:id", asyncHandler(c.removerOs));
 manutencaoRoutes.put("/ordens/:id/concluir", asyncHandler(c.concluirOs));
 manutencaoRoutes.post("/ordens/:id/notas", upload.single("arquivo"), asyncHandler(c.adicionarNotaFiscal));
 manutencaoRoutes.get("/ordens/:id/notas/:notaId/arquivo", asyncHandler(c.arquivoNotaFiscal));

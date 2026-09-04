@@ -64,7 +64,7 @@ export interface EstoqueSubcategoria { id: string; nome: string; categoria: stri
 export interface EstoqueProduto { id: string; nome: string; codigoInterno: string; categoria: CategoriaEstoque; subcategoria?: string; createdAt: string; }
 export type TipoMovimentacaoEstoque = "ENTRADA" | "SAIDA";
 export interface EstoqueMovimentacao { id:string; produtoId:string; tipo:TipoMovimentacaoEstoque; quantidade:number; valorUnitario:number; valorTotal:number; data:string; observacoes?:string|null; pdfUrl?:string|null; pdfName?:string|null; xmlUrl?:string|null; xmlName?:string|null; produto:EstoqueProduto; createdAt:string; }
-export interface EstoqueResumo { produto:EstoqueProduto; entradas:number; saidas:number; estoque:number; valorSaidas:number; }
+export interface EstoqueResumo { produto:EstoqueProduto; entradas:number; saidas:number; estoque:number; valorEstoque:number; }
 export interface Local { id: string; cidade: string; uf?: string | null; valorComissao: number; createdAt: string; }
 export interface ViagemFechamento { localId: string; quantidade: number; }
 export interface Fechamento { id: string; motoristaId: string; dataInicio: string; dataFim: string; viagens: ViagemFechamento[]; valorTotal: number; createdAt: string; }

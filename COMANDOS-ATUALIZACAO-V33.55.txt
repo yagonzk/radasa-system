@@ -1,0 +1,11 @@
+cd C:\Users\yago\Downloads\Radasa-System-Cloudflare-v1.4
+
+pnpm install
+pnpm run check
+pnpm run build:cloudflare
+pnpm run deploy:cloudflare
+
+# Se quiser publicar pelo Git também:
+git add .
+git commit -m "V33.55 - manutencao alinhamento filtros editar excluir"
+git push origin main
