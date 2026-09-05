@@ -1,0 +1,9 @@
+pnpm install
+pnpm run check
+pnpm run build
+
+git add .
+git commit -m "feat: selecao e conclusao de OS em lote"
+git push origin main
+
+pnpm run deploy:cloudflare

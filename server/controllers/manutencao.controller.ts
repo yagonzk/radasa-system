@@ -21,6 +21,7 @@ export const manutencaoController = {
   criarOs: async (r: Request, res: Response) => res.status(201).json(await s.criarOs(r.body)),
   atualizarOs: async (r: Request, res: Response) => res.json(await s.atualizarOs(id(r), r.body)),
   removerOs: async (r: Request, res: Response) => { await s.removerOs(id(r)); res.status(204).send(); },
+  concluirOsLote: async (r: Request, res: Response) => res.json(await s.concluirOsLote(r.body)),
   concluirOs: async (r: Request, res: Response) => res.json(await s.concluirOs(id(r), r.body)),
   adicionarNotaFiscal: async (r: Request, res: Response) => {
     if (!r.file) throw new AppError(400, "Selecione o arquivo da Nota Fiscal.");

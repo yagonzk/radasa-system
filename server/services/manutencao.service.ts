@@ -364,6 +364,69 @@ export const manutencaoService = {
     const outraAtiva = await prisma.ordemServico.findFirst({ where: { veiculoId: current.veiculoId, status: { notIn: ["CONCLUIDA", "CANCELADA"] } }, select: { id: true } });
     if (!outraAtiva) await prisma.veiculo.update({ where: { id: current.veiculoId }, data: { situacaoOperacional: "DISPONIVEL" } }).catch(() => undefined);
   },
+  async concluirOsLote(i: any) {
+    const ids = [...new Set((Array.isArray(i?.ids) ? i.ids : []).map((value: unknown) => String(value ?? "").trim()).filter(Boolean))].slice(0, 500);
+    if (!ids.length) throw new AppError(400, "Selecione pelo menos uma OS para concluir.");
+
+    const dataConclusao = parseDateOnly(String(i?.dataConclusao || dateOnly(new Date())));
+    const rows = await prisma.ordemServico.findMany({
+      where: { id: { in: ids }, status: { notIn: ["CONCLUIDA", "CANCELADA"] } },
+      select: { id: true, numero: true, veiculoId: true, descricao: true, fornecedor: true, valorPecas: true, valorMaoObra: true, valorOutros: true, desconto: true },
+    });
+    if (!rows.length) return { solicitadas: ids.length, concluidas: 0, ids: [] };
+
+    const numeros = rows.map((row) => row.numero);
+    const existingFinance = await prisma.lancamentoFinanceiro.findMany({
+      where: { numeroDocumento: { in: numeros }, categoria: "Manutenção" },
+      select: { id: true, numeroDocumento: true },
+    });
+    const financeByNumero = new Map(existingFinance.map((row) => [row.numeroDocumento, row.id]));
+    const financeCreates: any[] = [];
+    const financeUpdates: any[] = [];
+
+    for (const row of rows) {
+      const total = totalOs(row);
+      if (total <= 0) continue;
+      const financeData = {
+        tipo: "DESPESA" as const,
+        descricao: `Manutenção ${row.numero} - ${row.descricao.slice(0, 120)}`,
+        categoria: "Manutenção",
+        valor: total,
+        dataCompetencia: dataConclusao,
+        status: "PENDENTE" as const,
+        veiculoId: row.veiculoId,
+        fornecedor: row.fornecedor,
+        numeroDocumento: row.numero,
+      };
+      const existingId = financeByNumero.get(row.numero);
+      if (existingId) financeUpdates.push(prisma.lancamentoFinanceiro.update({ where: { id: existingId }, data: financeData }));
+      else financeCreates.push(financeData);
+    }
+
+    await prisma.$transaction([
+      prisma.ordemServico.updateMany({
+        where: { id: { in: rows.map((row) => row.id) }, status: { notIn: ["CONCLUIDA", "CANCELADA"] } },
+        data: { status: "CONCLUIDA", dataConclusao },
+      }),
+      ...(financeCreates.length ? [prisma.lancamentoFinanceiro.createMany({ data: financeCreates })] : []),
+      ...financeUpdates,
+    ]);
+
+    const vehicleIds = [...new Set(rows.map((row) => row.veiculoId))];
+    const remainingActive = await prisma.ordemServico.findMany({
+      where: { veiculoId: { in: vehicleIds }, status: { notIn: ["CONCLUIDA", "CANCELADA"] } },
+      select: { veiculoId: true },
+      distinct: ["veiculoId"],
+    });
+    const busyVehicleIds = new Set(remainingActive.map((row) => row.veiculoId));
+    const availableVehicleIds = vehicleIds.filter((vehicleId) => !busyVehicleIds.has(vehicleId));
+    if (availableVehicleIds.length) {
+      await prisma.veiculo.updateMany({ where: { id: { in: availableVehicleIds } }, data: { situacaoOperacional: "DISPONIVEL" } }).catch(() => undefined);
+    }
+
+    return { solicitadas: ids.length, concluidas: rows.length, ids: rows.map((row) => row.id) };
+  },
+
   async concluirOs(id: string, i: any) {
     const x = await prisma.ordemServico.findUnique({ where: { id } });
     if (!x) throw new AppError(404, "OS não encontrada.");

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -31,6 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { filterMaintenanceOrders, maintenanceOrderToForm, maintenanceStatusLabel, maintenanceTypeLabel, type MaintenanceColumnFilters } from "@/lib/manutencao-view";
+import { selectableMaintenanceIds, toggleAllMaintenanceSelection } from "@/lib/manutencao-selection";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (v: number) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -94,6 +96,8 @@ export default function Manutencao() {
   const [pendingNotas, setPendingNotas] = useState<PendingNota[]>([]);
   const [pendingAnexos, setPendingAnexos] = useState<PendingAnexo[]>([]);
   const [saving, setSaving] = useState(false);
+  const [selectedOsIds, setSelectedOsIds] = useState<Set<string>>(new Set());
+  const [bulkCompleting, setBulkCompleting] = useState(false);
   const [query, setQuery] = useState("");
   const [columnFilters, setColumnFilters] = useState<MaintenanceColumnFilters>({});
   const [activeColumnFilter, setActiveColumnFilter] = useState<string | null>(null);
@@ -142,6 +146,48 @@ export default function Manutencao() {
     () => filterMaintenanceOrders(ordens, placa, query, columnFilters),
     [ordens, query, columnFilters, veiculos],
   );
+  const selectableFilteredOsIds = useMemo(() => selectableMaintenanceIds(filteredOrdens), [filteredOrdens]);
+  const allFilteredSelected = selectableFilteredOsIds.length > 0 && selectableFilteredOsIds.every((id) => selectedOsIds.has(id));
+
+  useEffect(() => {
+    const selectable = new Set(selectableMaintenanceIds(ordens));
+    setSelectedOsIds((current) => {
+      const next = new Set([...current].filter((id) => selectable.has(id)));
+      if (next.size === current.size && [...next].every((id) => current.has(id))) return current;
+      return next;
+    });
+  }, [ordens]);
+
+  const toggleOsSelection = (id: string, checked: boolean) => {
+    setSelectedOsIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleAllFilteredOs = () => {
+    setSelectedOsIds((current) => toggleAllMaintenanceSelection(current, filteredOrdens));
+  };
+
+  const concluirSelecionadas = async () => {
+    const ids = [...selectedOsIds];
+    if (!ids.length || bulkCompleting) return;
+    if (!window.confirm(`Marcar ${ids.length} OS como concluída${ids.length > 1 ? "s" : ""}? Os custos dessas OS serão enviados ao Financeiro.`)) return;
+    setBulkCompleting(true);
+    try {
+      const response = await api.put<{ concluidas: number }>("/manutencao/ordens/concluir-lote", { ids, dataConclusao: today() });
+      const total = Number(response.data?.concluidas || 0);
+      setSelectedOsIds(new Set());
+      toast.success(total === 1 ? "1 OS marcada como concluída." : `${total} OS marcadas como concluídas.`);
+      await refreshOrdersAndDashboard();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? "Não foi possível concluir as OS selecionadas.");
+    } finally {
+      setBulkCompleting(false);
+    }
+  };
 
   const filterOptions = useMemo(() => ({
     os: Array.from(new Set(ordens.map((x) => `${x.numero}${x.numeroFornecedor ? ` · OS forn. ${x.numeroFornecedor}` : ""}`))).sort(),
@@ -347,12 +393,15 @@ export default function Manutencao() {
     {tab === "OS" && <div className="flex flex-wrap items-center gap-3">
       <div className="relative min-w-[260px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Pesquisar OS, placa, fornecedor, serviço..." /></div>
       {(query || Object.values(columnFilters).some(Boolean)) && <Button variant="outline" onClick={() => { setQuery(""); setColumnFilters({}); }}>Limpar filtros</Button>}
+      <Button variant="outline" onClick={toggleAllFilteredOs} disabled={!selectableFilteredOsIds.length || bulkCompleting}>{allFilteredSelected ? "Desmarcar todas" : "Selecionar todas"}</Button>
+      {selectedOsIds.size > 0 && <Button onClick={() => void concluirSelecionadas()} disabled={bulkCompleting}><CheckCircle2 className="mr-2 h-4 w-4" />{bulkCompleting ? "Concluindo..." : `Marcar como concluída${selectedOsIds.size > 1 ? "s" : ""} (${selectedOsIds.size})`}</Button>}
     </div>}
 
     <Card><CardContent className="overflow-x-auto p-4">
       {tab === "OS" && <table className="w-full min-w-[1250px] table-fixed text-sm">
-        <colgroup><col className="w-[120px]" /><col className="w-[110px]" /><col className="w-[120px]" /><col className="w-[170px]" /><col className="w-[120px]" /><col className="w-[260px]" /><col className="w-[160px]" /><col className="w-[140px]" /><col className="w-[120px]" /><col className="w-[132px]" /></colgroup>
+        <colgroup><col className="w-[52px]" /><col className="w-[120px]" /><col className="w-[110px]" /><col className="w-[120px]" /><col className="w-[170px]" /><col className="w-[120px]" /><col className="w-[260px]" /><col className="w-[160px]" /><col className="w-[140px]" /><col className="w-[120px]" /><col className="w-[132px]" /></colgroup>
         <thead><tr className="border-b text-muted-foreground">
+          <th className="px-4 py-3 text-center align-middle"><Checkbox aria-label="Selecionar todas as OS visíveis" checked={allFilteredSelected ? true : selectedOsIds.size > 0 && selectableFilteredOsIds.some((id) => selectedOsIds.has(id)) ? "indeterminate" : false} onCheckedChange={() => toggleAllFilteredOs()} disabled={!selectableFilteredOsIds.length || bulkCompleting} /></th>
           {[
             { key: "os", label: "OS" },
             { key: "data", label: "Data", date: true },
@@ -380,7 +429,8 @@ export default function Manutencao() {
           })}
           <th className="px-4 py-3 text-right align-middle font-medium text-muted-foreground">Ações</th>
         </tr></thead>
-        <tbody>{filteredOrdens.length ? filteredOrdens.map((x) => <tr className="border-b transition-colors hover:bg-muted/20" key={x.id}>
+        <tbody>{filteredOrdens.length ? filteredOrdens.map((x) => { const selectable = x.status !== "CONCLUIDA" && x.status !== "CANCELADA"; return <tr className={`border-b transition-colors hover:bg-muted/20 ${selectedOsIds.has(x.id) ? "bg-primary/5" : ""}`} key={x.id}>
+          <td className="px-4 py-3 text-center align-middle"><Checkbox aria-label={`Selecionar ${x.numero}`} checked={selectedOsIds.has(x.id)} disabled={!selectable || bulkCompleting} onCheckedChange={(checked) => toggleOsSelection(x.id, checked === true)} /></td>
           <td className="px-4 py-3 align-middle font-medium"><div className="truncate">{x.numero}</div>{x.numeroFornecedor && <div className="truncate text-xs text-muted-foreground">OS forn. {x.numeroFornecedor}</div>}</td>
           <td className="whitespace-nowrap px-4 py-3 align-middle">{dateBr(x.dataAbertura)}</td>
           <td className="px-4 py-3 align-middle font-medium">{placa(x.veiculoId)}</td>
@@ -391,7 +441,7 @@ export default function Manutencao() {
           <td className="px-4 py-3 align-middle"><Badge variant={x.status === "CONCLUIDA" ? "default" : "secondary"}>{statusLabel(x.status)}</Badge></td>
           <td className="whitespace-nowrap px-4 py-3 text-right align-middle font-medium tabular-nums">{money(x.valorTotal)}</td>
           <td className="px-4 py-3 text-right align-middle"><div className="inline-flex items-center justify-end gap-1"><Button size="icon" variant="ghost" title="Abrir OS" aria-label="Abrir OS" onClick={() => void openDetail(x.id)} disabled={detailLoading}><Eye className="h-4 w-4 text-blue-500" /></Button><Button size="icon" variant="ghost" title="Editar OS" aria-label="Editar OS" onClick={() => void openEdit(x.id)} disabled={detailLoading}><Pencil className="h-4 w-4 text-amber-500" /></Button><Button size="icon" variant="ghost" title="Excluir OS" aria-label="Excluir OS" onClick={() => void removeOs(x)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div></td>
-        </tr>) : <tr><td colSpan={10} className="py-12 text-center text-muted-foreground">Nenhuma Ordem de Serviço encontrada.</td></tr>}</tbody>
+        </tr>}) : <tr><td colSpan={11} className="py-12 text-center text-muted-foreground">Nenhuma Ordem de Serviço encontrada.</td></tr>}</tbody>
       </table>}
       {tab === "PLANOS" && <table className="w-full min-w-[700px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Veículo</th><th>Serviço</th><th>Intervalo</th><th>Próximo KM</th><th>Próxima data</th><th /></tr></thead><tbody>{planos.map((x) => <tr className="border-b" key={x.id}><td className="py-3">{placa(x.veiculoId)}</td><td className="font-medium">{x.nome}</td><td>{x.intervaloKm ? `${x.intervaloKm} km` : "—"}</td><td>{x.proximoKm ?? "—"}</td><td>{dateBr(x.proximaData)}</td><td className="text-right"><Button size="icon" variant="ghost" onClick={async () => { await api.delete(`/manutencao/planos/${x.id}`); await load(); }}><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table>}
       {tab === "DOCS" && <table className="w-full min-w-[650px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Veículo</th><th>Documento</th><th>Número</th><th>Validade</th><th /></tr></thead><tbody>{docs.map((x) => <tr className="border-b" key={x.id}><td className="py-3">{placa(x.veiculoId)}</td><td className="font-medium">{x.tipo}</td><td>{x.numero || "—"}</td><td>{dateBr(x.validade)}</td><td className="text-right"><Button size="icon" variant="ghost" onClick={async () => { await api.delete(`/manutencao/documentos/${x.id}`); await load(); }}><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table>}

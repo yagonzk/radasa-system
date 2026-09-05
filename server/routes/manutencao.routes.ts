@@ -23,6 +23,7 @@ manutencaoRoutes.delete("/planos/:id", asyncHandler(c.removerPlano));
 manutencaoRoutes.get("/ordens", asyncHandler(c.ordens));
 manutencaoRoutes.get("/ordens/:id", asyncHandler(c.obterOs));
 manutencaoRoutes.post("/ordens", asyncHandler(c.criarOs));
+manutencaoRoutes.put("/ordens/concluir-lote", asyncHandler(c.concluirOsLote));
 manutencaoRoutes.put("/ordens/:id", asyncHandler(c.atualizarOs));
 manutencaoRoutes.delete("/ordens/:id", asyncHandler(c.removerOs));
 manutencaoRoutes.put("/ordens/:id/concluir", asyncHandler(c.concluirOs));
