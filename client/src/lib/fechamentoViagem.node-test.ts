@@ -7,8 +7,8 @@ const fechamento = {
   dataInicio: '2026-08-01',
   dataFim: '2026-08-31',
   viagens: [
-    { localId: 'local-lucas', quantidade: 1, dataViagem: '2026-08-18' },
     { localId: 'local-lucas', quantidade: 1, dataViagem: '2026-08-21' },
+    { localId: 'local-lucas', quantidade: 1, dataViagem: '2026-08-18' },
   ],
 } as any;
 

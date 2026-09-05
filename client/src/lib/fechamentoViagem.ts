@@ -69,5 +69,14 @@ export function expandirViagensFechamento(
     }
   }
 
-  return resultado;
+  // A ordem do fechamento deve ser sempre cronológica pela data real da viagem.
+  // Itens antigos sem data ficam ao final, preservando a ordem relativa entre eles.
+  return resultado
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const dataA = a.item.dataViagem || "9999-12-31";
+      const dataB = b.item.dataViagem || "9999-12-31";
+      return dataA.localeCompare(dataB) || a.index - b.index;
+    })
+    .map(({ item }) => item);
 }

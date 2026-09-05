@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -67,6 +68,61 @@ const fileToDataUrl = (file: File) =>
     reader.onerror = () => reject(new Error("Não foi possível ler o PDF."));
     reader.readAsDataURL(file);
   });
+
+
+function MovementProductSelect({
+  value,
+  onChange,
+  products,
+  stockByProduct,
+  outbound,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  products: EstoqueProduto[];
+  stockByProduct: Map<string, number>;
+  outbound: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = products.find((produto) => produto.id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" role="combobox" aria-expanded={open} className="h-10 w-full justify-between px-3 font-normal">
+          <span className="truncate text-left">
+            {selected ? `${selected.nome} - ${selected.codigoInterno}` : "Selecione o produto"}
+          </span>
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command>
+          <CommandInput placeholder="Pesquisar produto por nome ou código..." autoFocus />
+          <CommandList>
+            <CommandEmpty>{outbound ? "Nenhum produto com estoque disponível." : "Nenhum produto encontrado."}</CommandEmpty>
+            {products.map((produto) => {
+              const saldo = stockByProduct.get(produto.id) ?? 0;
+              return (
+                <CommandItem
+                  key={produto.id}
+                  value={`${produto.nome} ${produto.codigoInterno} ${produto.categoria || ""} ${produto.subcategoria || ""}`}
+                  onSelect={() => { onChange(produto.id); setOpen(false); }}
+                >
+                  <Check className={`h-4 w-4 ${value === produto.id ? "opacity-100" : "opacity-0"}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate">{produto.nome} - {produto.codigoInterno}</p>
+                    {outbound && <p className="text-xs text-muted-foreground">Estoque: {saldo.toLocaleString("pt-BR")}</p>}
+                  </div>
+                </CommandItem>
+              );
+            })}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function ProductFileDropzone({
   title,
@@ -221,6 +277,13 @@ export default function Estoque() {
   const totalSaidas = resumoFiltrado.reduce((total, item) => total + item.saidas, 0);
   const totalEstoque = resumoFiltrado.reduce((total, item) => total + item.estoque, 0);
   const valorTotalEstoque = resumoFiltrado.reduce((total, item) => total + item.valorEstoque, 0);
+  const saldoPorProduto = useMemo(() => new Map(resumo.map((row) => [row.produto.id, row.estoque])), [resumo]);
+  const produtosDisponiveisSaida = useMemo(
+    () => resumo.filter((row) => row.estoque > 0).map((row) => row.produto),
+    [resumo],
+  );
+  const saldoProdutoSelecionado = form.produtoId ? (saldoPorProduto.get(form.produtoId) ?? 0) : 0;
+  const produtosMovimentacao = form.tipo === "SAIDA" ? produtosDisponiveisSaida : produtos;
 
   const resetForm = () => {
     setForm(emptyMovementForm());
@@ -447,11 +510,16 @@ export default function Estoque() {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     try {
+      const quantidade = Number(form.quantidade.replace(",", "."));
+      if (form.tipo === "SAIDA") {
+        if (saldoProdutoSelecionado <= 0) throw new Error("Este produto não possui saldo disponível para saída.");
+        if (quantidade > saldoProdutoSelecionado) throw new Error(`Quantidade acima do estoque disponível (${saldoProdutoSelecionado.toLocaleString("pt-BR")}).`);
+      }
       const pdfUrl = pdfFile ? await fileToDataUrl(pdfFile) : undefined;
       await create({
         produtoId: form.produtoId,
         tipo: form.tipo,
-        quantidade: Number(form.quantidade.replace(",", ".")),
+        quantidade,
         valorUnitario: Number(form.valorUnitario.replace(",", ".") || 0),
         data: form.data,
         observacoes: form.observacoes,
@@ -1050,23 +1118,57 @@ export default function Estoque() {
             <form onSubmit={submit} className="space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Tipo">
-                  <Select value={form.tipo} onValueChange={(value) => setForm({ ...form, tipo: value as TipoMovimentacaoEstoque })}>
+                  <Select value={form.tipo} onValueChange={(value) => {
+                    const tipo = value as TipoMovimentacaoEstoque;
+                    const saldoAtual = form.produtoId ? (saldoPorProduto.get(form.produtoId) ?? 0) : 0;
+                    setForm({ ...form, tipo, produtoId: tipo === "SAIDA" && saldoAtual <= 0 ? "" : form.produtoId, quantidade: "" });
+                  }}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent><SelectItem value="ENTRADA">Entrada</SelectItem><SelectItem value="SAIDA">Saída</SelectItem></SelectContent>
                   </Select>
                 </Field>
-                <Field label="Data"><DatePicker value={form.data} onChange={(value) => setForm({ ...form, data: value })} placeholder="Selecione uma data" /></Field>
+                <Field label="Data">
+                  <Input type="date" required value={form.data} onChange={(event) => setForm({ ...form, data: event.target.value })} />
+                </Field>
               </div>
               <Field label="Produto">
-                <Select value={form.produtoId} onValueChange={(value) => setForm({ ...form, produtoId: value })}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o produto" /></SelectTrigger>
-                  <SelectContent>
-                    {produtos.map((produto) => <SelectItem key={produto.id} value={produto.id}>{produto.nome} - {produto.codigoInterno}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <MovementProductSelect
+                  value={form.produtoId}
+                  onChange={(produtoId) => setForm({ ...form, produtoId, quantidade: "" })}
+                  products={produtosMovimentacao}
+                  stockByProduct={saldoPorProduto}
+                  outbound={form.tipo === "SAIDA"}
+                />
+                {form.tipo === "SAIDA" && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {form.produtoId ? `Estoque disponível: ${saldoProdutoSelecionado.toLocaleString("pt-BR")}` : "Na saída, aparecem somente produtos com saldo em estoque."}
+                  </p>
+                )}
               </Field>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Quantidade"><Input required value={form.quantidade} onChange={(event) => setForm({ ...form, quantidade: event.target.value })} placeholder="0" /></Field>
+                <Field label="Quantidade">
+                  <Input
+                    required
+                    type="number"
+                    min="0.0001"
+                    step="any"
+                    max={form.tipo === "SAIDA" && form.produtoId ? saldoProdutoSelecionado : undefined}
+                    value={form.quantidade}
+                    onChange={(event) => {
+                      const raw = event.target.value;
+                      if (form.tipo === "SAIDA" && raw !== "") {
+                        const value = Number(raw.replace(",", "."));
+                        if (Number.isFinite(value) && value > saldoProdutoSelecionado) {
+                          setForm({ ...form, quantidade: String(saldoProdutoSelecionado) });
+                          toast.error(`Máximo disponível: ${saldoProdutoSelecionado.toLocaleString("pt-BR")}.`);
+                          return;
+                        }
+                      }
+                      setForm({ ...form, quantidade: raw });
+                    }}
+                    placeholder={form.tipo === "SAIDA" && form.produtoId ? saldoProdutoSelecionado.toLocaleString("pt-BR") : "0"}
+                  />
+                </Field>
                 <Field label={form.tipo === "SAIDA" ? "Valor unitário da saída *" : "Valor unitário"}><Input required={form.tipo === "SAIDA"} value={form.valorUnitario} onChange={(event) => setForm({ ...form, valorUnitario: event.target.value })} placeholder="0,00" /></Field>
               </div>
               <Field label="Observações"><Input value={form.observacoes} onChange={(event) => setForm({ ...form, observacoes: event.target.value })} /></Field>
@@ -1410,8 +1512,126 @@ function ResumoTable({
   );
 }
 
+type MovimentacaoFilterKey = "data" | "produto" | "quantidade" | "valorUnitario" | "valorTotal" | "nf";
+type MovimentacaoFilters = Record<MovimentacaoFilterKey, string>;
+const emptyMovimentacaoFilters: MovimentacaoFilters = { data: "", produto: "", quantidade: "", valorUnitario: "", valorTotal: "", nf: "" };
+const movimentacaoColumns: Array<{ key: MovimentacaoFilterKey; label: string }> = [
+  { key: "data", label: "Data" },
+  { key: "produto", label: "Produto" },
+  { key: "quantidade", label: "Quantidade" },
+  { key: "valorUnitario", label: "Valor unitário" },
+  { key: "valorTotal", label: "Valor total" },
+  { key: "nf", label: "NF" },
+];
+
 function MovimentacoesTable({ rows, onView, onPdf, onRemove }: { rows: EstoqueMovimentacao[]; onView: (item: EstoqueMovimentacao) => void; onPdf: (item: { url: string; title: string }) => void; onRemove: (id: string) => Promise<void> }) {
-  return <div className="overflow-x-auto rounded-xl border bg-card"><table className="w-full min-w-[840px] text-sm"><thead className="bg-muted/30"><tr>{["Data", "Produto", "Quantidade", "Valor unitário", "Valor total", "NF", "Ações"].map((header) => <th key={header} className="px-4 py-3 text-left text-muted-foreground">{header}</th>)}</tr></thead><tbody>{rows.map((item) => <tr key={item.id} className="border-t"><td className="px-4 py-3">{formatDate(item.data)}</td><td className="px-4 py-3 font-medium">{item.produto.nome} - {item.produto.codigoInterno}</td><td className="px-4 py-3">{item.quantidade.toLocaleString("pt-BR")}</td><td className="px-4 py-3">{formatBRL(item.valorUnitario)}</td><td className="px-4 py-3">{formatBRL(item.valorTotal)}</td><td className="px-4 py-3">{item.pdfUrl ? <button className="text-blue-600 hover:underline" onClick={() => onPdf({ url: item.pdfUrl!, title: item.pdfName || "Nota fiscal" })}>Visualizar</button> : <span className="text-muted-foreground">—</span>}</td><td className="px-4 py-3"><div className="flex gap-1"><Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onView(item)}><Eye className="h-4 w-4" /></Button>{item.pdfUrl && <Button size="icon" variant="ghost" className="text-emerald-600" onClick={() => downloadPdf(item.pdfUrl!, item.pdfName || `nf_${item.id}.pdf`)}><Download className="h-4 w-4" /></Button>}<Button size="icon" variant="ghost" className="text-destructive" onClick={async () => { try { await onRemove(item.id); toast.success("Movimentação removida."); } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível remover."); } }}><Trash2 className="h-4 w-4" /></Button></div></td></tr>)}{!rows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">Nenhuma movimentação registrada.</td></tr>}</tbody></table></div>;
+  const [columnFilters, setColumnFilters] = useState<MovimentacaoFilters>(emptyMovimentacaoFilters);
+  const [activeColumnFilter, setActiveColumnFilter] = useState<MovimentacaoFilterKey | null>(null);
+  const [columnFilterSearch, setColumnFilterSearch] = useState("");
+  const [globalSearch, setGlobalSearch] = useState("");
+
+  const displayValue = (item: EstoqueMovimentacao, key: MovimentacaoFilterKey) => {
+    if (key === "data") return formatDate(item.data);
+    if (key === "produto") return `${item.produto.nome} - ${item.produto.codigoInterno}`;
+    if (key === "quantidade") return item.quantidade.toLocaleString("pt-BR");
+    if (key === "valorUnitario") return formatBRL(item.valorUnitario);
+    if (key === "valorTotal") return formatBRL(item.valorTotal);
+    return item.pdfUrl || item.pdfStored ? "Com NF" : "Sem NF";
+  };
+
+  const filteredRows = useMemo(() => {
+    const term = normalizeEstoqueFilterText(globalSearch);
+    return rows.filter((item) => {
+      const globalMatch = !term || normalizeEstoqueFilterText([
+        item.produto.nome,
+        item.produto.codigoInterno,
+        item.produto.categoria,
+        item.produto.subcategoria,
+        formatDate(item.data),
+        item.observacoes,
+        item.numeroNfe,
+        item.chaveNfe,
+      ].filter(Boolean).join(" ")).includes(term);
+      return globalMatch && movimentacaoColumns.every(({ key }) => !columnFilters[key] || displayValue(item, key) === columnFilters[key]);
+    });
+  }, [rows, globalSearch, columnFilters]);
+
+  const optionsFor = (key: MovimentacaoFilterKey) => Array.from(new Set(rows.map((item) => displayValue(item, key))))
+    .filter(Boolean)
+    .filter((option) => normalizeEstoqueFilterText(option).includes(normalizeEstoqueFilterText(columnFilterSearch)))
+    .sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+
+  const hasFilters = movimentacaoColumns.some(({ key }) => Boolean(columnFilters[key]));
+
+  return (
+    <div className="space-y-2">
+      {hasFilters && (
+        <div className="flex justify-end">
+          <Button type="button" size="sm" variant="outline" onClick={() => setColumnFilters(emptyMovimentacaoFilters)}>
+            <X className="mr-2 h-4 w-4" />Limpar filtros
+          </Button>
+        </div>
+      )}
+      <div className="flex justify-start py-1">
+        <div className="relative w-full max-w-[430px]">
+          <Input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="Buscar por produto, código, data ou NF" className="pl-9" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-xl border bg-card">
+        <table className="w-full min-w-[900px] text-sm">
+          <thead className="bg-muted/30">
+            <tr>
+              {movimentacaoColumns.map((column) => {
+                const active = Boolean(columnFilters[column.key]);
+                const options = optionsFor(column.key);
+                return (
+                  <th key={column.key} className="px-4 py-3 font-semibold">
+                    <Popover open={activeColumnFilter === column.key} onOpenChange={(open) => { setActiveColumnFilter(open ? column.key : null); setColumnFilterSearch(""); }}>
+                      <PopoverTrigger asChild>
+                        <button type="button" className={`flex w-full items-center gap-1 rounded-sm text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary ${active ? "text-primary" : "text-muted-foreground"}`} title={`Filtrar por ${column.label}`}>
+                          <span>{column.label}</span><ChevronDown className="h-4 w-4 shrink-0" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="w-80 p-0">
+                        <div className="border-b p-3"><Input value={columnFilterSearch} onChange={(event) => setColumnFilterSearch(event.target.value)} placeholder={`Pesquisar ${column.label.toLocaleLowerCase("pt-BR")}...`} autoFocus /></div>
+                        <div className="max-h-60 overflow-y-auto p-2">
+                          {options.length === 0 ? <p className="py-4 text-center text-xs text-muted-foreground">Nenhuma opção encontrada.</p> : options.map((option) => (
+                            <button type="button" key={option} onClick={() => { setColumnFilters((current) => ({ ...current, [column.key]: option })); setActiveColumnFilter(null); }} className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${columnFilters[column.key] === option ? "bg-primary/10 text-primary" : ""}`}>
+                              <span className="truncate">{option}</span>{columnFilters[column.key] === option && <Check className="h-4 w-4" />}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex gap-2 border-t p-3">
+                          <Button size="sm" variant="outline" className="flex-1" onClick={() => setColumnFilters((current) => ({ ...current, [column.key]: "" }))}>Limpar</Button>
+                          <Button size="sm" className="flex-1" onClick={() => setActiveColumnFilter(null)}>OK</Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </th>
+                );
+              })}
+              <th className="px-4 py-3 text-left text-muted-foreground">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRows.map((item) => (
+              <tr key={item.id} className="border-t">
+                <td className="px-4 py-3">{formatDate(item.data)}</td>
+                <td className="px-4 py-3 font-medium">{item.produto.nome} - {item.produto.codigoInterno}</td>
+                <td className="px-4 py-3">{item.quantidade.toLocaleString("pt-BR")}</td>
+                <td className="px-4 py-3">{formatBRL(item.valorUnitario)}</td>
+                <td className="px-4 py-3">{formatBRL(item.valorTotal)}</td>
+                <td className="px-4 py-3">{item.pdfUrl ? <button className="text-blue-600 hover:underline" onClick={() => onPdf({ url: item.pdfUrl!, title: item.pdfName || "Nota fiscal" })}>Visualizar</button> : <span className="text-muted-foreground">—</span>}</td>
+                <td className="px-4 py-3"><div className="flex gap-1"><Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onView(item)}><Eye className="h-4 w-4" /></Button>{item.pdfUrl && <Button size="icon" variant="ghost" className="text-emerald-600" onClick={() => downloadPdf(item.pdfUrl!, item.pdfName || `nf_${item.id}.pdf`)}><Download className="h-4 w-4" /></Button>}<Button size="icon" variant="ghost" className="text-destructive" onClick={async () => { if (!window.confirm(`Excluir esta ${item.tipo === "ENTRADA" ? "entrada" : "saída"}? O saldo do estoque será recalculado automaticamente.`)) return; try { await onRemove(item.id); toast.success(item.tipo === "ENTRADA" ? "Entrada removida e saldo do estoque revertido." : "Saída removida e quantidade devolvida ao estoque."); } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível remover."); } }}><Trash2 className="h-4 w-4" /></Button></div></td>
+              </tr>
+            ))}
+            {!filteredRows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">{hasFilters || globalSearch ? "Nenhuma movimentação corresponde aos filtros." : "Nenhuma movimentação registrada."}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function downloadDocument(url: string, filename: string) {
