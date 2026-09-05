@@ -1,6 +1,6 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3 } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3, TriangleAlert } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useEffect, useState } from "react";
@@ -32,6 +32,7 @@ const navGroups = [
       { label: "Veículos", href: "/cadastros/veiculos", icon: <Truck className="h-4 w-4" />, matchPaths: ["/cadastros/veiculos"] },
       { label: "Pneus", href: "/pneus", icon: <Truck className="h-4 w-4" />, matchPaths: ["/pneus"] },
       { label: "Manutenção", href: "/manutencao", icon: <Settings2 className="h-4 w-4" />, matchPaths: ["/manutencao"] },
+      { label: "Multas", href: "/multas", icon: <TriangleAlert className="h-4 w-4" />, matchPaths: ["/multas"] },
     ],
   },
   {
@@ -78,7 +79,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isDark = theme === "dark";
   const configuredPermissions = user?.permissoes && Object.keys(user.permissoes).length > 0;
-  const permissionFor = (href: string) => href.startsWith("/demandas") ? "demandas" : href.startsWith("/romaneios") ? "romaneios" : href.startsWith("/viagens") || href.startsWith("/pedagios") ? "viagens" : href.startsWith("/abastecimentos") ? "abastecimentos" : href.startsWith("/manutencao") || href.startsWith("/pneus") ? "frota" : href.startsWith("/financeiro") || href.startsWith("/fechamentos") ? "financeiro" : href.startsWith("/ciot") || href.startsWith("/fiscal") ? "fiscal" : href.startsWith("/comercial") ? "comercial" : href.startsWith("/bi") ? "bi" : href.startsWith("/cadastros") || href.startsWith("/estoque") ? "cadastros" : href.startsWith("/portal-motorista") ? "portal_motorista" : href.startsWith("/alertas") ? "dashboard" : "dashboard";
+  const permissionFor = (href: string) => href.startsWith("/demandas") ? "demandas" : href.startsWith("/romaneios") ? "romaneios" : href.startsWith("/viagens") || href.startsWith("/pedagios") ? "viagens" : href.startsWith("/abastecimentos") ? "abastecimentos" : href.startsWith("/manutencao") || href.startsWith("/pneus") || href.startsWith("/multas") ? "frota" : href.startsWith("/financeiro") || href.startsWith("/fechamentos") ? "financeiro" : href.startsWith("/ciot") || href.startsWith("/fiscal") ? "fiscal" : href.startsWith("/comercial") ? "comercial" : href.startsWith("/bi") ? "bi" : href.startsWith("/cadastros") || href.startsWith("/estoque") ? "cadastros" : href.startsWith("/portal-motorista") ? "portal_motorista" : href.startsWith("/alertas") ? "dashboard" : "dashboard";
   const canAccessItem = (item: NavItem) => user?.role === "ADMIN" || !configuredPermissions || user?.permissoes?.[permissionFor(item.href)] === true;
   const canAccessStandalone = (permission: string) => user?.role === "ADMIN" || !configuredPermissions || user?.permissoes?.[permission] === true;
 

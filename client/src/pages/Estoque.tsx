@@ -209,7 +209,7 @@ export default function Estoque() {
     remove: removeProduto,
     refresh: refreshProdutos,
   } = useEstoqueProdutos();
-  const { movimentacoes, resumo, create, remove, refresh: refreshEstoque } = useEstoque();
+  const { movimentacoes, resumo, create, update: updateMovimentacao, remove, refresh: refreshEstoque } = useEstoque();
 
   const [viewMode, setViewMode] = useState<ViewMode>("ESTOQUE");
 
@@ -218,6 +218,9 @@ export default function Estoque() {
   const [form, setForm] = useState(emptyMovementForm);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [viewing, setViewing] = useState<EstoqueMovimentacao | null>(null);
+  const [editingMovement, setEditingMovement] = useState<EstoqueMovimentacao | null>(null);
+  const [correctionForm, setCorrectionForm] = useState(emptyMovementForm);
+  const [savingCorrection, setSavingCorrection] = useState(false);
   const [viewingProduct, setViewingProduct] = useState<(typeof resumo)[number] | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -284,6 +287,44 @@ export default function Estoque() {
   );
   const saldoProdutoSelecionado = form.produtoId ? (saldoPorProduto.get(form.produtoId) ?? 0) : 0;
   const produtosMovimentacao = form.tipo === "SAIDA" ? produtosDisponiveisSaida : produtos;
+  const saldoBaseCorrecao = editingMovement ? (() => {
+    const saldoAtual = saldoPorProduto.get(editingMovement.produtoId) ?? 0;
+    return saldoAtual - (editingMovement.tipo === "ENTRADA" ? editingMovement.quantidade : -editingMovement.quantidade);
+  })() : 0;
+
+  const openCorrection = (movimento: EstoqueMovimentacao) => {
+    setEditingMovement(movimento);
+    setCorrectionForm({
+      produtoId: movimento.produtoId,
+      tipo: movimento.tipo,
+      quantidade: String(movimento.quantidade),
+      valorUnitario: String(movimento.valorUnitario),
+      data: movimento.data,
+      observacoes: movimento.observacoes || "",
+    });
+  };
+
+  const submitCorrection = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingMovement || savingCorrection) return;
+    const quantidade = Number(correctionForm.quantidade.replace(",", "."));
+    const valorUnitario = Number(correctionForm.valorUnitario.replace(",", ".") || 0);
+    if (!Number.isFinite(quantidade) || quantidade <= 0) { toast.error("Informe uma quantidade válida."); return; }
+    if (correctionForm.tipo === "SAIDA" && quantidade > saldoBaseCorrecao + 1e-9) {
+      toast.error(`A correção deixaria o estoque negativo. Disponível sem esta movimentação: ${saldoBaseCorrecao.toLocaleString("pt-BR")}.`);
+      return;
+    }
+    setSavingCorrection(true);
+    try {
+      await updateMovimentacao(editingMovement.id, {
+        tipo: correctionForm.tipo, quantidade, valorUnitario, data: correctionForm.data, observacoes: correctionForm.observacoes,
+      });
+      toast.success("Movimentação corrigida e estoque recalculado.");
+      setEditingMovement(null);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Não foi possível corrigir a movimentação.");
+    } finally { setSavingCorrection(false); }
+  };
 
   const resetForm = () => {
     setForm(emptyMovementForm());
@@ -625,10 +666,10 @@ export default function Estoque() {
             />
           </TabsContent>
           <TabsContent value="ENTRADAS" className="mt-4">
-            <MovimentacoesTable rows={entradas} onView={setViewing} onPdf={setPdfPreview} onRemove={remove} />
+            <MovimentacoesTable rows={entradas} onView={setViewing} onEdit={openCorrection} onPdf={setPdfPreview} onRemove={remove} />
           </TabsContent>
           <TabsContent value="SAIDAS" className="mt-4">
-            <MovimentacoesTable rows={saidas} onView={setViewing} onPdf={setPdfPreview} onRemove={remove} />
+            <MovimentacoesTable rows={saidas} onView={setViewing} onEdit={openCorrection} onPdf={setPdfPreview} onRemove={remove} />
           </TabsContent>
         </Tabs>
 
@@ -1190,6 +1231,42 @@ export default function Estoque() {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={!!editingMovement} onOpenChange={(value) => { if (!value && !savingCorrection) setEditingMovement(null); }}>
+          <DialogContent className="sm:max-w-[580px]">
+            <DialogHeader>
+              <DialogTitle>Corrigir movimentação</DialogTitle>
+              <p className="text-sm text-muted-foreground">{editingMovement ? `${editingMovement.produto.nome} - ${editingMovement.produto.codigoInterno}` : ""}</p>
+            </DialogHeader>
+            <form onSubmit={submitCorrection} className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <p><span className="font-medium">Saldo atual:</span> {(editingMovement ? (saldoPorProduto.get(editingMovement.produtoId) ?? 0) : 0).toLocaleString("pt-BR")}</p>
+                <p className="text-muted-foreground">Saldo desconsiderando esta movimentação: {saldoBaseCorrecao.toLocaleString("pt-BR")}</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Tipo">
+                  <Select value={correctionForm.tipo} onValueChange={(value) => setCorrectionForm((current) => ({ ...current, tipo: value as TipoMovimentacaoEstoque }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="ENTRADA">Entrada</SelectItem><SelectItem value="SAIDA">Saída</SelectItem></SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Data"><Input type="date" required value={correctionForm.data} onChange={(event) => setCorrectionForm((current) => ({ ...current, data: event.target.value }))} /></Field>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Quantidade">
+                  <Input required type="number" min="0.0001" step="any" max={correctionForm.tipo === "SAIDA" ? Math.max(0, saldoBaseCorrecao) : undefined} value={correctionForm.quantidade} onChange={(event) => setCorrectionForm((current) => ({ ...current, quantidade: event.target.value }))} />
+                  {correctionForm.tipo === "SAIDA" && <p className="mt-1 text-xs text-muted-foreground">Máximo disponível nesta correção: {Math.max(0, saldoBaseCorrecao).toLocaleString("pt-BR")}</p>}
+                </Field>
+                <Field label="Valor unitário"><Input value={correctionForm.valorUnitario} onChange={(event) => setCorrectionForm((current) => ({ ...current, valorUnitario: event.target.value }))} placeholder="0,00" /></Field>
+              </div>
+              <Field label="Observações"><Input value={correctionForm.observacoes} onChange={(event) => setCorrectionForm((current) => ({ ...current, observacoes: event.target.value }))} /></Field>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditingMovement(null)} disabled={savingCorrection}>Cancelar</Button>
+                <Button type="submit" disabled={savingCorrection}>{savingCorrection ? "Corrigindo..." : "Salvar correção"}</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={!!viewingProduct} onOpenChange={(value) => !value && setViewingProduct(null)}>
           <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[900px]">
             <DialogHeader>
@@ -1524,7 +1601,7 @@ const movimentacaoColumns: Array<{ key: MovimentacaoFilterKey; label: string }> 
   { key: "nf", label: "NF" },
 ];
 
-function MovimentacoesTable({ rows, onView, onPdf, onRemove }: { rows: EstoqueMovimentacao[]; onView: (item: EstoqueMovimentacao) => void; onPdf: (item: { url: string; title: string }) => void; onRemove: (id: string) => Promise<void> }) {
+function MovimentacoesTable({ rows, onView, onEdit, onPdf, onRemove }: { rows: EstoqueMovimentacao[]; onView: (item: EstoqueMovimentacao) => void; onEdit: (item: EstoqueMovimentacao) => void; onPdf: (item: { url: string; title: string }) => void; onRemove: (id: string) => Promise<void> }) {
   const [columnFilters, setColumnFilters] = useState<MovimentacaoFilters>(emptyMovimentacaoFilters);
   const [activeColumnFilter, setActiveColumnFilter] = useState<MovimentacaoFilterKey | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState("");
@@ -1623,7 +1700,7 @@ function MovimentacoesTable({ rows, onView, onPdf, onRemove }: { rows: EstoqueMo
                 <td className="px-4 py-3">{formatBRL(item.valorUnitario)}</td>
                 <td className="px-4 py-3">{formatBRL(item.valorTotal)}</td>
                 <td className="px-4 py-3">{item.pdfUrl ? <button className="text-blue-600 hover:underline" onClick={() => onPdf({ url: item.pdfUrl!, title: item.pdfName || "Nota fiscal" })}>Visualizar</button> : <span className="text-muted-foreground">—</span>}</td>
-                <td className="px-4 py-3"><div className="flex gap-1"><Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onView(item)}><Eye className="h-4 w-4" /></Button>{item.pdfUrl && <Button size="icon" variant="ghost" className="text-emerald-600" onClick={() => downloadPdf(item.pdfUrl!, item.pdfName || `nf_${item.id}.pdf`)}><Download className="h-4 w-4" /></Button>}<Button size="icon" variant="ghost" className="text-destructive" onClick={async () => { if (!window.confirm(`Excluir esta ${item.tipo === "ENTRADA" ? "entrada" : "saída"}? O saldo do estoque será recalculado automaticamente.`)) return; try { await onRemove(item.id); toast.success(item.tipo === "ENTRADA" ? "Entrada removida e saldo do estoque revertido." : "Saída removida e quantidade devolvida ao estoque."); } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível remover."); } }}><Trash2 className="h-4 w-4" /></Button></div></td>
+                <td className="px-4 py-3"><div className="flex gap-1"><Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onView(item)} title="Visualizar"><Eye className="h-4 w-4" /></Button><Button size="icon" variant="ghost" className="text-amber-600" onClick={() => onEdit(item)} title="Corrigir movimentação"><Pencil className="h-4 w-4" /></Button>{item.pdfUrl && <Button size="icon" variant="ghost" className="text-emerald-600" onClick={() => downloadPdf(item.pdfUrl!, item.pdfName || `nf_${item.id}.pdf`)} title="Baixar PDF"><Download className="h-4 w-4" /></Button>}<Button size="icon" variant="ghost" className="text-destructive" title="Excluir movimentação" onClick={async () => { if (!window.confirm(`Excluir esta ${item.tipo === "ENTRADA" ? "entrada" : "saída"}? O saldo do estoque será recalculado automaticamente.`)) return; try { await onRemove(item.id); toast.success(item.tipo === "ENTRADA" ? "Entrada removida e saldo do estoque revertido." : "Saída removida e quantidade devolvida ao estoque."); } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível remover."); } }}><Trash2 className="h-4 w-4" /></Button></div></td>
               </tr>
             ))}
             {!filteredRows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">{hasFilters || globalSearch ? "Nenhuma movimentação corresponde aos filtros." : "Nenhuma movimentação registrada."}</td></tr>}

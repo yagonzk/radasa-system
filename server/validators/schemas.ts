@@ -159,6 +159,29 @@ export const estoqueProdutoBody = z.object({
   createdAt: z.string().optional(),
 });
 
+
+export const multaBody = z.object({
+  id: id.optional(),
+  veiculoId: id,
+  motoristaId: id.optional().nullable().or(z.literal("")),
+  autoInfracao: z.string().trim().max(120).optional().default(""),
+  codigoInfracao: z.string().trim().max(80).optional().default(""),
+  orgaoAutuador: z.string().trim().max(180).optional().default(""),
+  dataInfracao: dateOnly,
+  hora: z.string().trim().max(10).optional().default(""),
+  local: z.string().trim().max(500).optional().default(""),
+  descricao: z.string().trim().max(3000).optional().default(""),
+  pontos: z.coerce.number().int().min(0).max(100).optional().default(0),
+  valorOriginal: money.optional().default(0),
+  valorAtual: money.optional().default(0),
+  vencimento: dateOnly.optional().nullable().or(z.literal("")),
+  status: z.enum(["PENDENTE", "PAGO", "EM_RECURSO", "CANCELADO"]).optional().default("PENDENTE"),
+  observacoes: z.string().trim().max(5000).optional().default(""),
+  documentoUrl: z.string().optional().nullable(),
+  documentoNome: z.string().trim().max(255).optional().nullable(),
+  createdAt: z.string().optional(),
+});
+
 export const estoqueNfeImportBody = z.object({
   xmlUrl: z.string().min(1),
   xmlName: z.string().trim().max(255).optional().nullable(),

@@ -174,6 +174,7 @@ model Motorista {
   fechamentos              Fechamento[]
   ciots                    Ciot[]
   veiculos                 Veiculo[]
+  multas                   Multa[]
 
   @@index([nome])
   @@index([cpf])
@@ -396,6 +397,7 @@ model Veiculo {
   rodiziosComoCarreta    PneuRodizio[]    @relation("CarretaRodizios")
   ciots                  Ciot[]
   motorista              Motorista?       @relation(fields: [motoristaId], references: [id], onDelete: SetNull)
+  multas                  Multa[]
 
   @@index([placa])
   @@index([renavam])
@@ -404,6 +406,39 @@ model Veiculo {
   @@index([crlvValidade])
   @@index([ipvaVencimento])
   @@map("veiculos")
+}
+
+model Multa {
+  id             String    @id @default(cuid())
+  veiculoId      String
+  motoristaId    String?
+  autoInfracao   String    @default("")
+  codigoInfracao String    @default("")
+  orgaoAutuador  String    @default("")
+  dataInfracao   DateTime  @db.Date
+  hora           String    @default("")
+  local          String    @default("")
+  descricao      String    @default("") @db.Text
+  pontos         Int       @default(0)
+  valorOriginal  Decimal   @default(0) @db.Decimal(14, 2)
+  valorAtual     Decimal   @default(0) @db.Decimal(14, 2)
+  vencimento     DateTime? @db.Date
+  status         String    @default("PENDENTE")
+  observacoes    String    @default("") @db.Text
+  documentoUrl   String?   @db.Text
+  documentoNome  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  veiculo        Veiculo   @relation(fields: [veiculoId], references: [id], onDelete: Cascade)
+  motorista      Motorista? @relation(fields: [motoristaId], references: [id], onDelete: SetNull)
+
+  @@index([veiculoId])
+  @@index([motoristaId])
+  @@index([dataInfracao])
+  @@index([vencimento])
+  @@index([status])
+  @@index([autoInfracao])
+  @@map("multas")
 }
 
 model Viagem {

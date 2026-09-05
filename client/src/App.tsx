@@ -25,6 +25,7 @@ import AprovacaoContas from "./pages/AprovacaoContas";
 import Fiscal from "./pages/Fiscal";
 import Financeiro from "./pages/Financeiro";
 import Manutencao from "./pages/Manutencao";
+import Multas from "./pages/Multas";
 import BIGerencial from "./pages/BIGerencial";
 import Administracao from "./pages/Administracao";
 import CiotGerar from "./pages/CiotGerar";
@@ -45,6 +46,7 @@ function Router() {
       <Route path="/fiscal" component={Fiscal} />
       <Route path="/financeiro" component={Financeiro} />
       <Route path="/manutencao" component={Manutencao} />
+      <Route path="/multas" component={Multas} />
       <Route path="/bi" component={BIGerencial} />
       <Route path="/administracao" component={Administracao} />
       <Route path="/manifestos" component={Romaneios} />

@@ -76,6 +76,13 @@ export interface Veiculo {
   ipvaVencimento?: string | null; ipvaPago?: boolean; ipvaValor?: number; licenciamentoVencimento?: string | null; licenciamentoValor?: number; seguroValidade?: string | null; seguroValor?: number;
   rntrc?: string; crlvPdfNome?: string; crlvPdfStored?: boolean; observacoes?: string; createdAt: string;
 }
+
+export type StatusMulta = "PENDENTE" | "PAGO" | "EM_RECURSO" | "CANCELADO";
+export interface Multa {
+  id: string; veiculoId: string; motoristaId?: string | null; autoInfracao: string; codigoInfracao: string; orgaoAutuador: string; dataInfracao: string; hora: string; local: string; descricao: string; pontos: number; valorOriginal: number; valorAtual: number; vencimento?: string | null; status: StatusMulta; observacoes: string; documentoUrl?: string | null; documentoNome?: string | null; documentoStored?: boolean; createdAt: string;
+  veiculo: Pick<Veiculo, "id"|"placa"|"renavam"|"modelo"|"marca">; motorista?: Pick<Motorista, "id"|"nome"|"cpf"> | null;
+}
+
 export interface ViagemDespesaExtrato { id:string; viagemId:string; tipo:"PEDAGIO"|"CHAPA"; data:string; hora:string; valor:number; descricao:string; colaborador:string; origem:string; fingerprint:string; createdAt:string; }
 export interface Viagem { id: string; codigo?: string | null; status?: "PLANEJADA"|"CARREGANDO"|"EM_TRANSITO"|"ENTREGUE"|"FINALIZADA"|"CANCELADA"; placa: string; motoristaId: string; clienteId?: string | null; valorFrete: number; dataManifesto: string; cidadeOrigem?: string; cidadeEntrega: string; rotas: string[]; distanciaKm: number; kmSaida?: number | null; kmChegada?: number | null; dataSaida?: string | null; previsaoChegada?: string | null; dataChegada?: string | null; valorPedagio: number; valorPedagioManual?: number; valorPedagioImportado?: number; valorDiaria: number; valorAbastecimento: number; valorChapa: number; valorChapaManual?: number; valorChapaImportado?: number; valorMulta?: number; custoExtraTag?: string; valorCustoExtra?: number; despesasExtrato?: ViagemDespesaExtrato[]; observacoes?: string; createdAt: string; }
 export type TipoManifesto = "Bonificação - Lebrinha" | "Acertar c/ Lebrinha" | "Receber c/ Cliente" | "Vasilhame";
@@ -440,6 +447,18 @@ export const useEstoqueSubcategorias = () => useApiCrud<EstoqueSubcategoria>("es
 export const useEstoqueProdutos = () => useApiCrud<EstoqueProduto>("estoque/produtos", "Produto do almoxarifado");
 export const useLocais = () => useApiCrud<Local>("locais", "Local");
 export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");
+
+export function useMultas() {
+  const [items, setItems] = useState<Multa[]>([]);
+  const refresh = useCallback(async () => setItems((await api.get<Multa[]>("/multas")).data), []);
+  useEffect(() => { void refresh(); }, [refresh]);
+  const create = useCallback(async (data: Omit<Multa, "id"|"veiculo"|"motorista"|"createdAt">) => { const item=(await api.post<Multa>("/multas",data)).data; await refresh(); return item; }, [refresh]);
+  const update = useCallback(async (id:string, data: Omit<Multa, "id"|"veiculo"|"motorista"|"createdAt">) => { const item=(await api.put<Multa>(`/multas/${id}`,data)).data; await refresh(); return item; }, [refresh]);
+  const remove = useCallback(async (id:string) => { await api.delete(`/multas/${id}`); await refresh(); }, [refresh]);
+  const consultarVeiculo = useCallback(async (veiculoId:string) => (await api.get<{ integracaoAutomatica:boolean; fonte:string; mensagem:string; multas:Multa[] }>(`/multas/${veiculoId}/consultar`)).data, []);
+  return { items, refresh, create, update, remove, consultarVeiculo };
+}
+
 export const useViagens = () => useApiCrud<Viagem>("viagens", "Viagem");
 export type DemandaInput = Omit<Demanda, "id" | "createdAt" | "updatedAt" | "ordem" | "arquivada"> & {
   ordem?: number;
@@ -532,8 +551,9 @@ export function useEstoque() {
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   const create = useCallback(async (data: Omit<EstoqueMovimentacao,"id"|"produto"|"valorTotal"|"createdAt">) => { const item=(await api.post<EstoqueMovimentacao>("/estoque",data)).data; await refresh(); return item; },[refresh]);
+  const update = useCallback(async (id:string, data:{ tipo:TipoMovimentacaoEstoque; quantidade:number; valorUnitario:number; data:string; observacoes?:string }) => { const item=(await api.put<EstoqueMovimentacao>(`/estoque/${id}`,data)).data; await refresh(); return item; },[refresh]);
   const remove = useCallback(async (id:string)=>{ await api.delete(`/estoque/${id}`); await refresh(); },[refresh]);
-  return { movimentacoes, resumo, create, remove, refresh };
+  return { movimentacoes, resumo, create, update, remove, refresh };
 }
 
 export function usePneuOperacoes() {

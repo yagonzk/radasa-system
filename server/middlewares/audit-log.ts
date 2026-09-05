@@ -5,7 +5,7 @@ import { requestParam } from "../utils/request-param.js";
 
 const labels: Record<string, string> = {
   motoristas: "motorista", chapas: "chapa", clientes: "cliente", empresa: "empresa", produtos: "produto",
-  locais: "local", veiculos: "veículo", viagens: "viagem", fechamentos: "comissão",
+  locais: "local", veiculos: "veículo", multas: "multa", viagens: "viagem", fechamentos: "comissão",
   manifestos: "romaneio", romaneios: "romaneio", abastecimentos: "abastecimento", pneus: "pneu", estoque: "movimentação de almoxarifado", usuarios: "usuário", comercial: "registro comercial", admin: "configuração administrativa", "portal-motorista": "registro do motorista",
 };
 

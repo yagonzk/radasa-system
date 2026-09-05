@@ -36,4 +36,5 @@ estoqueRoutes.get("/notas/:id/pdf", validate(idParamsSchema), asyncHandler(estoq
 estoqueRoutes.get("/", asyncHandler(estoqueController.list));
 estoqueRoutes.get("/resumo", asyncHandler(estoqueController.resumo));
 estoqueRoutes.post("/", validate(bodySchema(estoqueMovimentacaoBody)), asyncHandler(estoqueController.create));
+estoqueRoutes.put("/:id", validate(idParamsSchema), validate(bodySchema(estoqueMovimentacaoBody.omit({ id: true, produtoId: true }))), asyncHandler(estoqueController.update));
 estoqueRoutes.delete("/:id", validate(idParamsSchema), asyncHandler(estoqueController.remove));

@@ -25,6 +25,7 @@ export const estoqueController = {
   list: async (_req: Request, res: Response) => res.json(await estoqueService.list()),
   resumo: async (_req: Request, res: Response) => res.json(await estoqueService.resumo()),
   create: async (req: Request, res: Response) => res.status(201).json(await estoqueService.create(req.body)),
+  update: async (req: Request, res: Response) => res.json(await estoqueService.update(requestParam(req.params.id), req.body)),
   remove: async (req: Request, res: Response) => {
     await estoqueService.remove(requestParam(req.params.id));
     res.status(204).send();

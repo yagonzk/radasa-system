@@ -3,6 +3,7 @@ import { AppError } from "../utils/app-error.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
 import { calcularValorAtualEstoque } from "./estoque-valuation.js";
 import { parseEstoqueNfeXml } from "../../shared/estoque-nfe.js";
+import { podeAplicarCorrecao, saldoAposCorrecao } from "./estoque-correction.js";
 
 const serializeTipoProduto = (item: any) => ({
   ...item,
@@ -439,6 +440,38 @@ export const estoqueService = {
       include: { produto: true },
     });
     return serialize(item);
+  },
+
+  async update(id: string, data: any) {
+    const quantidade = Number(data.quantidade);
+    const valorUnitario = Number(data.valorUnitario || 0);
+    const tipo = data.tipo as "ENTRADA" | "SAIDA";
+
+    return prisma.$transaction(async (tx) => {
+      const atual = await tx.estoqueMovimentacao.findUnique({ where: { id }, include: { produto: true } });
+      if (!atual) throw new AppError(404, "Movimentação não encontrada.");
+
+      const rows = await tx.estoqueMovimentacao.findMany({ where: { produtoId: atual.produtoId, id: { not: id } }, select: { tipo: true, quantidade: true } });
+      const saldoSemMovimento = rows.reduce((total, row) => total + (row.tipo === "ENTRADA" ? number(row.quantidade) : -number(row.quantidade)), 0);
+      if (!podeAplicarCorrecao(saldoSemMovimento, tipo, quantidade)) {
+        const saldoFinal = saldoAposCorrecao(saldoSemMovimento, tipo, quantidade);
+        throw new AppError(409, `Esta correção deixaria o estoque negativo (${saldoFinal.toLocaleString("pt-BR")}). Saldo disponível sem esta movimentação: ${saldoSemMovimento.toLocaleString("pt-BR")}.`);
+      }
+
+      const item = await tx.estoqueMovimentacao.update({
+        where: { id },
+        data: {
+          tipo,
+          quantidade,
+          valorUnitario,
+          valorTotal: quantidade * valorUnitario,
+          data: new Date(`${data.data}T12:00:00.000Z`),
+          observacoes: data.observacoes || "",
+        },
+        include: { produto: true, notaFiscal: { select: { id: true, chave: true, numero: true, serie: true, xmlName: true, pdfName: true, fornecedor: true } } },
+      });
+      return serialize(item);
+    });
   },
 
   async remove(id: string) {
