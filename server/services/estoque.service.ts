@@ -261,6 +261,40 @@ export const estoqueService = {
     });
     if (!selecionados.length) throw new AppError(400, "Selecione ao menos um item da NF-e para importar.");
 
+    // Valida categorias/subcategorias antes de abrir a transação interativa.
+    // Isso evita gastar o timeout da transação com consultas que não precisam
+    // fazer parte da gravação atômica da NF-e.
+    const [tiposProdutoCadastrados, subcategoriasCadastradas] = await Promise.all([
+      prisma.estoqueTipoProduto.findMany({ select: { nome: true } }),
+      prisma.estoqueSubcategoria.findMany({ select: { categoria: true, nome: true } }),
+    ]);
+    const tiposPorNome = new Map(
+      tiposProdutoCadastrados.map((tipo) => [tipo.nome.trim().toLocaleLowerCase("pt-BR"), tipo.nome]),
+    );
+    const itensPreparados = selecionados.map((itemXml) => {
+      const cfg = configuracoes.find((x: any) => String(x.nItem) === itemXml.nItem) ?? {};
+      const categoriaInformada = cleanText(cfg.categoria ?? data.categoria);
+      if (!categoriaInformada) throw new AppError(400, "Informe o tipo de produto do almoxarifado.");
+      const categoria = tiposPorNome.get(categoriaInformada.toLocaleLowerCase("pt-BR"));
+      if (!categoria) throw new AppError(400, `Tipo de produto "${categoriaInformada}" não cadastrado no almoxarifado.`);
+
+      const subcategoria = cleanText(cfg.subcategoria ?? data.subcategoria);
+      if (subcategoria) {
+        const subExiste = subcategoriasCadastradas.some(
+          (sub) => sub.categoria.toLocaleLowerCase("pt-BR") === categoria.toLocaleLowerCase("pt-BR")
+            && sub.nome.toLocaleLowerCase("pt-BR") === subcategoria.toLocaleLowerCase("pt-BR"),
+        );
+        if (!subExiste) throw new AppError(400, `Subcategoria "${subcategoria}" não cadastrada para ${categoria}.`);
+      }
+
+      return {
+        itemXml,
+        categoria,
+        subcategoria,
+        nome: cleanText(cfg.nome) || itemXml.nome,
+      };
+    });
+
     return prisma.$transaction(async (tx: any) => {
       const notaExistente = await tx.estoqueNotaFiscal.findUnique({ where: { chave: parsed.chave }, select: { id: true } });
       if (notaExistente) throw new AppError(409, `A NF-e ${parsed.numero || parsed.chave} já foi importada no Almoxarifado.`);
@@ -319,15 +353,8 @@ export const estoqueService = {
       }, 0) + 1;
 
       const resultados: any[] = [];
-      for (const itemXml of selecionados) {
-        const cfg = configuracoes.find((x: any) => String(x.nItem) === itemXml.nItem) ?? {};
-        const categoria = await resolveCategoria(cfg.categoria ?? data.categoria);
-        const subcategoria = cleanText(cfg.subcategoria ?? data.subcategoria);
-        if (subcategoria) {
-          const sub = await tx.estoqueSubcategoria.findFirst({ where: { categoria, nome: { equals: subcategoria, mode: "insensitive" } } });
-          if (!sub) throw new AppError(400, `Subcategoria "${subcategoria}" não cadastrada para ${categoria}.`);
-        }
-        const nome = cleanText(cfg.nome) || itemXml.nome;
+      for (const preparado of itensPreparados) {
+        const { itemXml, categoria, subcategoria, nome } = preparado;
         const codigoFornecedor = itemXml.codigoFornecedor;
 
         let produto: any = null;
@@ -382,6 +409,9 @@ export const estoqueService = {
         criados: resultados.filter((x) => x.criado).length,
         atualizados: resultados.filter((x) => !x.criado).length,
       };
+    }, {
+      maxWait: 10_000,
+      timeout: 60_000,
     });
   },
 
