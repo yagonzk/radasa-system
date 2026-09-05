@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { parseDateOnly } from "../utils/date.js";
 import { dateOnly, number, created } from "../utils/serialize.js";
+import { buildStockBalanceMap, maintenanceCostFromAggregate } from "./manutencao-performance.js";
 
 const d = (v: any) => v ? parseDateOnly(String(v)) : null;
 const nonNegative = (v: unknown) => Math.max(0, number(v) || 0);
@@ -27,7 +28,7 @@ const notaMeta = (x: any) => ({
   valor: number(x.valor),
   arquivoNome: x.arquivoNome,
   arquivoMime: x.arquivoMime,
-  arquivoStored: Boolean(x.arquivoUrl),
+  arquivoStored: Boolean(x.arquivoUrl ?? x.arquivoNome),
   createdAt: created(x.createdAt),
 });
 const anexoMeta = (x: any) => ({
@@ -36,7 +37,7 @@ const anexoMeta = (x: any) => ({
   descricao: x.descricao,
   arquivoNome: x.arquivoNome,
   arquivoMime: x.arquivoMime,
-  arquivoStored: Boolean(x.arquivoUrl),
+  arquivoStored: Boolean(x.arquivoUrl ?? x.arquivoNome),
   createdAt: created(x.createdAt),
 });
 
@@ -78,8 +79,14 @@ const os = (x: any) => ({
 const detailInclude = {
   fornecedorCadastro: { select: { id: true, razaoSocial: true, nomeFantasia: true, documento: true, telefone: true } },
   itens: { orderBy: { createdAt: "asc" as const }, include: { produto: { select: { id: true, nome: true, codigoInterno: true } } } },
-  notasFiscais: { orderBy: { createdAt: "asc" as const } },
-  anexos: { orderBy: { createdAt: "asc" as const } },
+  notasFiscais: {
+    orderBy: { createdAt: "asc" as const },
+    select: { id: true, numero: true, serie: true, chaveAcesso: true, dataEmissao: true, valor: true, arquivoNome: true, arquivoMime: true, createdAt: true },
+  },
+  anexos: {
+    orderBy: { createdAt: "asc" as const },
+    select: { id: true, tipo: true, descricao: true, arquivoNome: true, arquivoMime: true, createdAt: true },
+  },
 };
 
 async function getOsDetail(id: string) {
@@ -123,11 +130,23 @@ function normalizeItems(raw: unknown) {
 }
 
 async function validateStock(items: ReturnType<typeof normalizeItems>) {
+  const requested = new Map<string, number>();
   for (const item of items) {
     if (!item.produtoId) continue;
-    const movimentos = await prisma.estoqueMovimentacao.findMany({ where: { produtoId: item.produtoId }, select: { tipo: true, quantidade: true } });
-    const saldo = movimentos.reduce((acc, mov) => acc + (mov.tipo === "ENTRADA" ? number(mov.quantidade) : -number(mov.quantidade)), 0);
-    if (item.quantidade > saldo) throw new AppError(409, `Saldo insuficiente para uma das peças. Disponível: ${saldo}.`);
+    requested.set(item.produtoId, (requested.get(item.produtoId) ?? 0) + item.quantidade);
+  }
+  const productIds = [...requested.keys()];
+  if (!productIds.length) return;
+
+  const aggregates = await prisma.estoqueMovimentacao.groupBy({
+    by: ["produtoId", "tipo"],
+    where: { produtoId: { in: productIds } },
+    _sum: { quantidade: true },
+  });
+  const balances = buildStockBalanceMap(aggregates);
+  for (const [produtoId, quantidade] of requested) {
+    const saldo = balances.get(produtoId) ?? 0;
+    if (quantidade > saldo) throw new AppError(409, `Saldo insuficiente para uma das peças. Disponível: ${saldo}.`);
   }
 }
 
@@ -153,28 +172,48 @@ async function nextOsNumber() {
 
 export const manutencaoService = {
   async dashboard() {
-    const [planos, ordens, docs, ab] = await Promise.all([
-      prisma.planoManutencao.findMany({ where: { ativo: true } }),
-      prisma.ordemServico.findMany(),
-      prisma.documentoFrota.findMany(),
-      prisma.abastecimento.findMany({ orderBy: { dataEmissao: "desc" } }),
-    ]);
-    const km = new Map<string, number>();
-    for (const a of ab) if (!km.has(a.veiculoId)) km.set(a.veiculoId, number(a.hodometro));
     const limite = new Date(); limite.setDate(limite.getDate() + 30);
+    const [planos, osAbertas, custoAggregate, documentos, docsAlertas] = await Promise.all([
+      prisma.planoManutencao.findMany({
+        where: { ativo: true },
+        select: { veiculoId: true, nome: true, proximoKm: true, proximaData: true },
+      }),
+      prisma.ordemServico.count({ where: { status: { notIn: ["CONCLUIDA", "CANCELADA"] } } }),
+      prisma.ordemServico.aggregate({
+        where: { status: "CONCLUIDA" },
+        _sum: { valorPecas: true, valorMaoObra: true, valorOutros: true, desconto: true },
+      }),
+      prisma.documentoFrota.count(),
+      prisma.documentoFrota.findMany({
+        where: { validade: { lte: limite } },
+        select: { veiculoId: true, tipo: true, validade: true },
+      }),
+    ]);
+
+    const vehicleIds = [...new Set(planos.map((p) => p.veiculoId))];
+    const abastecimentos = vehicleIds.length ? await prisma.abastecimento.findMany({
+      where: { veiculoId: { in: vehicleIds } },
+      orderBy: [{ veiculoId: "asc" }, { dataEmissao: "desc" }],
+      distinct: ["veiculoId"],
+      select: { veiculoId: true, hodometro: true },
+    }) : [];
+
+    const km = new Map<string, number>();
+    for (const a of abastecimentos) km.set(a.veiculoId, number(a.hodometro));
     const alertas: any[] = [];
     for (const p of planos) {
       const atual = km.get(p.veiculoId) || 0;
       if (p.proximoKm != null && number(p.proximoKm) - atual <= 2000) alertas.push({ tipo: "KM", veiculoId: p.veiculoId, titulo: p.nome, detalhe: `${Math.max(0, number(p.proximoKm) - atual).toFixed(0)} km restantes` });
       if (p.proximaData && p.proximaData <= limite) alertas.push({ tipo: "DATA", veiculoId: p.veiculoId, titulo: p.nome, detalhe: `Vence em ${dateOnly(p.proximaData)}` });
     }
-    for (const x of docs) if (x.validade && x.validade <= limite) alertas.push({ tipo: "DOCUMENTO", veiculoId: x.veiculoId, titulo: x.tipo, detalhe: `Validade ${dateOnly(x.validade)}` });
+    for (const x of docsAlertas) if (x.validade) alertas.push({ tipo: "DOCUMENTO", veiculoId: x.veiculoId, titulo: x.tipo, detalhe: `Validade ${dateOnly(x.validade)}` });
+
     return {
-      osAbertas: ordens.filter((x) => x.status !== "CONCLUIDA" && x.status !== "CANCELADA").length,
+      osAbertas,
       planosAtivos: planos.length,
       alertas,
-      documentos: docs.length,
-      custoTotal: ordens.filter((x) => x.status === "CONCLUIDA").reduce((acc, x) => acc + totalOs(x), 0),
+      documentos,
+      custoTotal: maintenanceCostFromAggregate(custoAggregate),
     };
   },
   async planos() { return (await prisma.planoManutencao.findMany({ orderBy: { createdAt: "desc" } })).map(plano); },
@@ -228,9 +267,10 @@ export const manutencaoService = {
         desconto: nonNegative(i.desconto),
         observacoes: String(i.observacoes ?? "").trim(),
       } });
-      for (const item of items) {
-        await tx.ordemServicoItem.create({ data: { ordemServicoId: ordem.id, produtoId: item.produtoId, tipo: item.tipo, descricao: item.descricao, quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal } });
-        if (item.produtoId) await tx.estoqueMovimentacao.create({ data: { produtoId: item.produtoId, tipo: "SAIDA", quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal, data: dataAbertura, observacoes: `Utilizado na ${ordem.numero}` } });
+      if (items.length) {
+        await tx.ordemServicoItem.createMany({ data: items.map((item) => ({ ordemServicoId: ordem.id, produtoId: item.produtoId, tipo: item.tipo, descricao: item.descricao, quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal })) });
+        const stockItems = items.filter((item) => item.produtoId);
+        if (stockItems.length) await tx.estoqueMovimentacao.createMany({ data: stockItems.map((item) => ({ produtoId: item.produtoId!, tipo: "SAIDA", quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal, data: dataAbertura, observacoes: `Utilizado na ${ordem.numero}` })) });
       }
       return ordem;
     });
@@ -249,12 +289,18 @@ export const manutencaoService = {
     if (hasItems) {
       const oldByProduct = new Map<string, number>();
       for (const item of current.itens) if (item.produtoId) oldByProduct.set(item.produtoId, (oldByProduct.get(item.produtoId) || 0) + number(item.quantidade));
-      for (const item of items) {
-        if (!item.produtoId) continue;
-        const movimentos = await prisma.estoqueMovimentacao.findMany({ where: { produtoId: item.produtoId }, select: { tipo: true, quantidade: true } });
-        const saldoAtual = movimentos.reduce((acc, mov) => acc + (mov.tipo === "ENTRADA" ? number(mov.quantidade) : -number(mov.quantidade)), 0);
-        const disponivelConsiderandoOsAtual = saldoAtual + (oldByProduct.get(item.produtoId) || 0);
-        if (item.quantidade > disponivelConsiderandoOsAtual) throw new AppError(409, `Saldo insuficiente para uma das peças. Disponível: ${disponivelConsiderandoOsAtual}.`);
+      const requestedByProduct = new Map<string, number>();
+      for (const item of items) if (item.produtoId) requestedByProduct.set(item.produtoId, (requestedByProduct.get(item.produtoId) ?? 0) + item.quantidade);
+      const productIds = [...requestedByProduct.keys()];
+      const aggregates = productIds.length ? await prisma.estoqueMovimentacao.groupBy({
+        by: ["produtoId", "tipo"],
+        where: { produtoId: { in: productIds } },
+        _sum: { quantidade: true },
+      }) : [];
+      const balances = buildStockBalanceMap(aggregates);
+      for (const [produtoId, quantidade] of requestedByProduct) {
+        const disponivelConsiderandoOsAtual = (balances.get(produtoId) ?? 0) + (oldByProduct.get(produtoId) || 0);
+        if (quantidade > disponivelConsiderandoOsAtual) throw new AppError(409, `Saldo insuficiente para uma das peças. Disponível: ${disponivelConsiderandoOsAtual}.`);
       }
     }
 
@@ -266,9 +312,10 @@ export const manutencaoService = {
       if (hasItems) {
         await tx.estoqueMovimentacao.deleteMany({ where: { observacoes: `Utilizado na ${current.numero}` } });
         await tx.ordemServicoItem.deleteMany({ where: { ordemServicoId: id } });
-        for (const item of items) {
-          await tx.ordemServicoItem.create({ data: { ordemServicoId: id, produtoId: item.produtoId, tipo: item.tipo, descricao: item.descricao, quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal } });
-          if (item.produtoId) await tx.estoqueMovimentacao.create({ data: { produtoId: item.produtoId, tipo: "SAIDA", quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal, data: dataAbertura, observacoes: `Utilizado na ${current.numero}` } });
+        if (items.length) {
+          await tx.ordemServicoItem.createMany({ data: items.map((item) => ({ ordemServicoId: id, produtoId: item.produtoId, tipo: item.tipo, descricao: item.descricao, quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal })) });
+          const stockItems = items.filter((item) => item.produtoId);
+          if (stockItems.length) await tx.estoqueMovimentacao.createMany({ data: stockItems.map((item) => ({ produtoId: item.produtoId!, tipo: "SAIDA", quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal, data: dataAbertura, observacoes: `Utilizado na ${current.numero}` })) });
         }
       }
       await tx.ordemServico.update({ where: { id }, data: {
@@ -343,7 +390,8 @@ export const manutencaoService = {
   },
 
   async adicionarNotaFiscal(id: string, i: any, file: Express.Multer.File) {
-    await getOsDetail(id);
+    const exists = await prisma.ordemServico.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) throw new AppError(404, "OS não encontrada.");
     const row = await prisma.ordemServicoNotaFiscal.create({ data: {
       ordemServicoId: id,
       numero: String(i.numero ?? "").trim(),
@@ -369,7 +417,8 @@ export const manutencaoService = {
     return { ...decoded, nome: row.arquivoNome || `nota-${notaId}` };
   },
   async adicionarAnexo(id: string, i: any, file: Express.Multer.File) {
-    await getOsDetail(id);
+    const exists = await prisma.ordemServico.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) throw new AppError(404, "OS não encontrada.");
     const row = await prisma.ordemServicoAnexo.create({ data: {
       ordemServicoId: id,
       tipo: String(i.tipo ?? "OUTRO").trim().toUpperCase(),

@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { api } from "@/lib/api";
 import { useEstoqueProdutos, useFornecedores, useVeiculos } from "@/lib/store";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -108,6 +108,7 @@ export default function Manutencao() {
   const [detailAnexo, setDetailAnexo] = useState<PendingAnexo>(newAnexo());
   const [detailUploading, setDetailUploading] = useState(false);
   const [supplierOpen, setSupplierOpen] = useState(false);
+  const saveLockRef = useRef(false);
 
   const placa = (id: string) => veiculos.find((v) => v.id === id)?.placa || "—";
   const activeSuppliers = fornecedores.filter((f) => f.ativo !== false);
@@ -127,6 +128,15 @@ export default function Manutencao() {
     }
   };
   useEffect(() => { void load(); }, []);
+
+  const refreshOrdersAndDashboard = async () => {
+    const [dashboardResponse, ordersResponse] = await Promise.all([
+      api.get("/manutencao/dashboard"),
+      api.get("/manutencao/ordens"),
+    ]);
+    setDash(dashboardResponse.data);
+    setOrdens(ordersResponse.data);
+  };
 
   const filteredOrdens = useMemo(
     () => filterMaintenanceOrders(ordens, placa, query, columnFilters),
@@ -183,7 +193,7 @@ export default function Manutencao() {
       await api.delete(`/manutencao/ordens/${item.id}`);
       if (detail?.id === item.id) setDetail(null);
       toast.success(`${item.numero} excluída.`);
-      await load();
+      await refreshOrdersAndDashboard();
     } catch (error: any) {
       toast.error(error?.response?.data?.message ?? "Não foi possível excluir a OS.");
     }
@@ -226,6 +236,7 @@ export default function Manutencao() {
   };
 
   const salvarOs = async () => {
+    if (saveLockRef.current || saving) return;
     if (!osForm.veiculoId) return toast.error("Selecione o veículo.");
     const invalidItem = osForm.itens.find((item) => !item.descricao.trim() && !item.produtoId);
     if (invalidItem) return toast.error("Preencha a descrição dos itens da OS.");
@@ -234,6 +245,7 @@ export default function Manutencao() {
     const invalidAnexo = pendingAnexos.find((anexo) => !anexo.file);
     if (invalidAnexo) return toast.error("Selecione o arquivo de todos os anexos adicionados.");
 
+    saveLockRef.current = true;
     setSaving(true);
     try {
       const payload = {
@@ -251,10 +263,11 @@ export default function Manutencao() {
       setModal("");
       setEditingOsId(null);
       toast.success(editingOsId ? `Ordem de Serviço ${response.data.numero} atualizada.` : `Ordem de Serviço ${response.data.numero} criada com sucesso.`);
-      await load();
+      await refreshOrdersAndDashboard();
     } catch (error: any) {
       toast.error(error?.response?.data?.message ?? "Não foi possível salvar a Ordem de Serviço.");
     } finally {
+      saveLockRef.current = false;
       setSaving(false);
     }
   };
@@ -271,8 +284,7 @@ export default function Manutencao() {
 
   const refreshDetail = async () => {
     if (!detail) return;
-    await openDetail(detail.id);
-    await load();
+    await Promise.all([openDetail(detail.id), refreshOrdersAndDashboard()]);
   };
 
   const downloadFile = async (url: string, filename: string) => {
