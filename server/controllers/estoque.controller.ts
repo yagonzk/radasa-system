@@ -14,11 +14,14 @@ export const estoqueController = {
   },
   listProdutos: async (_req: Request, res: Response) => res.json(await estoqueService.listProdutos()),
   createProduto: async (req: Request, res: Response) => res.status(201).json(await estoqueService.createProduto(req.body)),
+  importarNfe: async (req: Request, res: Response) => res.status(201).json(await estoqueService.importarNfe(req.body)),
   updateProduto: async (req: Request, res: Response) => res.json(await estoqueService.updateProduto(requestParam(req.params.id), req.body)),
   removeProduto: async (req: Request, res: Response) => {
     await estoqueService.removeProduto(requestParam(req.params.id));
     res.status(204).send();
   },
+  getNotaXml: async (req: Request, res: Response) => res.json(await estoqueService.getNotaDocumento(requestParam(req.params.id), "xml")),
+  getNotaPdf: async (req: Request, res: Response) => res.json(await estoqueService.getNotaDocumento(requestParam(req.params.id), "pdf")),
   list: async (_req: Request, res: Response) => res.json(await estoqueService.list()),
   resumo: async (_req: Request, res: Response) => res.json(await estoqueService.resumo()),
   create: async (req: Request, res: Response) => res.status(201).json(await estoqueService.create(req.body)),

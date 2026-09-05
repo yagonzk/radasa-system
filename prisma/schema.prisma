@@ -237,6 +237,7 @@ model Fornecedor {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   ordensServico  OrdemServico[]
+  notasEstoque    EstoqueNotaFiscal[]
 
   @@index([razaoSocial])
   @@index([nomeFantasia])
@@ -288,6 +289,7 @@ model EstoqueProduto {
   codigoInterno  String
   categoria      String                 @default("Produtos de Piscina")
   subcategoria   String                 @default("")
+  ncm            String                 @default("")
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
   movimentacoes  EstoqueMovimentacao[]
@@ -297,6 +299,27 @@ model EstoqueProduto {
   @@index([codigoInterno])
   @@index([categoria])
   @@map("estoque_produtos")
+}
+
+model EstoqueNotaFiscal {
+  id            String               @id @default(cuid())
+  chave         String               @unique
+  numero        String               @default("")
+  serie         String               @default("")
+  dataEmissao   DateTime             @db.Date
+  fornecedorId  String?
+  xmlUrl        String?              @db.Text
+  xmlName       String?
+  pdfUrl        String?              @db.Text
+  pdfName       String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  fornecedor    Fornecedor?          @relation(fields: [fornecedorId], references: [id], onDelete: SetNull)
+  movimentacoes EstoqueMovimentacao[]
+
+  @@index([fornecedorId])
+  @@index([dataEmissao])
+  @@map("estoque_notas_fiscais")
 }
 
 model EstoqueSubcategoria {
@@ -443,11 +466,13 @@ model FechamentoViagem {
   fechamentoId String
   localId      String
   quantidade   Int
+  dataViagem   DateTime?  @db.Date
   fechamento   Fechamento @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
   local        Local      @relation(fields: [localId], references: [id], onDelete: Restrict)
 
   @@index([fechamentoId])
   @@index([localId])
+  @@index([dataViagem])
   @@map("fechamento_viagens")
 }
 
@@ -703,12 +728,15 @@ enum TipoEventoPneu {
 model EstoqueMovimentacao {
   id            String                  @id @default(cuid())
   produtoId     String
+  notaFiscalId  String?
   tipo          TipoMovimentacaoEstoque
   quantidade    Decimal                 @db.Decimal(14, 3)
   valorUnitario Decimal                 @default(0) @db.Decimal(14, 2)
   valorTotal    Decimal                 @default(0) @db.Decimal(14, 2)
   data          DateTime                @db.Date
   observacoes   String?
+  codigoFornecedor String @default("")
+  unidade       String @default("")
   pdfUrl        String?                 @db.Text
   pdfName       String?
   xmlUrl        String?                 @db.Text
@@ -716,8 +744,11 @@ model EstoqueMovimentacao {
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
   produto       EstoqueProduto          @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  notaFiscal    EstoqueNotaFiscal?       @relation(fields: [notaFiscalId], references: [id], onDelete: SetNull)
 
   @@index([produtoId])
+  @@index([notaFiscalId])
+  @@index([codigoFornecedor])
   @@index([tipo])
   @@index([data])
   @@map("estoque_movimentacoes")
@@ -1146,6 +1177,7 @@ model OrdemServicoItem {
   ordemServicoId String
   produtoId      String?
   tipo           String   @default("SERVICO")
+  categoria      String?
   descricao      String   @default("")
   quantidade     Decimal  @db.Decimal(14,3)
   valorUnitario  Decimal  @default(0) @db.Decimal(14,2)
@@ -1155,6 +1187,7 @@ model OrdemServicoItem {
   produto        EstoqueProduto? @relation(fields: [produtoId], references: [id], onDelete: SetNull)
   @@index([ordemServicoId])
   @@index([produtoId])
+  @@index([categoria])
   @@map("ordem_servico_itens")
 }
 

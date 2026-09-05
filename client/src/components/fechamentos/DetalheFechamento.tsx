@@ -6,14 +6,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { type Fechamento, type Motorista, type Local } from "@/lib/store";
+import { type Fechamento, type Motorista, type Local, type Viagem } from "@/lib/store";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 import { Edit3, Trash2 } from "lucide-react";
+import { expandirViagensFechamento, formatFechamentoViagemLabel } from "@/lib/fechamentoViagem";
 
 interface DetalheFechamentoProps {
   fechamento: Fechamento | null;
   motoristas: Motorista[];
   locais: Local[];
+  viagensCadastradas: Viagem[];
   onClose: () => void;
   onEdit: (f: Fechamento) => void;
   onDelete: (f: Fechamento) => void;
@@ -23,6 +25,7 @@ export default function DetalheFechamento({
   fechamento,
   motoristas,
   locais,
+  viagensCadastradas,
   onClose,
   onEdit,
   onDelete,
@@ -30,6 +33,7 @@ export default function DetalheFechamento({
   if (!fechamento) return null;
 
   const motorista = motoristas.find((m) => m.id === fechamento.motoristaId);
+  const viagensExibicao = expandirViagensFechamento(fechamento, viagensCadastradas, locais);
 
   return (
     <Dialog open={Boolean(fechamento)} onOpenChange={(open) => !open && onClose()}>
@@ -75,11 +79,9 @@ export default function DetalheFechamento({
               Viagens
             </p>
             <div className="max-h-64 overflow-y-auto space-y-2">
-              {fechamento.viagens.map((viagem, index) => {
+              {viagensExibicao.map((viagem, index) => {
                 const local = locais.find((l) => l.id === viagem.localId);
-                const subtotal = local
-                  ? local.valorComissao * viagem.quantidade
-                  : 0;
+                const subtotal = local ? local.valorComissao : 0;
                 return (
                   <div
                     key={index}
@@ -87,10 +89,10 @@ export default function DetalheFechamento({
                   >
                     <div>
                       <p className="font-medium text-foreground">
-                        {local?.cidade || "—"}
+                        {formatFechamentoViagemLabel(viagem.dataViagem, local?.cidade || viagem.cidade || "—")}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {viagem.quantidade}x {formatBRL(local?.valorComissao || 0)}
+                        Comissão: {formatBRL(local?.valorComissao || 0)}
                       </p>
                     </div>
                     <p className="font-bold text-primary">{formatBRL(subtotal)}</p>

@@ -4,16 +4,17 @@ import { parseDateOnly } from "../utils/date.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
 import { valorComissaoPorDestino } from "../utils/comissao.js";
 
-const include = { viagens: { select: { localId: true, quantidade: true } } } as const;
+const include = { viagens: { select: { localId: true, quantidade: true, dataViagem: true } } } as const;
 const serialize = (item: any) => ({
   id: item.id, motoristaId: item.motoristaId, dataInicio: dateOnly(item.dataInicio), dataFim: dateOnly(item.dataFim),
-  viagens: item.viagens.map((v: any) => ({ localId: v.localId, quantidade: v.quantidade })),
+  viagens: item.viagens.map((v: any) => ({ localId: v.localId, quantidade: v.quantidade, dataViagem: v.dataViagem ? dateOnly(v.dataViagem) : undefined })),
   valorTotal: number(item.valorTotal), createdAt: created(item.createdAt),
 });
 const nested = (input: any) =>
   input.viagens.map((v: any) => ({
     localId: v.localId,
-    quantidade: v.quantidade,
+    quantidade: 1,
+    dataViagem: v.dataViagem ? parseDateOnly(v.dataViagem) : null,
   }));
 
 async function calcularValorTotal(viagens: Array<{ localId: string; quantidade: number }>) {

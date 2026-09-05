@@ -78,8 +78,11 @@ export const fornecedoresService = {
     return serialize(await prisma.fornecedor.update({ where: { id }, data: normalized }));
   },
   async remove(id: string) {
-    const uses = await prisma.ordemServico.count({ where: { fornecedorId: id } });
-    if (uses > 0) {
+    const [uses, notasEstoque] = await Promise.all([
+      prisma.ordemServico.count({ where: { fornecedorId: id } }),
+      prisma.estoqueNotaFiscal.count({ where: { fornecedorId: id } }),
+    ]);
+    if (uses > 0 || notasEstoque > 0) {
       await prisma.fornecedor.update({ where: { id }, data: { ativo: false } });
       return;
     }

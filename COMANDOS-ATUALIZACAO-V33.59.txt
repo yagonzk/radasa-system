@@ -1,0 +1,8 @@
+pnpm install
+pnpm prisma migrate deploy
+pnpm run check
+pnpm run build
+git add .
+git commit -m "feat: categorias por item nas ordens de servico"
+git push origin main
+pnpm run deploy:cloudflare

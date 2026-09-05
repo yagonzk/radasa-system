@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
 import { calcularValorAtualEstoque } from "./estoque-valuation.js";
+import { parseEstoqueNfeXml } from "../../shared/estoque-nfe.js";
 
 const serializeTipoProduto = (item: any) => ({
   ...item,
@@ -10,6 +11,7 @@ const serializeTipoProduto = (item: any) => ({
 
 const serializeProduto = (item: any) => ({
   ...item,
+  ncm: item.ncm ?? "",
   createdAt: created(item.createdAt),
 });
 
@@ -20,12 +22,37 @@ const serialize = (item: any) => ({
   valorUnitario: number(item.valorUnitario),
   valorTotal: number(item.valorTotal),
   data: dateOnly(item.data),
+  fornecedor: item.notaFiscal?.fornecedor ?? null,
+  chaveNfe: item.notaFiscal?.chave ?? "",
+  numeroNfe: item.notaFiscal?.numero ?? "",
+  serieNfe: item.notaFiscal?.serie ?? "",
+  notaFiscalId: item.notaFiscalId ?? item.notaFiscal?.id ?? null,
   pdfUrl: item.pdfUrl ?? null,
-  pdfName: item.pdfName ?? null,
+  pdfName: item.pdfName ?? item.notaFiscal?.pdfName ?? null,
+  pdfStored: Boolean(item.pdfUrl || item.notaFiscal?.pdfName),
   xmlUrl: item.xmlUrl ?? null,
-  xmlName: item.xmlName ?? null,
+  xmlName: item.xmlName ?? item.notaFiscal?.xmlName ?? null,
+  xmlStored: Boolean(item.xmlUrl || item.notaFiscal?.xmlName),
   createdAt: created(item.createdAt),
 });
+
+function decodeXmlPayload(value: unknown) {
+  const raw = String(value ?? "");
+  if (!raw) throw new AppError(400, "Envie o XML da NF-e.");
+  if (!raw.startsWith("data:")) return raw;
+  const comma = raw.indexOf(",");
+  if (comma < 0) throw new AppError(400, "XML da NF-e inválido.");
+  const header = raw.slice(0, comma);
+  const body = raw.slice(comma + 1);
+  try {
+    return header.includes(";base64") ? Buffer.from(body, "base64").toString("utf8") : decodeURIComponent(body);
+  } catch {
+    throw new AppError(400, "Não foi possível decodificar o XML da NF-e.");
+  }
+}
+
+const onlyDigits = (value: unknown) => String(value ?? "").replace(/\D/g, "");
+const cleanText = (value: unknown) => String(value ?? "").trim();
 
 async function resolveCategoria(value: unknown) {
   const nome = String(value ?? "").trim();
@@ -176,10 +203,22 @@ export const estoqueService = {
   async list() {
     return (
       await prisma.estoqueMovimentacao.findMany({
-        include: { produto: true },
+        include: { produto: true, notaFiscal: { select: { id: true, chave: true, numero: true, serie: true, xmlName: true, pdfName: true, fornecedor: true } } },
         orderBy: [{ data: "desc" }, { createdAt: "desc" }],
       })
     ).map(serialize);
+  },
+
+  async getNotaDocumento(id: string, tipo: "xml" | "pdf") {
+    const select = tipo === "xml"
+      ? { xmlUrl: true as const, xmlName: true as const }
+      : { pdfUrl: true as const, pdfName: true as const };
+    const nota = await prisma.estoqueNotaFiscal.findUnique({ where: { id }, select });
+    if (!nota) throw new AppError(404, "Nota fiscal do Almoxarifado não encontrada.");
+    const dataUrl = tipo === "xml" ? (nota as any).xmlUrl : (nota as any).pdfUrl;
+    const name = tipo === "xml" ? (nota as any).xmlName : (nota as any).pdfName;
+    if (!dataUrl) throw new AppError(404, `Arquivo ${tipo.toUpperCase()} não encontrado nesta nota fiscal.`);
+    return { dataUrl, name: name || `nota_fiscal.${tipo}` };
   },
 
   async resumo() {
@@ -198,6 +237,150 @@ export const estoqueService = {
         saidas,
         estoque,
         valorEstoque,
+      };
+    });
+  },
+
+  async importarNfe(data: any) {
+    const xmlUrl = String(data.xmlUrl ?? "");
+    let parsed;
+    try {
+      parsed = parseEstoqueNfeXml(decodeXmlPayload(xmlUrl));
+    } catch (error: any) {
+      throw new AppError(400, error?.message || "Não foi possível ler a NF-e.");
+    }
+    if (!parsed.chave) throw new AppError(400, "A NF-e não possui uma chave de acesso válida.");
+    if (!parsed.fornecedor.documento || !parsed.fornecedor.razaoSocial) {
+      throw new AppError(400, "Não foi possível identificar o fornecedor da NF-e.");
+    }
+
+    const configuracoes = Array.isArray(data.itens) ? data.itens : [];
+    const selecionados = parsed.itens.filter((item) => {
+      const cfg = configuracoes.find((x: any) => String(x.nItem) === item.nItem);
+      return cfg ? cfg.incluir !== false : true;
+    });
+    if (!selecionados.length) throw new AppError(400, "Selecione ao menos um item da NF-e para importar.");
+
+    return prisma.$transaction(async (tx: any) => {
+      const notaExistente = await tx.estoqueNotaFiscal.findUnique({ where: { chave: parsed.chave }, select: { id: true } });
+      if (notaExistente) throw new AppError(409, `A NF-e ${parsed.numero || parsed.chave} já foi importada no Almoxarifado.`);
+
+      const documento = onlyDigits(parsed.fornecedor.documento);
+      let fornecedor = await tx.fornecedor.findFirst({ where: { documento } });
+      if (!fornecedor) {
+        fornecedor = await tx.fornecedor.create({
+          data: {
+            razaoSocial: parsed.fornecedor.razaoSocial,
+            nomeFantasia: parsed.fornecedor.nomeFantasia,
+            documento,
+            tipos: ["Almoxarifado"],
+            telefone: parsed.fornecedor.telefone,
+            endereco: parsed.fornecedor.endereco,
+            cidade: parsed.fornecedor.cidade,
+            uf: parsed.fornecedor.uf,
+            observacoes: parsed.fornecedor.inscricaoEstadual ? `IE: ${parsed.fornecedor.inscricaoEstadual}` : "",
+            ativo: true,
+          },
+        });
+      } else {
+        const tipos = Array.from(new Set([...(fornecedor.tipos || []), "Almoxarifado"]));
+        fornecedor = await tx.fornecedor.update({
+          where: { id: fornecedor.id },
+          data: {
+            tipos,
+            nomeFantasia: fornecedor.nomeFantasia || parsed.fornecedor.nomeFantasia,
+            telefone: fornecedor.telefone || parsed.fornecedor.telefone,
+            endereco: fornecedor.endereco || parsed.fornecedor.endereco,
+            cidade: fornecedor.cidade || parsed.fornecedor.cidade,
+            uf: fornecedor.uf || parsed.fornecedor.uf,
+          },
+        });
+      }
+
+      const dataEmissao = parsed.dataEmissao || new Date().toISOString().slice(0, 10);
+      const nota = await tx.estoqueNotaFiscal.create({
+        data: {
+          chave: parsed.chave,
+          numero: parsed.numero,
+          serie: parsed.serie,
+          dataEmissao: new Date(`${dataEmissao}T12:00:00.000Z`),
+          fornecedorId: fornecedor.id,
+          xmlUrl,
+          xmlName: cleanText(data.xmlName) || `NFe_${parsed.chave}.xml`,
+          pdfUrl: data.pdfUrl || null,
+          pdfName: cleanText(data.pdfName) || null,
+        },
+      });
+
+      const codigos = await tx.estoqueProduto.findMany({ where: { codigoInterno: { startsWith: "RAD-" } }, select: { codigoInterno: true } });
+      let proximoNumero = codigos.reduce((maior: number, produto: { codigoInterno: string }) => {
+        const match = /^RAD-(\d+)$/.exec(produto.codigoInterno.trim().toUpperCase());
+        return match ? Math.max(maior, Number(match[1]) || 0) : maior;
+      }, 0) + 1;
+
+      const resultados: any[] = [];
+      for (const itemXml of selecionados) {
+        const cfg = configuracoes.find((x: any) => String(x.nItem) === itemXml.nItem) ?? {};
+        const categoria = await resolveCategoria(cfg.categoria ?? data.categoria);
+        const subcategoria = cleanText(cfg.subcategoria ?? data.subcategoria);
+        if (subcategoria) {
+          const sub = await tx.estoqueSubcategoria.findFirst({ where: { categoria, nome: { equals: subcategoria, mode: "insensitive" } } });
+          if (!sub) throw new AppError(400, `Subcategoria "${subcategoria}" não cadastrada para ${categoria}.`);
+        }
+        const nome = cleanText(cfg.nome) || itemXml.nome;
+        const codigoFornecedor = itemXml.codigoFornecedor;
+
+        let produto: any = null;
+        if (codigoFornecedor) {
+          const movimentoAnterior = await tx.estoqueMovimentacao.findFirst({
+            where: { codigoFornecedor, notaFiscal: { fornecedorId: fornecedor.id } },
+            select: { produto: true },
+            orderBy: { createdAt: "desc" },
+          });
+          produto = movimentoAnterior?.produto ?? null;
+        }
+        if (!produto && itemXml.ncm) {
+          produto = await tx.estoqueProduto.findFirst({
+            where: { nome: { equals: nome, mode: "insensitive" }, ncm: itemXml.ncm },
+          });
+        }
+        if (!produto) {
+          produto = await tx.estoqueProduto.findFirst({ where: { nome: { equals: nome, mode: "insensitive" } } });
+        }
+
+        let criado = false;
+        if (!produto) {
+          const codigoInterno = `RAD-${String(proximoNumero++).padStart(5, "0")}`;
+          produto = await tx.estoqueProduto.create({ data: { nome, codigoInterno, categoria, subcategoria, ncm: itemXml.ncm } });
+          criado = true;
+        } else if (!produto.ncm && itemXml.ncm) {
+          produto = await tx.estoqueProduto.update({ where: { id: produto.id }, data: { ncm: itemXml.ncm } });
+        }
+
+        await tx.estoqueMovimentacao.create({
+          data: {
+            produtoId: produto.id,
+            notaFiscalId: nota.id,
+            tipo: "ENTRADA",
+            quantidade: itemXml.quantidade,
+            valorUnitario: itemXml.valorUnitario,
+            valorTotal: itemXml.valorTotal || itemXml.quantidade * itemXml.valorUnitario,
+            data: new Date(`${dataEmissao}T12:00:00.000Z`),
+            observacoes: `NF-e ${parsed.numero || parsed.chave} · ${fornecedor.nomeFantasia || fornecedor.razaoSocial}`,
+            codigoFornecedor,
+            unidade: itemXml.unidade,
+          },
+        });
+        resultados.push({ produtoId: produto.id, codigoInterno: produto.codigoInterno, nome: produto.nome, quantidade: itemXml.quantidade, criado });
+      }
+
+      return {
+        chave: parsed.chave,
+        numero: parsed.numero,
+        fornecedor: { id: fornecedor.id, razaoSocial: fornecedor.razaoSocial, nomeFantasia: fornecedor.nomeFantasia, documento: fornecedor.documento },
+        itens: resultados,
+        criados: resultados.filter((x) => x.criado).length,
+        atualizados: resultados.filter((x) => !x.criado).length,
       };
     });
   },

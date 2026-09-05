@@ -6,9 +6,8 @@ import {
   type Viagem,
   type ViagemFechamento,
 } from "@/lib/store";
-import { formatBRL } from "@/lib/exportUtils";
+import { formatBRL, formatDate } from "@/lib/exportUtils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import {
@@ -27,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Trash2, MapPin, Route, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { expandirViagensFechamento } from "@/lib/fechamentoViagem";
 
 interface FechamentoFormProps {
   open: boolean;
@@ -108,7 +108,7 @@ export default function FechamentoForm({
       setMotoristaId(editingFechamento.motoristaId);
       setDataInicio(editingFechamento.dataInicio);
       setDataFim(editingFechamento.dataFim);
-      setViagens(editingFechamento.viagens);
+      setViagens(expandirViagensFechamento(editingFechamento, viagensCadastradas, locais).map(({ localId, dataViagem }) => ({ localId, quantidade: 1, dataViagem })));
     } else {
       setMotoristaId("");
       setDataInicio("");
@@ -117,7 +117,7 @@ export default function FechamentoForm({
       setAutoResumo("");
       setDestinosNaoCadastrados([]);
     }
-  }, [editingFechamento, open]);
+  }, [editingFechamento, open, viagensCadastradas, locais]);
 
   const viagensDoPeriodo = useMemo(() => {
     if (editingFechamento || !motoristaId || !dataInicio || !dataFim) return [];
@@ -152,8 +152,8 @@ export default function FechamentoForm({
       return;
     }
 
-    const grouped = new Map<string, number>();
     const unmatched = new Set<string>();
+    const automaticas: ViagemFechamento[] = [];
 
     for (const viagem of viagensDoPeriodo) {
       const local = matchLocalByDestino(viagem.cidadeEntrega, locais);
@@ -161,22 +161,14 @@ export default function FechamentoForm({
         unmatched.add(viagem.cidadeEntrega || "Destino não informado");
         continue;
       }
-      grouped.set(local.id, (grouped.get(local.id) ?? 0) + 1);
+      automaticas.push({ localId: local.id, quantidade: 1, dataViagem: viagem.dataManifesto });
     }
-
-    const automaticas = Array.from(grouped.entries())
-      .map(([localId, quantidade]) => ({ localId, quantidade }))
-      .sort((a, b) => {
-        const cidadeA = locais.find((local) => local.id === a.localId)?.cidade ?? "";
-        const cidadeB = locais.find((local) => local.id === b.localId)?.cidade ?? "";
-        return cidadeA.localeCompare(cidadeB, "pt-BR");
-      });
 
     setViagens(automaticas);
     setDestinosNaoCadastrados(Array.from(unmatched).sort((a, b) => a.localeCompare(b, "pt-BR")));
 
     const totalEncontradas = viagensDoPeriodo.length;
-    const totalVinculadas = automaticas.reduce((sum, item) => sum + item.quantidade, 0);
+    const totalVinculadas = automaticas.length;
     if (totalEncontradas === 0) {
       setAutoResumo("Nenhuma viagem encontrada para este motorista no período selecionado.");
     } else {
@@ -206,7 +198,7 @@ export default function FechamentoForm({
 
   const valorTotal = viagens.reduce((sum, v) => {
     const local = locais.find((l) => l.id === v.localId);
-    return sum + (local ? local.valorComissao * v.quantidade : 0);
+    return sum + (local ? local.valorComissao : 0);
   }, 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -326,7 +318,7 @@ export default function FechamentoForm({
           {/* Viagens */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Acertos por Local</Label>
+              <Label className="text-sm font-medium">Viagens</Label>
               <Button
                 type="button"
                 variant="outline"
@@ -349,18 +341,21 @@ export default function FechamentoForm({
               <div className="grid gap-2 xl:grid-cols-2">
                 {viagens.map((viagem, index) => {
                   const local = locais.find((l) => l.id === viagem.localId);
-                  const subtotal = local
-                    ? local.valorComissao * viagem.quantidade
-                    : 0;
+                  const subtotal = local ? local.valorComissao : 0;
                   return (
                     <div
-                      key={index}
-                      className="grid min-w-0 grid-cols-[32px_minmax(0,1fr)_64px_96px_32px] items-center gap-2 rounded-lg border border-border bg-muted/30 px-2 py-1.5"
+                      key={`${viagem.dataViagem || "manual"}-${viagem.localId}-${index}`}
+                      className="grid min-w-0 grid-cols-[32px_minmax(0,1fr)_96px_32px] items-center gap-2 rounded-lg border border-border bg-muted/30 px-2 py-1.5"
                     >
                       <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400">
                         <MapPin className="h-4 w-4" />
                       </div>
                       <div className="min-w-0 overflow-hidden">
+                        {viagem.dataViagem && (
+                          <div className="mb-1 truncate text-xs font-semibold text-foreground">
+                            {formatDate(viagem.dataViagem)} - {local?.cidade || "Destino"}
+                          </div>
+                        )}
                         <Select
                           value={viagem.localId}
                           onValueChange={(val) =>
@@ -378,20 +373,6 @@ export default function FechamentoForm({
                             ))}
                           </SelectContent>
                         </Select>
-                      </div>
-                      <div className="w-16">
-                        <Input
-                          type="number"
-                          min={1}
-                          value={viagem.quantidade}
-                          onChange={(e) =>
-                            updateViagem(index, {
-                              quantidade: Math.max(1, parseInt(e.target.value) || 1),
-                            })
-                          }
-                          className="h-9 text-center"
-                          placeholder="Qtd"
-                        />
                       </div>
                       <div className="w-24 whitespace-nowrap text-right text-sm font-semibold text-foreground">
                         {formatBRL(subtotal)}

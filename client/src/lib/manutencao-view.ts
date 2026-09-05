@@ -34,6 +34,7 @@ export type MaintenanceOrderLike = {
   itens?: Array<{
     id?: string;
     produtoId?: string | null;
+    categoria?: string | null;
     tipo: "SERVICO" | "PECA" | "OUTRO";
     descricao: string;
     quantidade: number;

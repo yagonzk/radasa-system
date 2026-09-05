@@ -41,6 +41,8 @@ import {
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 import { matchesEstoqueGlobalSearch, normalizeEstoqueFilterText } from "@/lib/estoque-filters";
+import { api } from "@/lib/api";
+import { parseEstoqueNfeXml, type EstoqueNfeParsed } from "@shared/estoque-nfe";
 
 type ViewMode = "ESTOQUE" | "ENTRADAS" | "SAIDAS";
 
@@ -149,6 +151,7 @@ export default function Estoque() {
     create: createProduto,
     update: updateProduto,
     remove: removeProduto,
+    refresh: refreshProdutos,
   } = useEstoqueProdutos();
   const { movimentacoes, resumo, create, remove, refresh: refreshEstoque } = useEstoque();
 
@@ -169,6 +172,14 @@ export default function Estoque() {
   const [savingProduct, setSavingProduct] = useState(false);
   const [productPdfFile, setProductPdfFile] = useState<File | null>(null);
   const [productXmlFile, setProductXmlFile] = useState<File | null>(null);
+  type EstoqueNfePreviewItem = EstoqueNfeParsed["itens"][number] & {
+    incluir: boolean;
+    categoria: string;
+    subcategoria: string;
+    nomeEditado: string;
+  };
+  type EstoqueNfePreview = Omit<EstoqueNfeParsed, "itens"> & { itens: EstoqueNfePreviewItem[] };
+  const [nfePreview, setNfePreview] = useState<EstoqueNfePreview | null>(null);
   const [subManagerOpen, setSubManagerOpen] = useState(false);
   const [newSubName, setNewSubName] = useState("");
   const [savingSubcategoria, setSavingSubcategoria] = useState(false);
@@ -190,6 +201,13 @@ export default function Estoque() {
       : [],
     [movimentacoes, viewingProduct],
   );
+  const viewingProductSuppliers = useMemo(() => {
+    const unique = new Map<string, NonNullable<EstoqueMovimentacao["fornecedor"]>>();
+    for (const movimento of viewingProductMovements) {
+      if (movimento.fornecedor?.id) unique.set(movimento.fornecedor.id, movimento.fornecedor);
+    }
+    return Array.from(unique.values());
+  }, [viewingProductMovements]);
   const entradas = useMemo(
     () => movimentosFiltrados.filter((movimento) => movimento.tipo === "ENTRADA"),
     [movimentosFiltrados],
@@ -220,6 +238,9 @@ export default function Estoque() {
     }
 
     setEditingProduct(null);
+    setNfePreview(null);
+    setProductXmlFile(null);
+    setProductPdfFile(null);
     setProductForm(emptyProductForm(categoriaInicial));
     setProductOpen(true);
   };
@@ -236,15 +257,53 @@ export default function Estoque() {
 
   const readProductXml = async (file: File) => {
     const text = await file.text();
-    const doc = new DOMParser().parseFromString(text, "application/xml");
-    if (doc.querySelector("parsererror")) throw new Error("XML inválido.");
-    const det = doc.getElementsByTagNameNS("*", "det")[0];
-    const get = (root: Element | Document, tag: string) => root.getElementsByTagNameNS("*", tag)[0]?.textContent?.trim() || "";
-    if (!det) throw new Error("Nenhum produto encontrado na NF-e.");
-    const dh = get(doc, "dhEmi") || get(doc, "dEmi");
-    setProductForm(current => ({ ...current, nome: get(det, "xProd") || current.nome, quantidade: get(det, "qCom") || current.quantidade, valorUnitario: get(det, "vUnCom") || current.valorUnitario, dataCompra: dh ? dh.slice(0,10) : current.dataCompra }));
+    const parsed = parseEstoqueNfeXml(text);
+    const categoriaPadrao = productForm.categoria || categoriasEstoque[0] || "";
+    const preview = {
+      ...parsed,
+      itens: parsed.itens.map((item) => ({
+        ...item,
+        incluir: true,
+        categoria: categoriaPadrao,
+        subcategoria: "",
+        nomeEditado: item.nome,
+      })),
+    };
+    setNfePreview(preview);
+    const primeiro = parsed.itens[0];
+    setProductForm((current) => ({
+      ...current,
+      nome: primeiro?.nome || current.nome,
+      quantidade: String(primeiro?.quantidade || current.quantidade),
+      valorUnitario: String(primeiro?.valorUnitario || current.valorUnitario),
+      dataCompra: parsed.dataEmissao || current.dataCompra,
+    }));
     setProductXmlFile(file);
-    toast.success("XML da NF-e lido. Confira os dados antes de cadastrar.");
+    toast.success(`${parsed.itens.length} item(ns) encontrado(s) na NF-e. Confira a prévia antes de importar.`);
+  };
+
+  const findExistingProductForPreview = (item: EstoqueNfeParsed["itens"][number] & { nomeEditado: string }) => {
+    const bySupplierCode = item.codigoFornecedor
+      ? movimentacoes.find((movimento) =>
+          movimento.codigoFornecedor === item.codigoFornecedor &&
+          movimento.fornecedor?.documento === nfePreview?.fornecedor.documento,
+        )?.produto
+      : null;
+    if (bySupplierCode) return bySupplierCode;
+    const normalizedName = item.nomeEditado.trim().toLocaleLowerCase("pt-BR");
+    return produtos.find((produto) =>
+      produto.nome.trim().toLocaleLowerCase("pt-BR") === normalizedName &&
+      (!item.ncm || !produto.ncm || produto.ncm === item.ncm),
+    ) ?? null;
+  };
+
+  const loadNotaDocument = async (movimento: EstoqueMovimentacao, tipo: "xml" | "pdf") => {
+    const directUrl = tipo === "xml" ? movimento.xmlUrl : movimento.pdfUrl;
+    const directName = tipo === "xml" ? movimento.xmlName : movimento.pdfName;
+    if (directUrl) return { dataUrl: directUrl, name: directName || `nota_fiscal.${tipo}` };
+    if (!movimento.notaFiscalId) throw new Error(`Arquivo ${tipo.toUpperCase()} não encontrado.`);
+    const response = await api.get<{ dataUrl: string; name: string }>(`/estoque/notas/${movimento.notaFiscalId}/${tipo}`);
+    return response.data;
   };
 
   const submitSubcategoria = async (event?: FormEvent) => {
@@ -287,6 +346,30 @@ export default function Estoque() {
       if (editingProduct) {
         await updateProduto(editingProduct.id, productForm);
         toast.success("Produto do almoxarifado atualizado.");
+      } else if (nfePreview && productXmlFile) {
+        const selecionados = nfePreview.itens.filter((item) => item.incluir);
+        if (!selecionados.length) throw new Error("Selecione ao menos um item da NF-e.");
+        if (selecionados.some((item) => !item.categoria)) throw new Error("Selecione a categoria de todos os itens que serão importados.");
+        const xmlUrl = await fileToDataUrl(productXmlFile);
+        const pdfUrl = productPdfFile ? await fileToDataUrl(productPdfFile) : null;
+        const response = await api.post("/estoque/importar-nfe", {
+          xmlUrl,
+          xmlName: productXmlFile.name,
+          pdfUrl,
+          pdfName: productPdfFile?.name || null,
+          categoria: productForm.categoria,
+          subcategoria: productForm.subcategoria,
+          itens: nfePreview.itens.map((item) => ({
+            nItem: item.nItem,
+            incluir: item.incluir,
+            nome: item.nomeEditado.trim() || item.nome,
+            categoria: item.categoria,
+            subcategoria: item.subcategoria,
+          })),
+        });
+        const result = response.data as { criados: number; atualizados: number; fornecedor?: { nomeFantasia?: string; razaoSocial?: string } };
+        toast.success(`NF-e importada: ${result.criados} produto(s) criado(s) e ${result.atualizados} produto(s) com estoque somado.`);
+        await refreshProdutos();
       } else {
         const pdfUrl = productPdfFile ? await fileToDataUrl(productPdfFile) : null;
         const xmlUrl = productXmlFile ? await fileToDataUrl(productXmlFile) : null;
@@ -294,10 +377,13 @@ export default function Estoque() {
         toast.success(`Produto criado com o código ${novoProduto.codigoInterno}.`);
       }
       setProductOpen(false);
-      setEditingProduct(null); setProductPdfFile(null); setProductXmlFile(null);
+      setEditingProduct(null);
+      setProductPdfFile(null);
+      setProductXmlFile(null);
+      setNfePreview(null);
       await refreshEstoque();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Não foi possível salvar o produto do almoxarifado.");
+      toast.error(error?.response?.data?.message || error?.message || "Não foi possível salvar o produto do almoxarifado.");
     } finally {
       setSavingProduct(false);
     }
@@ -533,6 +619,7 @@ export default function Estoque() {
             setEditingProduct(null);
             setProductPdfFile(null);
             setProductXmlFile(null);
+            setNfePreview(null);
           }
         }}>
           <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[1040px]">
@@ -725,6 +812,73 @@ export default function Estoque() {
                         }}
                       />
                     </div>
+
+                    {nfePreview && (
+                      <div className="mt-5 space-y-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold">Prévia da NF-e {nfePreview.numero || ""}</p>
+                            <p className="text-xs text-muted-foreground">{nfePreview.chave ? `Chave: ${nfePreview.chave}` : "Chave não encontrada"}</p>
+                          </div>
+                          <div className="rounded-lg border bg-background px-3 py-2 text-sm">
+                            <p className="font-semibold">Fornecedor: {nfePreview.fornecedor.nomeFantasia || nfePreview.fornecedor.razaoSocial}</p>
+                            <p className="text-xs text-muted-foreground">{nfePreview.fornecedor.documento || "Documento não informado"} · {nfePreview.fornecedor.cidade || "—"}/{nfePreview.fornecedor.uf || "—"}</p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Produtos já existentes terão o estoque somado. Produtos novos receberão um novo código RAD automaticamente.</p>
+                        <div className="space-y-3">
+                          {nfePreview.itens.map((item, index) => (
+                            <div key={item.nItem} className={`rounded-lg border bg-background p-4 ${item.incluir ? "" : "opacity-50"}`}>
+                              <div className="mb-3 flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={item.incluir}
+                                      onChange={(event) => setNfePreview((current) => current ? ({ ...current, itens: current.itens.map((row, i) => i === index ? { ...row, incluir: event.target.checked } : row) }) : current)}
+                                      aria-label={`Importar ${item.nomeEditado}`}
+                                    />
+                                    <span className="text-xs font-medium text-muted-foreground">Item {item.nItem} · Cód. fornecedor: {item.codigoFornecedor || "—"} · NCM: {item.ncm || "—"}</span>
+                                    {item.incluir && (() => { const existente = findExistingProductForPreview(item); return existente ? <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">Existente — somará em {existente.codigoInterno}</span> : <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-600">Novo produto — receberá código RAD</span>; })()}
+                                  </div>
+                                  <Input
+                                    className="mt-2 h-9"
+                                    value={item.nomeEditado}
+                                    disabled={!item.incluir}
+                                    onChange={(event) => setNfePreview((current) => current ? ({ ...current, itens: current.itens.map((row, i) => i === index ? { ...row, nomeEditado: event.target.value } : row) }) : current)}
+                                  />
+                                </div>
+                                <div className="shrink-0 text-right text-sm">
+                                  <p className="font-semibold">{item.quantidade.toLocaleString("pt-BR")} {item.unidade}</p>
+                                  <p className="text-xs text-muted-foreground">{formatBRL(item.valorUnitario)} / un.</p>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                <Select
+                                  value={item.categoria}
+                                  disabled={!item.incluir}
+                                  onValueChange={(value) => setNfePreview((current) => current ? ({ ...current, itens: current.itens.map((row, i) => i === index ? { ...row, categoria: value, subcategoria: "" } : row) }) : current)}
+                                >
+                                  <SelectTrigger className="h-9"><SelectValue placeholder="Categoria" /></SelectTrigger>
+                                  <SelectContent>{categoriasEstoque.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}</SelectContent>
+                                </Select>
+                                <Select
+                                  value={item.subcategoria || "__SEM__"}
+                                  disabled={!item.incluir}
+                                  onValueChange={(value) => setNfePreview((current) => current ? ({ ...current, itens: current.itens.map((row, i) => i === index ? { ...row, subcategoria: value === "__SEM__" ? "" : value } : row) }) : current)}
+                                >
+                                  <SelectTrigger className="h-9"><SelectValue placeholder="Subcategoria (opcional)" /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__SEM__">Sem subcategoria</SelectItem>
+                                    {subcategorias.filter((sub) => sub.categoria === item.categoria).map((sub) => <SelectItem key={sub.id} value={sub.nome}>{sub.nome}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -755,7 +909,7 @@ export default function Estoque() {
               <DialogFooter className="border-t pt-5">
                 <Button type="button" variant="outline" onClick={() => setProductOpen(false)}>Cancelar</Button>
                 <Button type="submit" disabled={savingProduct || !productForm.categoria}>
-                  {savingProduct ? "Salvando..." : editingProduct ? "Salvar alterações" : "Cadastrar produto"}
+                  {savingProduct ? "Salvando..." : editingProduct ? "Salvar alterações" : nfePreview ? `Importar ${nfePreview.itens.filter((item) => item.incluir).length} item(ns)` : "Cadastrar produto"}
                 </Button>
               </DialogFooter>
             </form>
@@ -952,33 +1106,50 @@ export default function Estoque() {
                   <Detail label="Valor em estoque" value={formatBRL(viewingProduct.valorEstoque)} />
                 </div>
 
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                  <h3 className="font-semibold">Fornecedor(es)</h3>
+                  <p className="mb-3 text-xs text-muted-foreground">Fornecedores identificados pelas notas fiscais de entrada deste produto.</p>
+                  {viewingProductSuppliers.length ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {viewingProductSuppliers.map((fornecedor) => (
+                        <div key={fornecedor.id} className="rounded-lg border bg-background p-3">
+                          <p className="font-semibold">{fornecedor.nomeFantasia || fornecedor.razaoSocial}</p>
+                          <p className="text-xs text-muted-foreground">{fornecedor.razaoSocial}</p>
+                          <p className="mt-1 text-xs">CNPJ/CPF: {fornecedor.documento || "—"}</p>
+                          <p className="text-xs">{fornecedor.cidade || "—"}/{fornecedor.uf || "—"} · {fornecedor.telefone || "Sem telefone"}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-muted-foreground">Nenhum fornecedor identificado nas entradas registradas.</p>}
+                </div>
+
                 <div className="space-y-3">
                   <div>
                     <h3 className="font-semibold">Documentos fiscais</h3>
                     <p className="text-xs text-muted-foreground">Notas e arquivos vinculados às entradas e movimentações deste produto.</p>
                   </div>
                   <div className="space-y-2">
-                    {viewingProductMovements.filter((movimento) => movimento.pdfUrl || movimento.xmlUrl).map((movimento) => (
+                    {viewingProductMovements.filter((movimento) => movimento.pdfUrl || movimento.xmlUrl || movimento.pdfStored || movimento.xmlStored).map((movimento) => (
                       <div key={`docs-${movimento.id}`} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0 text-sm">
                           <p className="font-medium">{movimento.tipo === "ENTRADA" ? "Entrada" : "Saída"} de {formatDate(movimento.data)}</p>
                           <p className="truncate text-xs text-muted-foreground">{movimento.pdfName || movimento.xmlName || "Documento fiscal"}</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {movimento.pdfUrl && (
-                            <Button type="button" size="sm" variant="outline" onClick={() => setPdfPreview({ url: movimento.pdfUrl!, title: movimento.pdfName || "Nota fiscal" })}>
+                          {(movimento.pdfUrl || movimento.pdfStored) && (
+                            <Button type="button" size="sm" variant="outline" onClick={async () => { try { const doc = await loadNotaDocument(movimento, "pdf"); setPdfPreview({ url: doc.dataUrl, title: doc.name || "Nota fiscal" }); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || "Não foi possível abrir o PDF."); } }}>
                               <Eye className="mr-2 h-4 w-4" />Visualizar PDF
                             </Button>
                           )}
-                          {movimento.xmlUrl && (
-                            <Button type="button" size="sm" variant="outline" onClick={() => downloadDocument(movimento.xmlUrl!, movimento.xmlName || `nf_${movimento.id}.xml`)}>
+                          {(movimento.xmlUrl || movimento.xmlStored) && (
+                            <Button type="button" size="sm" variant="outline" onClick={async () => { try { const doc = await loadNotaDocument(movimento, "xml"); downloadDocument(doc.dataUrl, doc.name || `nf_${movimento.id}.xml`); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || "Não foi possível baixar o XML."); } }}>
                               <Download className="mr-2 h-4 w-4" />Baixar XML
                             </Button>
                           )}
                         </div>
                       </div>
                     ))}
-                    {!viewingProductMovements.some((movimento) => movimento.pdfUrl || movimento.xmlUrl) && (
+                    {!viewingProductMovements.some((movimento) => movimento.pdfUrl || movimento.xmlUrl || movimento.pdfStored || movimento.xmlStored) && (
                       <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Nenhum XML ou PDF vinculado a este produto.</div>
                     )}
                   </div>
@@ -988,19 +1159,20 @@ export default function Estoque() {
                   <h3 className="font-semibold">Histórico de movimentações</h3>
                   <div className="overflow-x-auto rounded-lg border">
                     <table className="w-full min-w-[720px] text-sm">
-                      <thead className="bg-muted/30"><tr><th className="px-3 py-2 text-left">Data</th><th className="px-3 py-2 text-left">Tipo</th><th className="px-3 py-2 text-right">Quantidade</th><th className="px-3 py-2 text-right">Valor unitário</th><th className="px-3 py-2 text-right">Valor total</th><th className="px-3 py-2 text-left">Observação</th></tr></thead>
+                      <thead className="bg-muted/30"><tr><th className="px-3 py-2 text-left">Data</th><th className="px-3 py-2 text-left">Tipo</th><th className="px-3 py-2 text-left">Fornecedor / NF-e</th><th className="px-3 py-2 text-right">Quantidade</th><th className="px-3 py-2 text-right">Valor unitário</th><th className="px-3 py-2 text-right">Valor total</th><th className="px-3 py-2 text-left">Observação</th></tr></thead>
                       <tbody>
                         {viewingProductMovements.map((movimento) => (
                           <tr key={movimento.id} className="border-t">
                             <td className="px-3 py-2">{formatDate(movimento.data)}</td>
                             <td className="px-3 py-2">{movimento.tipo === "ENTRADA" ? "Entrada" : "Saída"}</td>
-                            <td className="px-3 py-2 text-right">{movimento.quantidade.toLocaleString("pt-BR")}</td>
+                            <td className="px-3 py-2"><div className="font-medium">{movimento.fornecedor?.nomeFantasia || movimento.fornecedor?.razaoSocial || "—"}</div><div className="text-xs text-muted-foreground">{movimento.numeroNfe ? `NF-e ${movimento.numeroNfe}` : movimento.codigoFornecedor ? `Cód. ${movimento.codigoFornecedor}` : ""}</div></td>
+                            <td className="px-3 py-2 text-right">{movimento.quantidade.toLocaleString("pt-BR")} {movimento.unidade || ""}</td>
                             <td className="px-3 py-2 text-right">{formatBRL(movimento.valorUnitario)}</td>
                             <td className="px-3 py-2 text-right">{formatBRL(movimento.valorTotal)}</td>
                             <td className="max-w-[260px] truncate px-3 py-2" title={movimento.observacoes || ""}>{movimento.observacoes || "—"}</td>
                           </tr>
                         ))}
-                        {!viewingProductMovements.length && <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">Nenhuma movimentação registrada.</td></tr>}
+                        {!viewingProductMovements.length && <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">Nenhuma movimentação registrada.</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -1016,7 +1188,7 @@ export default function Estoque() {
             {viewing && <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm"><Detail label="Produto" value={`${viewing.produto.nome} - ${viewing.produto.codigoInterno}`} /><Detail label="Tipo" value={viewing.tipo === "ENTRADA" ? "Entrada" : "Saída"} /><Detail label="Data" value={formatDate(viewing.data)} /><Detail label="Quantidade" value={viewing.quantidade.toLocaleString("pt-BR")} /><Detail label="Valor unitário" value={formatBRL(viewing.valorUnitario)} /><Detail label="Valor total" value={formatBRL(viewing.valorTotal)} /></div>
               {viewing.observacoes && <Detail label="Observações" value={viewing.observacoes} />}
-              {viewing.pdfUrl ? <div className="flex flex-wrap gap-2 border-t pt-4"><Button type="button" variant="outline" className="text-blue-600" onClick={() => setPdfPreview({ url: viewing.pdfUrl!, title: viewing.pdfName || "Nota fiscal" })}><Eye className="mr-2 h-4 w-4" />Visualizar PDF</Button><Button type="button" variant="outline" className="text-emerald-600" onClick={() => downloadPdf(viewing.pdfUrl!, viewing.pdfName || `nf_${viewing.id}.pdf`)}><Download className="mr-2 h-4 w-4" />Baixar PDF</Button></div> : <p className="text-sm text-muted-foreground">Nenhuma nota fiscal vinculada.</p>}
+              {(viewing.pdfUrl || viewing.pdfStored) ? <div className="flex flex-wrap gap-2 border-t pt-4"><Button type="button" variant="outline" className="text-blue-600" onClick={async () => { try { const doc = await loadNotaDocument(viewing, "pdf"); setPdfPreview({ url: doc.dataUrl, title: doc.name || "Nota fiscal" }); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || "Não foi possível abrir o PDF."); } }}><Eye className="mr-2 h-4 w-4" />Visualizar PDF</Button><Button type="button" variant="outline" className="text-emerald-600" onClick={async () => { try { const doc = await loadNotaDocument(viewing, "pdf"); downloadPdf(doc.dataUrl, doc.name || `nf_${viewing.id}.pdf`); } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || "Não foi possível baixar o PDF."); } }}><Download className="mr-2 h-4 w-4" />Baixar PDF</Button></div> : <p className="text-sm text-muted-foreground">Nenhuma nota fiscal em PDF vinculada.</p>}
             </div>}
           </DialogContent>
         </Dialog>

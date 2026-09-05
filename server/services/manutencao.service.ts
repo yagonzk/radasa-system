@@ -7,6 +7,15 @@ import { buildStockBalanceMap, maintenanceCostFromAggregate } from "./manutencao
 const d = (v: any) => v ? parseDateOnly(String(v)) : null;
 const nonNegative = (v: unknown) => Math.max(0, number(v) || 0);
 const nullableNumber = (v: unknown) => v === "" || v === null || v === undefined ? null : number(v);
+const MAINTENANCE_CATEGORIES = new Set([
+  "MOTOR_COMBUSTAO", "TRANSMISSAO_EMBREAGEM", "FREIOS", "SUSPENSAO_DIRECAO", "ELETRICO_ELETRONICO",
+  "ARREFECIMENTO", "LUBRIFICACAO", "ESTRUTURA_CHASSI", "IMPLEMENTOS_CARROCERIA", "PNEUS_RODAS", "HIDRAULICA",
+  "ESCAPE", "LIMPEZA_HIGIENIZACAO", "PREVENTIVA_PROGRAMADA", "CORRETIVA_EMERGENCIAL", "DIAGNOSTICO_TESTES", "SEGURANCA_OBRIGATORIOS",
+]);
+const normalizeMaintenanceCategory = (v: unknown) => {
+  const value = String(v ?? "").trim().toUpperCase();
+  return MAINTENANCE_CATEGORIES.has(value) ? value : null;
+};
 const plano = (x: any) => ({
   ...x,
   intervaloKm: x.intervaloKm == null ? null : number(x.intervaloKm),
@@ -59,6 +68,7 @@ const os = (x: any) => ({
     id: item.id,
     produtoId: item.produtoId,
     tipo: item.tipo,
+    categoria: item.categoria ?? null,
     descricao: item.descricao || item.produto?.nome || "",
     quantidade: number(item.quantidade),
     valorUnitario: number(item.valorUnitario),
@@ -121,6 +131,7 @@ function normalizeItems(raw: unknown) {
     return {
       produtoId,
       tipo: ["SERVICO", "PECA", "OUTRO"].includes(tipo) ? tipo : "OUTRO",
+      categoria: normalizeMaintenanceCategory(item.categoria),
       descricao: String(item.descricao ?? "").trim(),
       quantidade,
       valorUnitario,
@@ -268,7 +279,7 @@ export const manutencaoService = {
         observacoes: String(i.observacoes ?? "").trim(),
       } });
       if (items.length) {
-        await tx.ordemServicoItem.createMany({ data: items.map((item) => ({ ordemServicoId: ordem.id, produtoId: item.produtoId, tipo: item.tipo, descricao: item.descricao, quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal })) });
+        await tx.ordemServicoItem.createMany({ data: items.map((item) => ({ ordemServicoId: ordem.id, produtoId: item.produtoId, tipo: item.tipo, categoria: item.categoria, descricao: item.descricao, quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal })) });
         const stockItems = items.filter((item) => item.produtoId);
         if (stockItems.length) await tx.estoqueMovimentacao.createMany({ data: stockItems.map((item) => ({ produtoId: item.produtoId!, tipo: "SAIDA", quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal, data: dataAbertura, observacoes: `Utilizado na ${ordem.numero}` })) });
       }
@@ -313,7 +324,7 @@ export const manutencaoService = {
         await tx.estoqueMovimentacao.deleteMany({ where: { observacoes: `Utilizado na ${current.numero}` } });
         await tx.ordemServicoItem.deleteMany({ where: { ordemServicoId: id } });
         if (items.length) {
-          await tx.ordemServicoItem.createMany({ data: items.map((item) => ({ ordemServicoId: id, produtoId: item.produtoId, tipo: item.tipo, descricao: item.descricao, quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal })) });
+          await tx.ordemServicoItem.createMany({ data: items.map((item) => ({ ordemServicoId: id, produtoId: item.produtoId, tipo: item.tipo, categoria: item.categoria, descricao: item.descricao, quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal })) });
           const stockItems = items.filter((item) => item.produtoId);
           if (stockItems.length) await tx.estoqueMovimentacao.createMany({ data: stockItems.map((item) => ({ produtoId: item.produtoId!, tipo: "SAIDA", quantidade: item.quantidade, valorUnitario: item.valorUnitario, valorTotal: item.valorTotal, data: dataAbertura, observacoes: `Utilizado na ${current.numero}` })) });
         }
@@ -365,7 +376,10 @@ export const manutencaoService = {
     if (!outraAtiva) await prisma.veiculo.update({ where: { id: current.veiculoId }, data: { situacaoOperacional: "DISPONIVEL" } }).catch(() => undefined);
   },
   async concluirOsLote(i: any) {
-    const ids = [...new Set((Array.isArray(i?.ids) ? i.ids : []).map((value: unknown) => String(value ?? "").trim()).filter(Boolean))].slice(0, 500);
+    const rawIds: unknown[] = Array.isArray(i?.ids) ? i.ids : [];
+    const ids: string[] = Array.from(
+      new Set<string>(rawIds.map((value) => String(value ?? "").trim()).filter((value) => value.length > 0)),
+    ).slice(0, 500);
     if (!ids.length) throw new AppError(400, "Selecione pelo menos uma OS para concluir.");
 
     const dataConclusao = parseDateOnly(String(i?.dataConclusao || dateOnly(new Date())));

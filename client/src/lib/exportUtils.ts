@@ -1,4 +1,5 @@
-import type { Fechamento, Motorista, Local } from "./store";
+import type { Fechamento, Motorista, Local, Viagem } from "./store";
+import { expandirViagensFechamento, formatFechamentoViagemLabel } from "./fechamentoViagem";
 
 /**
  * Format currency in BRL
@@ -43,28 +44,29 @@ export function formatDate(iso: string): string {
 export function exportToCSV(
   fechamentos: Fechamento[],
   motoristas: Motorista[],
-  locais: Local[]
+  locais: Local[],
+  viagensCadastradas: Viagem[] = []
 ): void {
   const headers = [
     "Motorista",
     "CPF",
     "Data Início",
     "Data Fim",
-    "Locais Visitados",
+    "Viagens (Data - Destino)",
     "Total de Viagens",
     "Valor Total",
   ];
 
   const rows = fechamentos.map((f) => {
     const motorista = motoristas.find((m) => m.id === f.motoristaId);
-    const locaisStr = f.viagens
+    const locaisStr = expandirViagensFechamento(f, viagensCadastradas, locais)
       .map((v) => {
         const local = locais.find((l) => l.id === v.localId);
         const nome = local ? local.cidade : "—";
-        return `${nome} (${v.quantidade}x)`;
+        return formatFechamentoViagemLabel(v.dataViagem, nome);
       })
       .join("; ");
-    const totalViagens = f.viagens.reduce((sum, v) => sum + v.quantidade, 0);
+    const totalViagens = expandirViagensFechamento(f, viagensCadastradas, locais).length;
     return [
       motorista?.nome || "—",
       motorista?.cpf || "—",
@@ -100,7 +102,8 @@ export function exportToCSV(
 export function exportToPDF(
   fechamentos: Fechamento[],
   motoristas: Motorista[],
-  locais: Local[]
+  locais: Local[],
+  viagensCadastradas: Viagem[] = []
 ): void {
   const printWindow = window.open("", "_blank");
   if (!printWindow) return;
@@ -108,24 +111,17 @@ export function exportToPDF(
   const rows = fechamentos
     .map((f) => {
       const motorista = motoristas.find((m) => m.id === f.motoristaId);
-      const locaisStr = f.viagens
+      const locaisStr = expandirViagensFechamento(f, viagensCadastradas, locais)
         .map((v) => {
           const local = locais.find((l) => l.id === v.localId);
           return `<tr><td style="padding:4px 8px;border:1px solid #ddd;">${
-            local ? local.cidade : "—"
-          }</td><td style="padding:4px 8px;border:1px solid #ddd;text-align:center;">${
-            v.quantidade
+            formatFechamentoViagemLabel(v.dataViagem, local ? local.cidade : v.cidade || "—")
           }</td><td style="padding:4px 8px;border:1px solid #ddd;text-align:right;">${
             local ? formatBRL(local.valorComissao) : "—"
-          }</td><td style="padding:4px 8px;border:1px solid #ddd;text-align:right;">${
-            local ? formatBRL(local.valorComissao * v.quantidade) : "—"
           }</td></tr>`;
         })
         .join("");
-      const totalViagens = f.viagens.reduce(
-        (sum, v) => sum + v.quantidade,
-        0
-      );
+      const totalViagens = expandirViagensFechamento(f, viagensCadastradas, locais).length;
       return `
         <div style="margin-bottom:24px;padding:16px;border:1px solid #ddd;border-radius:8px;">
           <h3 style="margin:0 0 8px;color:#0062B1;">${motorista?.nome || "—"}</h3>
@@ -134,10 +130,8 @@ export function exportToPDF(
           <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
             <thead>
               <tr style="background:#f4f6f9;">
-                <th style="padding:4px 8px;border:1px solid #ddd;text-align:left;">Local</th>
-                <th style="padding:4px 8px;border:1px solid #ddd;text-align:center;">Qtd</th>
-                <th style="padding:4px 8px;border:1px solid #ddd;text-align:right;">Valor Unit.</th>
-                <th style="padding:4px 8px;border:1px solid #ddd;text-align:right;">Subtotal</th>
+                <th style="padding:4px 8px;border:1px solid #ddd;text-align:left;">Viagem</th>
+                <th style="padding:4px 8px;border:1px solid #ddd;text-align:right;">Valor</th>
               </tr>
             </thead>
             <tbody>${locaisStr}</tbody>

@@ -159,6 +159,22 @@ export const estoqueProdutoBody = z.object({
   createdAt: z.string().optional(),
 });
 
+export const estoqueNfeImportBody = z.object({
+  xmlUrl: z.string().min(1),
+  xmlName: z.string().trim().max(255).optional().nullable(),
+  pdfUrl: z.string().optional().nullable(),
+  pdfName: z.string().trim().max(255).optional().nullable(),
+  categoria: z.string().trim().min(1).max(80),
+  subcategoria: z.string().trim().max(80).optional().default(""),
+  itens: z.array(z.object({
+    nItem: z.string().trim().min(1).max(30),
+    incluir: z.boolean().optional().default(true),
+    nome: z.string().trim().min(1).max(255).optional(),
+    categoria: z.string().trim().min(1).max(80).optional(),
+    subcategoria: z.string().trim().max(80).optional().default(""),
+  })).max(1000).optional().default([]),
+});
+
 export const estoqueMovimentacaoBody = z.object({
   id: id.optional(), produtoId: id, tipo: z.enum(["ENTRADA", "SAIDA"]),
   quantidade: z.coerce.number().finite().positive(),
@@ -211,7 +227,7 @@ export const viagemBody = z.object({
 });
 export const fechamentoBody = z.object({
   id: id.optional(), motoristaId: id, dataInicio: dateOnly, dataFim: dateOnly,
-  viagens: z.array(z.object({ localId: id, quantidade: z.coerce.number().int().min(1) })),
+  viagens: z.array(z.object({ localId: id, quantidade: z.coerce.number().int().min(1), dataViagem: dateOnly.optional().nullable() })),
   valorTotal: money.optional(), createdAt: z.string().optional(),
 });
 export const tipoManifesto = z.enum(["Bonificação - Lebrinha", "Acertar c/ Lebrinha", "Receber c/ Cliente", "Vasilhame"]);

@@ -87,7 +87,7 @@ export default function Fechamentos() {
       toast.error("Nenhum fechamento para exportar.");
       return;
     }
-    exportToCSV(filteredFechamentos, motoristas, locais);
+    exportToCSV(filteredFechamentos, motoristas, locais, viagensCadastradas);
     toast.success("CSV exportado com sucesso!");
   };
 
@@ -96,7 +96,7 @@ export default function Fechamentos() {
       toast.error("Nenhum fechamento para exportar.");
       return;
     }
-    exportToPDF(filteredFechamentos, motoristas, locais);
+    exportToPDF(filteredFechamentos, motoristas, locais, viagensCadastradas);
     toast.success("PDF gerado com sucesso!");
   };
 
@@ -299,6 +299,7 @@ export default function Fechamentos() {
         fechamento={detalheFechamento}
         motoristas={motoristas}
         locais={locais}
+        viagensCadastradas={viagensCadastradas}
         onClose={() => setDetalheFechamento(null)}
         onEdit={handleOpenEdit}
         onDelete={handleDelete}
