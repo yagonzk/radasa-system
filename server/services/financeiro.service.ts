@@ -45,8 +45,8 @@ export const financeiroService={
   let receitasAutomaticas=0,despesasAutomaticas=0;
   // Receita de frete da DRE vem exclusivamente dos Romaneios.
   for(const m of romaneios){for(const p of m.produtos){const valor=number(p.valorTotal);receitasAutomaticas+=valor;add("Receita de fretes",valor)}}
-  // Custos operacionais da viagem continuam vindo do Acerto de Viagem, sem usar valorAbastecimento manual.
-  for(const v of viagens){for(const [k,val] of [["Pedágios",v.valorPedagio],["Diárias",v.valorDiaria],["Chapas",v.valorChapa],["Multas",v.valorMulta],["Custo Extra",v.valorCustoExtra]] as const){despesasAutomaticas+=number(val);add(k,val)}}
+  // Custos operacionais da viagem continuam vindo do Acerto de Viagem, sem usar valorAbastecimento manual. Custo Extra do fechamento não entra no DRE Operacional.
+  for(const v of viagens){for(const [k,val] of [["Pedágios",v.valorPedagio],["Diárias",v.valorDiaria],["Chapas",v.valorChapa],["Multas",v.valorMulta]] as const){despesasAutomaticas+=number(val);add(k,val)}}
   // Combustível é calculado pelos itens reais dos Abastecimentos: Diesel separado de ARLA.
   for(const x of abastecimentos){for(const p of x.produtos){const tipo=classifyFuelProduct(p.produto.nome);if(tipo==="DIESEL"){despesasAutomaticas+=number(p.valorTotal);add("Abastecimento",p.valorTotal)}else if(tipo==="ARLA"){despesasAutomaticas+=number(p.valorTotal);add("ARLA",p.valorTotal)}}}
   for(const x of fechamentos){despesasAutomaticas+=number(x.valorTotal);add("Comissões",x.valorTotal)} for(const x of estoque){despesasAutomaticas+=number(x.valorTotal);add(x.produto.categoria||"Almoxarifado",x.valorTotal)} for(const x of pneus){despesasAutomaticas+=number(x.valorCompra);add("Pneus",x.valorCompra)} for(const x of recapagens){despesasAutomaticas+=number(x.valor);add("Recapagem",x.valor)} for(const x of consertos){despesasAutomaticas+=number(x.valor);add("Conserto de pneus",x.valor)}
@@ -97,8 +97,8 @@ export const financeiroService={
    const idsClientes=clientesDaViagem(v);
    const nomesClientes=idsClientes.map(id=>clienteNome.get(id)||"Sem cliente");
    const cliente=nomesClientes.length?nomesClientes.join(", "):"Sem cliente";
-   const receita=number(v.valorFrete),despesa=number(v.valorPedagio)+number(v.valorDiaria)+number(v.valorChapa)+number(v.valorMulta)+number(v.valorCustoExtra),dist=number(v.distanciaKm);
-   const vk=norm(placa)||placa;const vr=ensure(byVeiculo,vk,placa);vr.receita+=receita;vr.despesa+=despesa;vr.viagens.add(v.id);vr.distanciaKm+=dist;addCusto(vk,placa,"Pedágios",v.valorPedagio);addCusto(vk,placa,"Diárias",v.valorDiaria);addCusto(vk,placa,"Chapas",v.valorChapa);addCusto(vk,placa,"Multas",v.valorMulta);addCusto(vk,placa,"Custo Extra",v.valorCustoExtra);
+   const receita=number(v.valorFrete),despesa=number(v.valorPedagio)+number(v.valorDiaria)+number(v.valorChapa)+number(v.valorMulta),dist=number(v.distanciaKm);
+   const vk=norm(placa)||placa;const vr=ensure(byVeiculo,vk,placa);vr.receita+=receita;vr.despesa+=despesa;vr.viagens.add(v.id);vr.distanciaKm+=dist;addCusto(vk,placa,"Pedágios",v.valorPedagio);addCusto(vk,placa,"Diárias",v.valorDiaria);addCusto(vk,placa,"Chapas",v.valorChapa);addCusto(vk,placa,"Multas",v.valorMulta);
    if(idsClientes.length){
      const divisor=idsClientes.length;
      for(const clienteId of idsClientes){
