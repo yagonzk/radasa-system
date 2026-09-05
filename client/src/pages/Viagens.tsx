@@ -578,7 +578,7 @@ export default function Viagens() {
     }
   };
 
-  const handleOpenEdit = (v: Viagem) => {
+  const preencherEdicao = (v: Viagem) => {
     setManifestoVinculado(null);
     setEditingViagem(v);
     setPlaca(v.placa);
@@ -599,6 +599,26 @@ export default function Viagens() {
     setValorMulta(String(v.valorMulta ?? 0));
     setValorCustoExtra(String(v.valorCustoExtra ?? 0));
     setFormOpen(true);
+  };
+
+  const handleOpenEdit = async (v: Viagem) => {
+    try {
+      const { data: atualizada } = await api.get<Viagem>(`/viagens/${v.id}`);
+      preencherEdicao(atualizada);
+    } catch (error: any) {
+      console.error("Falha ao carregar viagem para edição.", error);
+      toast.error(error?.response?.data?.message ?? "Não foi possível carregar os dados atualizados da viagem.");
+    }
+  };
+
+  const handleOpenView = async (v: Viagem) => {
+    try {
+      const { data: atualizada } = await api.get<Viagem>(`/viagens/${v.id}`);
+      setViewingViagem(atualizada);
+    } catch (error: any) {
+      console.error("Falha ao carregar detalhes da viagem.", error);
+      toast.error(error?.response?.data?.message ?? "Não foi possível carregar os detalhes atualizados da viagem.");
+    }
   };
 
   const resetForm = () => {
@@ -1117,7 +1137,7 @@ export default function Viagens() {
                         <td className="px-4 py-3 text-center">
                           <div className="flex justify-center gap-2">
                             <button
-                              onClick={() => setViewingViagem(v)}
+                              onClick={() => void handleOpenView(v)}
                               className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600 transition-colors hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
                               title="Visualizar"
                             >
@@ -1625,6 +1645,23 @@ export default function Viagens() {
                       <span>Combustível</span>
                       <span className="font-medium">{formatBRL(viewingViagem.valorAbastecimento)}</span>
                     </div>
+                    {(viewingViagem.abastecimentosVinculados?.length ?? 0) > 0 && (
+                      <div className="ml-3 space-y-1.5 rounded-md border border-border bg-muted/20 p-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Abastecimentos vinculados</div>
+                        {(viewingViagem.abastecimentosVinculados ?? []).map((link) => {
+                          const nota = link.abastecimento;
+                          return (
+                            <div key={link.abastecimentoId} className="flex items-start justify-between gap-3 text-xs">
+                              <div className="min-w-0">
+                                <div className="truncate font-medium">NF {nota?.numeroNfe || "—"} · {nota?.emitenteNomeFantasia || nota?.emitenteRazaoSocial || "Posto não informado"}</div>
+                                <div className="text-muted-foreground">{nota?.dataEmissao ? formatDate(nota.dataEmissao) : "Data não informada"}</div>
+                              </div>
+                              <span className="shrink-0 font-semibold">{formatBRL(Number(nota?.valorTotal ?? link.valorVinculado ?? 0))}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span>Comissão</span>
                       <span className="font-medium">{formatBRL(viewingViagem.valorComissao ?? 0)}</span>

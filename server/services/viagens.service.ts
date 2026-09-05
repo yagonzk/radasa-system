@@ -31,6 +31,12 @@ const serialize = (item: any) => {
   const abastecimentoIds = abastecimentosVinculados.length
     ? abastecimentosVinculados.map((link: any) => link.abastecimentoId)
     : (item.abastecimentoId ? [item.abastecimentoId] : []);
+  // Os vínculos são a fonte de verdade do combustível da viagem. Isso evita
+  // exibir R$ 0,00 quando o campo legado valorAbastecimento ficou desatualizado.
+  const valorAbastecimentoVinculado = abastecimentosVinculados.reduce(
+    (total: number, link: any) => total + number(link.abastecimento?.valorTotal ?? link.valorVinculado),
+    0,
+  );
   return {
     ...item,
     abastecimentoIds,
@@ -39,7 +45,7 @@ const serialize = (item: any) => {
     valorPedagioManual, valorChapaManual,
     valorPedagioImportado: pedagioImportado, valorChapaImportado: chapaImportada,
     valorPedagio: valorPedagioManual + pedagioImportado, valorDiaria: number(item.valorDiaria),
-    valorAbastecimento: number(item.valorAbastecimento), abastecimentoId: item.abastecimentoId ?? null, valorComissao: number(item.valorComissao), valorChapa: valorChapaManual + chapaImportada,
+    valorAbastecimento: abastecimentosVinculados.length ? valorAbastecimentoVinculado : number(item.valorAbastecimento), abastecimentoId: item.abastecimentoId ?? null, valorComissao: number(item.valorComissao), valorChapa: valorChapaManual + chapaImportada,
     valorMulta: number(item.valorMulta), custoExtraTag: String(item.custoExtraTag || ""), valorCustoExtra: number(item.valorCustoExtra),
     despesasExtrato: despesas.map((x: any) => ({ ...x, valor: number(x.valor), data: dateOnly(x.data), createdAt: created(x.createdAt) })),
     kmSaida: item.kmSaida == null ? null : number(item.kmSaida), kmChegada: item.kmChegada == null ? null : number(item.kmChegada),
@@ -514,7 +520,14 @@ export const viagensService = {
     return rows.map((x) => ({ ...x, valor: number(x.valor), data: dateOnly(x.data), createdAt: created(x.createdAt) }));
   },
   async rentabilidade(id: string) {
-    const viagem = await prisma.viagem.findUnique({ where: { id } });
+    const viagem = await prisma.viagem.findUnique({
+      where: { id },
+      include: {
+        abastecimentosVinculados: {
+          include: { abastecimento: { select: { valorTotal: true } } },
+        },
+      },
+    });
     if (!viagem) throw new AppError(404, "Viagem não encontrada.");
 
     const lancamentos = await prisma.lancamentoFinanceiro.findMany({
@@ -523,7 +536,12 @@ export const viagensService = {
     });
 
     const frete = number(viagem.valorFrete);
-    const combustivelReal = number(viagem.valorAbastecimento);
+    const combustivelReal = viagem.abastecimentosVinculados.length
+      ? viagem.abastecimentosVinculados.reduce(
+          (total, link) => total + number(link.abastecimento?.valorTotal ?? link.valorVinculado),
+          0,
+        )
+      : number(viagem.valorAbastecimento);
     const extrato = await prisma.viagemDespesaExtrato.findMany({ where: { viagemId: id }, select: { tipo: true, valor: true } });
     const pedagioImportado = extrato.filter((x) => x.tipo === "PEDAGIO").reduce((s, x) => s + number(x.valor), 0);
     const chapaImportada = extrato.filter((x) => x.tipo === "CHAPA").reduce((s, x) => s + number(x.valor), 0);
