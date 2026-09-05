@@ -246,7 +246,7 @@ export const viagemBody = z.object({
   dataManifesto: dateOnly, cidadeOrigem: z.string().trim().max(160).optional().default(""), cidadeEntrega: text(), rotas: z.array(text()).default([]),
   distanciaKm: money, kmSaida: z.coerce.number().finite().min(0).optional().nullable(), kmChegada: z.coerce.number().finite().min(0).optional().nullable(),
   dataSaida: z.string().optional().nullable().or(z.literal("")), previsaoChegada: z.string().optional().nullable().or(z.literal("")), dataChegada: z.string().optional().nullable().or(z.literal("")),
-  valorPedagio: money, valorDiaria: money, valorAbastecimento: money, valorChapa: money, valorMulta: money.optional().default(0), custoExtraTag: z.string().trim().max(120).optional().default(""), valorCustoExtra: money.optional().default(0), observacoes: z.string().trim().max(5000).optional().default(""), createdAt: z.string().optional(),
+  valorPedagio: money, valorDiaria: money, valorAbastecimento: money, abastecimentoId: id.optional().nullable(), valorComissao: money.optional().default(0), valorChapa: money, valorMulta: money.optional().default(0), custoExtraTag: z.string().trim().max(120).optional().default(""), valorCustoExtra: money.optional().default(0), observacoes: z.string().trim().max(5000).optional().default(""), createdAt: z.string().optional(),
 });
 export const fechamentoBody = z.object({
   id: id.optional(), motoristaId: id, dataInicio: dateOnly, dataFim: dateOnly,

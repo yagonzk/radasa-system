@@ -462,6 +462,8 @@ model Viagem {
   valorPedagio       Decimal   @db.Decimal(14, 2)
   valorDiaria        Decimal   @db.Decimal(14, 2)
   valorAbastecimento Decimal   @db.Decimal(14, 2)
+  abastecimentoId   String?
+  valorComissao     Decimal   @default(0) @db.Decimal(14, 2)
   valorChapa         Decimal   @db.Decimal(14, 2)
   valorMulta         Decimal   @default(0) @db.Decimal(14, 2)
   custoExtraTag      String    @default("")
@@ -470,9 +472,11 @@ model Viagem {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   motorista          Motorista @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
+  abastecimento      Abastecimento? @relation(fields: [abastecimentoId], references: [id], onDelete: SetNull)
   despesasExtrato    ViagemDespesaExtrato[]
 
   @@index([motoristaId])
+  @@index([abastecimentoId])
   @@index([clienteId])
   @@index([placa])
   @@index([status])
@@ -701,6 +705,7 @@ model Abastecimento {
   cliente                   Cliente                @relation(fields: [clienteId], references: [id], onDelete: Restrict)
   veiculo                   Veiculo                @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
   produtos                  AbastecimentoProduto[]
+  viagens                   Viagem[]
 
   @@index([clienteId])
   @@index([veiculoId])

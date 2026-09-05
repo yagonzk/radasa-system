@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
-import { useViagens, useMotoristas, useVeiculos, type Motorista, type Veiculo, type Viagem } from "@/lib/store";
+import { useViagens, useMotoristas, useVeiculos, useAbastecimentos, useLocais, type Motorista, type Veiculo, type Viagem } from "@/lib/store";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 import { api } from "@/lib/api";
 import { extrairTextoPdf, type PdfTextProgress } from "@/lib/pdfText";
@@ -83,7 +83,7 @@ const viagemColumns: Array<{
 ];
 
 function viagemTotalCusto(viagem: Viagem) {
-  return viagem.valorAbastecimento + viagem.valorPedagio + viagem.valorDiaria + viagem.valorChapa + Number(viagem.valorMulta || 0) + Number(viagem.valorCustoExtra || 0);
+  return viagem.valorAbastecimento + viagem.valorPedagio + viagem.valorDiaria + viagem.valorChapa + Number(viagem.valorMulta || 0) + Number(viagem.valorCustoExtra || 0) + Number(viagem.valorComissao || 0);
 }
 
 function viagemCustoPorKm(viagem: Viagem) {
@@ -93,6 +93,10 @@ function viagemCustoPorKm(viagem: Viagem) {
 
 function viagemLucroBruto(viagem: Viagem) {
   return viagem.valorFrete - viagemTotalCusto(viagem);
+}
+
+function normalizeCidadeLookup(value: string) {
+  return normalizeLookup(value).replace(/\s+(MT|PA)$/, "").trim();
 }
 
 function formatKm(value: number) {
@@ -327,6 +331,8 @@ export default function Viagens() {
   const [activeColumnFilter, setActiveColumnFilter] = useState<ViagemFilterKey | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState("");
   const { items: veiculos } = useVeiculos();
+  const { items: abastecimentos } = useAbastecimentos();
+  const { items: locais } = useLocais();
 
   // Form state
   const [placa, setPlaca] = useState("");
@@ -344,6 +350,7 @@ export default function Viagens() {
   const rotaCalculationRun = useRef(0);
   const [valorPedagio, setValorPedagio] = useState("");
   const [valorDiaria, setValorDiaria] = useState("");
+  const [abastecimentoId, setAbastecimentoId] = useState("");
   const [valorChapa, setValorChapa] = useState("");
   const [valorMulta, setValorMulta] = useState("");
   const [valorCustoExtra, setValorCustoExtra] = useState("");
@@ -379,6 +386,38 @@ export default function Viagens() {
     () => new Map(motoristas.map((motorista) => [motorista.id, motorista])),
     [motoristas],
   );
+
+  const veiculoSelecionado = useMemo(
+    () => veiculos.find((veiculo) => normalizeLookup(veiculo.placa) === normalizeLookup(placa)),
+    [placa, veiculos],
+  );
+
+  const abastecimentosDaPlaca = useMemo(() => {
+    if (!veiculoSelecionado) return [];
+    const manifestoMs = dataManifesto ? new Date(`${dataManifesto}T00:00:00`).getTime() : 0;
+    return abastecimentos
+      .filter((item) => item.veiculoId === veiculoSelecionado.id)
+      .sort((a, b) => {
+        if (manifestoMs) {
+          const da = Math.abs(new Date(`${a.dataEmissao}T00:00:00`).getTime() - manifestoMs);
+          const db = Math.abs(new Date(`${b.dataEmissao}T00:00:00`).getTime() - manifestoMs);
+          if (da !== db) return da - db;
+        }
+        return b.dataEmissao.localeCompare(a.dataEmissao);
+      });
+  }, [abastecimentos, dataManifesto, veiculoSelecionado]);
+
+  const abastecimentoSelecionado = useMemo(
+    () => abastecimentos.find((item) => item.id === abastecimentoId) ?? null,
+    [abastecimentoId, abastecimentos],
+  );
+
+  const localComissao = useMemo(
+    () => locais.find((local) => normalizeCidadeLookup(local.cidade) === normalizeCidadeLookup(cidadeEntrega)),
+    [cidadeEntrega, locais],
+  );
+  const valorComissaoAutomatica = Number(localComissao?.valorComissao ?? 0);
+  const valorAbastecimentoSelecionado = Number(abastecimentoSelecionado?.valorTotal ?? 0);
 
 
   useEffect(() => {
@@ -489,6 +528,9 @@ export default function Viagens() {
     // A placa e o motorista da viagem são independentes.
     // Alterar a placa não deve sobrescrever o motorista escolhido manualmente.
     setPlaca(novaPlaca);
+    const veiculo = veiculos.find((item) => normalizeLookup(item.placa) === normalizeLookup(novaPlaca));
+    const selecionado = abastecimentos.find((item) => item.id === abastecimentoId);
+    if (selecionado && selecionado.veiculoId !== veiculo?.id) setAbastecimentoId("");
   };
 
   const handleOpenCreate = () => {
@@ -523,6 +565,7 @@ export default function Viagens() {
     setDistanciaKm(String(v.distanciaKm));
     setValorPedagio(String(v.valorPedagioManual ?? v.valorPedagio));
     setValorDiaria(String(v.valorDiaria));
+    setAbastecimentoId(v.abastecimentoId ?? "");
     setValorChapa(String(v.valorChapaManual ?? v.valorChapa));
     setValorMulta(String(v.valorMulta ?? 0));
     setValorCustoExtra(String(v.valorCustoExtra ?? 0));
@@ -543,6 +586,7 @@ export default function Viagens() {
     setTrechosRota([]);
     setValorPedagio("");
     setValorDiaria("");
+    setAbastecimentoId("");
     setValorChapa("");
     setValorMulta("");
     setValorCustoExtra("");
@@ -694,7 +738,9 @@ export default function Viagens() {
       distanciaKm: parseFloat(distanciaKm) || 0,
       valorPedagio: parseFloat(valorPedagio) || 0,
       valorDiaria: parseFloat(valorDiaria) || 0,
-      valorAbastecimento: 0,
+      abastecimentoId: abastecimentoId || null,
+      valorAbastecimento: valorAbastecimentoSelecionado,
+      valorComissao: valorComissaoAutomatica,
       valorChapa: parseFloat(valorChapa) || 0,
       valorMulta: parseFloat(valorMulta) || 0,
       custoExtraTag: "",
@@ -1287,6 +1333,31 @@ export default function Viagens() {
               </div>
             )}
 
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Selecionar abastecimento</Label>
+                <Select value={abastecimentoId || "SEM_ABASTECIMENTO"} onValueChange={(value) => setAbastecimentoId(value === "SEM_ABASTECIMENTO" ? "" : value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um abastecimento da placa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SEM_ABASTECIMENTO">Sem abastecimento vinculado</SelectItem>
+                    {abastecimentosDaPlaca.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {formatDate(item.dataEmissao)} · NF {item.numeroNfe || "—"} · {formatBRL(item.valorTotal)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Somente abastecimentos já cadastrados para a placa selecionada. Este valor não será duplicado no DRE Operacional.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Comissão automática (R$)</Label>
+                <Input value={valorComissaoAutomatica ? valorComissaoAutomatica.toFixed(2) : "0.00"} readOnly className="bg-muted/40" />
+                <p className="text-xs text-muted-foreground">{localComissao ? `Calculada pela última cidade: ${cidadeEntrega}. Não entra no DRE Operacional.` : cidadeEntrega ? "Comissão não cadastrada para este destino." : "Informe a cidade de entrega para calcular a comissão."}</p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Diária (R$)</Label>
@@ -1337,7 +1408,8 @@ export default function Viagens() {
                 </span>
                 <span className="font-display text-lg font-bold text-primary">
                   {formatBRL(
-                    parseFloat(valorPedagio || "0") +
+                    valorAbastecimentoSelecionado + valorComissaoAutomatica +
+                      parseFloat(valorPedagio || "0") +
                       parseFloat(valorDiaria || "0") +
                       parseFloat(valorChapa || "0") + parseFloat(valorMulta || "0") + parseFloat(valorCustoExtra || "0")
                   )}
@@ -1351,7 +1423,7 @@ export default function Viagens() {
                   </span>
                   <span className="font-display text-lg font-bold text-foreground">
                     {formatBRL(
-                      (parseFloat(valorPedagio || "0") +
+                      (valorAbastecimentoSelecionado + valorComissaoAutomatica + parseFloat(valorPedagio || "0") +
                         parseFloat(valorDiaria || "0") +
                         parseFloat(valorChapa || "0") + parseFloat(valorMulta || "0") + parseFloat(valorCustoExtra || "0")) /
                         parseFloat(distanciaKm || "1")
@@ -1361,7 +1433,7 @@ export default function Viagens() {
               )}
 
               <div className={`flex items-center justify-between border-t border-border pt-2 ${
-                (parseFloat(valorFrete || "0") - (parseFloat(valorPedagio || "0") + parseFloat(valorDiaria || "0") + parseFloat(valorChapa || "0") + parseFloat(valorMulta || "0") + parseFloat(valorCustoExtra || "0"))) >= 0
+                (parseFloat(valorFrete || "0") - (valorAbastecimentoSelecionado + valorComissaoAutomatica + parseFloat(valorPedagio || "0") + parseFloat(valorDiaria || "0") + parseFloat(valorChapa || "0") + parseFloat(valorMulta || "0") + parseFloat(valorCustoExtra || "0"))) >= 0
                   ? 'text-green-600 dark:text-green-400'
                   : 'text-red-600 dark:text-red-400'
               }`}>
@@ -1371,6 +1443,7 @@ export default function Viagens() {
                 <span className="font-display text-lg font-bold">
                   {formatBRL(
                     parseFloat(valorFrete || "0") - (
+                      valorAbastecimentoSelecionado + valorComissaoAutomatica +
                       parseFloat(valorPedagio || "0") +
                       parseFloat(valorDiaria || "0") +
                       parseFloat(valorChapa || "0") + parseFloat(valorMulta || "0") + parseFloat(valorCustoExtra || "0")
@@ -1471,6 +1544,10 @@ export default function Viagens() {
                     <div className="flex justify-between">
                       <span>Combustível</span>
                       <span className="font-medium">{formatBRL(viewingViagem.valorAbastecimento)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Comissão</span>
+                      <span className="font-medium">{formatBRL(viewingViagem.valorComissao ?? 0)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Pedágio</span>

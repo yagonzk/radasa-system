@@ -3,6 +3,7 @@ import { AppError } from "../utils/app-error.js";
 import { parseDateOnly } from "../utils/date.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
 import { createHash } from "node:crypto";
+import { valorComissaoPorDestino } from "../utils/comissao.js";
 
 const serialize = (item: any) => {
   const despesas = Array.isArray(item.despesasExtrato) ? item.despesasExtrato : [];
@@ -16,7 +17,7 @@ const serialize = (item: any) => {
     valorPedagioManual, valorChapaManual,
     valorPedagioImportado: pedagioImportado, valorChapaImportado: chapaImportada,
     valorPedagio: valorPedagioManual + pedagioImportado, valorDiaria: number(item.valorDiaria),
-    valorAbastecimento: number(item.valorAbastecimento), valorChapa: valorChapaManual + chapaImportada,
+    valorAbastecimento: number(item.valorAbastecimento), abastecimentoId: item.abastecimentoId ?? null, valorComissao: number(item.valorComissao), valorChapa: valorChapaManual + chapaImportada,
     valorMulta: number(item.valorMulta), custoExtraTag: String(item.custoExtraTag || ""), valorCustoExtra: number(item.valorCustoExtra),
     despesasExtrato: despesas.map((x: any) => ({ ...x, valor: number(x.valor), data: dateOnly(x.data), createdAt: created(x.createdAt) })),
     kmSaida: item.kmSaida == null ? null : number(item.kmSaida), kmChegada: item.kmChegada == null ? null : number(item.kmChegada),
@@ -185,6 +186,38 @@ const optionalMoney = (row: any, keys: string[]) => {
   return null;
 };
 
+
+const normalizeCidade = (value: unknown) => normalizeText(value).replace(/\s+(MT|PA)$/, "").trim();
+
+async function resolverCustosAutomaticosViagem(input: any, atual?: any) {
+  const abastecimentoId = Object.prototype.hasOwnProperty.call(input, "abastecimentoId")
+    ? (input.abastecimentoId || null)
+    : (atual?.abastecimentoId ?? null);
+  const placa = String(input.placa ?? atual?.placa ?? "");
+  let valorAbastecimento = 0;
+
+  if (abastecimentoId) {
+    const abastecimento = await prisma.abastecimento.findUnique({
+      where: { id: String(abastecimentoId) },
+      select: { id: true, valorTotal: true, veiculo: { select: { placa: true } } },
+    });
+    if (!abastecimento) throw new AppError(404, "Abastecimento selecionado não encontrado.");
+    if (normalizePlate(abastecimento.veiculo.placa) !== normalizePlate(placa)) {
+      throw new AppError(409, "O abastecimento selecionado pertence a outra placa.");
+    }
+    valorAbastecimento = number(abastecimento.valorTotal);
+  }
+
+  const cidadeEntrega = String(input.cidadeEntrega ?? atual?.cidadeEntrega ?? "");
+  const locais = await prisma.local.findMany({ select: { cidade: true, uf: true, valorComissao: true } });
+  const local = locais.find((item) => normalizeCidade(item.cidade) === normalizeCidade(cidadeEntrega));
+  const valorComissao = local
+    ? valorComissaoPorDestino({ cidade: local.cidade, uf: local.uf, valorLegado: number(local.valorComissao) })
+    : 0;
+
+  return { abastecimentoId, valorAbastecimento, valorComissao };
+}
+
 const fingerprintExpense = (row: any, tipo: string) => createHash("sha256")
   .update([row.data, row.hora, row.colaborador, row.descricao, parseMoneyBR(row.valor).toFixed(2), tipo].join("|"))
   .digest("hex");
@@ -199,17 +232,19 @@ export const viagensService = {
     while (await prisma.viagem.findFirst({ where: { codigo }, select: { id: true } })) {
       codigo = `RAD-${String(Number(codigo.replace(/\D/g, "")) + 1).padStart(5, "0")}`;
     }
-    const item=await prisma.viagem.create({ data: { ...data(input), codigo } });
+    const custosAutomaticos = await resolverCustosAutomaticosViagem(input);
+    const item=await prisma.viagem.create({ data: { ...data(input), ...custosAutomaticos, codigo } });
     const veiculo=await prisma.veiculo.findFirst({where:{placa:input.placa}});if(veiculo&&["CARREGANDO","EM_TRANSITO"].includes(item.status))await prisma.veiculo.update({where:{id:veiculo.id},data:{situacaoOperacional:"EM_VIAGEM"}}).catch(()=>undefined);
     return serialize(item);
   },
   async update(id: string, input: any) {
-    const atual = await prisma.viagem.findUnique({ where: { id }, select: { motoristaId: true } });
+    const atual = await prisma.viagem.findUnique({ where: { id }, select: { motoristaId: true, placa: true, cidadeEntrega: true, abastecimentoId: true } });
     if (!atual) throw new AppError(404, "Viagem não encontrada.");
     const motoristaId = input.motoristaId ?? atual.motoristaId;
     await ensureMotoristaDisponivel(motoristaId, id);
+    const custosAutomaticos = await resolverCustosAutomaticosViagem(input, atual);
     const { createdAt, id: _id, clienteId: _clienteId, ...rest } = data(input);
-    const item = await prisma.viagem.update({ where: { id }, data: rest });
+    const item = await prisma.viagem.update({ where: { id }, data: { ...rest, ...custosAutomaticos } });
     const veiculo = await prisma.veiculo.findFirst({ where: { placa: item.placa } });
     if (veiculo) {
       const sit = ["CARREGANDO", "EM_TRANSITO"].includes(item.status)
@@ -394,18 +429,18 @@ export const viagensService = {
     });
 
     const frete = number(viagem.valorFrete);
-    const veiculos=await prisma.veiculo.findMany({select:{id:true,placa:true}});const norm=(v:any)=>String(v||"").replace(/[^A-Z0-9]/gi,"").toUpperCase();const veiculo=veiculos.find(v=>norm(v.placa)===norm(viagem.placa));
-    let combustivelReal=0;if(veiculo){const inicio=viagem.dataSaida?new Date(viagem.dataSaida):new Date(`${dateOnly(viagem.dataManifesto)}T00:00:00Z`);const fim=viagem.dataChegada?new Date(viagem.dataChegada):new Date(inicio.getTime()+7*86400000);const abs=await prisma.abastecimento.findMany({where:{veiculoId:veiculo.id,dataEmissao:{gte:inicio,lte:fim}},select:{valorTotal:true}});combustivelReal=abs.reduce((a,x)=>a+number(x.valorTotal),0)}
+    const combustivelReal = number(viagem.valorAbastecimento);
     const extrato = await prisma.viagemDespesaExtrato.findMany({ where: { viagemId: id }, select: { tipo: true, valor: true } });
     const pedagioImportado = extrato.filter((x) => x.tipo === "PEDAGIO").reduce((s, x) => s + number(x.valor), 0);
     const chapaImportada = extrato.filter((x) => x.tipo === "CHAPA").reduce((s, x) => s + number(x.valor), 0);
     const custosBase = [
-      { categoria: "Combustível", valor: combustivelReal || number(viagem.valorAbastecimento) },
+      { categoria: "Combustível", valor: combustivelReal },
       { categoria: "Pedágio", valor: number(viagem.valorPedagio) + pedagioImportado },
       { categoria: "Diária", valor: number(viagem.valorDiaria) },
       { categoria: "Chapa", valor: number(viagem.valorChapa) + chapaImportada },
       { categoria: "Multas", valor: number(viagem.valorMulta) },
       { categoria: "Custo Extra", valor: number(viagem.valorCustoExtra) },
+      { categoria: "Comissão", valor: number(viagem.valorComissao) },
     ];
     const despesasBase = custosBase.reduce((total, item) => total + item.valor, 0);
     const receitasAdicionais = lancamentos

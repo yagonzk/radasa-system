@@ -34,22 +34,23 @@ export const financeiroService={
  },
  async resumo(from?:string,to?:string){
   const range=(from||to)?{...(from?{gte:parseDateOnly(from)}:{}),...(to?{lte:parseDateOnly(to)}:{})}:undefined;
-  const [manual,viagens,romaneios,abastecimentos,fechamentos,estoque,pneus,recapagens,consertos,ordensManutencao,baixasResumo]=await Promise.all([
+  const [manual,viagens,romaneios,abastecimentos,estoque,pneus,recapagens,consertos,ordensManutencao,baixasResumo]=await Promise.all([
    prisma.lancamentoFinanceiro.findMany({where:range?{dataCompetencia:range}:undefined}),
    prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}),
    prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{produtos:{select:{valorTotal:true}}}}),
    prisma.abastecimento.findMany({where:range?{dataEmissao:range}:undefined,select:{produtos:{select:{valorTotal:true,produto:{select:{nome:true}}}}}}),
-   prisma.fechamento.findMany({where:range?{dataFim:range}:undefined}), prisma.estoqueMovimentacao.findMany({where:{tipo:"ENTRADA",...(range?{data:range}:{})},include:{produto:{select:{categoria:true}}}}), prisma.pneu.findMany({where:range?{dataCompra:range}:undefined}), prisma.pneuRecapagem.findMany({where:range?{dataEnvio:range}:undefined}), prisma.pneuConserto.findMany({where:range?{data:range}:undefined}), prisma.ordemServico.findMany({where:{status:"CONCLUIDA",...(range?{dataConclusao:range}:{})},select:{numero:true,valorPecas:true,valorMaoObra:true,valorOutros:true,desconto:true}}), prisma.baixaFinanceira.findMany()
+   prisma.estoqueMovimentacao.findMany({where:{tipo:"ENTRADA",...(range?{data:range}:{})},include:{produto:{select:{categoria:true}}}}), prisma.pneu.findMany({where:range?{dataCompra:range}:undefined}), prisma.pneuRecapagem.findMany({where:range?{dataEnvio:range}:undefined}), prisma.pneuConserto.findMany({where:range?{data:range}:undefined}), prisma.ordemServico.findMany({where:{status:"CONCLUIDA",...(range?{dataConclusao:range}:{})},select:{numero:true,valorPecas:true,valorMaoObra:true,valorOutros:true,desconto:true}}), prisma.baixaFinanceira.findMany()
   ]);
   const categorias:Record<string,number>={}; const add=(k:string,v:any)=>categorias[k]=(categorias[k]||0)+number(v);
   let receitasAutomaticas=0,despesasAutomaticas=0;
   // Receita de frete da DRE vem exclusivamente dos Romaneios.
   for(const m of romaneios){for(const p of m.produtos){const valor=number(p.valorTotal);receitasAutomaticas+=valor;add("Receita de fretes",valor)}}
-  // Custos operacionais da viagem continuam vindo do Acerto de Viagem, sem usar valorAbastecimento manual. Custo Extra do fechamento não entra no DRE Operacional.
+  // Custos operacionais da viagem continuam vindo do Acerto de Viagem, sem usar abastecimento, comissão ou custo extra: esses três não entram no DRE Operacional.
   for(const v of viagens){for(const [k,val] of [["Pedágios",v.valorPedagio],["Diárias",v.valorDiaria],["Chapas",v.valorChapa],["Multas",v.valorMulta]] as const){despesasAutomaticas+=number(val);add(k,val)}}
   // Combustível é calculado pelos itens reais dos Abastecimentos: Diesel separado de ARLA.
   for(const x of abastecimentos){for(const p of x.produtos){const tipo=classifyFuelProduct(p.produto.nome);if(tipo==="DIESEL"){despesasAutomaticas+=number(p.valorTotal);add("Abastecimento",p.valorTotal)}else if(tipo==="ARLA"){despesasAutomaticas+=number(p.valorTotal);add("ARLA",p.valorTotal)}}}
-  for(const x of fechamentos){despesasAutomaticas+=number(x.valorTotal);add("Comissões",x.valorTotal)} for(const x of estoque){despesasAutomaticas+=number(x.valorTotal);add(x.produto.categoria||"Almoxarifado",x.valorTotal)} for(const x of pneus){despesasAutomaticas+=number(x.valorCompra);add("Pneus",x.valorCompra)} for(const x of recapagens){despesasAutomaticas+=number(x.valor);add("Recapagem",x.valor)} for(const x of consertos){despesasAutomaticas+=number(x.valor);add("Conserto de pneus",x.valor)}
+  // Comissão do Acerto/Fechamento de Viagem é custo interno da viagem e não compõe o DRE Operacional.
+  for(const x of estoque){despesasAutomaticas+=number(x.valorTotal);add(x.produto.categoria||"Almoxarifado",x.valorTotal)} for(const x of pneus){despesasAutomaticas+=number(x.valorCompra);add("Pneus",x.valorCompra)} for(const x of recapagens){despesasAutomaticas+=number(x.valor);add("Recapagem",x.valor)} for(const x of consertos){despesasAutomaticas+=number(x.valor);add("Conserto de pneus",x.valor)}
   // Manutenção no DRE vem diretamente das OS concluídas. Peças continuam separadas pelo Almoxarifado; aqui entram apenas mão de obra/outros, líquido do desconto.
   for(const os of ordensManutencao){const valor=maintenanceDreValue(os);if(valor>0){despesasAutomaticas+=valor;add("Manutenção",valor)}}
   const numerosOsManutencao=new Set(ordensManutencao.map(os=>os.numero));
