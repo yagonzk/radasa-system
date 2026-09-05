@@ -350,7 +350,9 @@ export default function Viagens() {
   const rotaCalculationRun = useRef(0);
   const [valorPedagio, setValorPedagio] = useState("");
   const [valorDiaria, setValorDiaria] = useState("");
-  const [abastecimentoId, setAbastecimentoId] = useState("");
+  const [abastecimentoIds, setAbastecimentoIds] = useState<string[]>([]);
+  const [abastecimentoBusca, setAbastecimentoBusca] = useState("");
+  const [abastecimentoPickerOpen, setAbastecimentoPickerOpen] = useState(false);
   const [valorChapa, setValorChapa] = useState("");
   const [valorMulta, setValorMulta] = useState("");
   const [valorCustoExtra, setValorCustoExtra] = useState("");
@@ -407,17 +409,41 @@ export default function Viagens() {
       });
   }, [abastecimentos, dataManifesto, veiculoSelecionado]);
 
-  const abastecimentoSelecionado = useMemo(
-    () => abastecimentos.find((item) => item.id === abastecimentoId) ?? null,
-    [abastecimentoId, abastecimentos],
+  const abastecimentosSelecionados = useMemo(
+    () => abastecimentoIds.map((id) => abastecimentos.find((item) => item.id === id)).filter(Boolean),
+    [abastecimentoIds, abastecimentos],
   );
+
+  const abastecimentosFiltrados = useMemo(() => {
+    const query = normalizeLookup(abastecimentoBusca);
+    return abastecimentosDaPlaca
+      .filter((item) => !abastecimentoIds.includes(item.id))
+      .filter((item) => {
+        if (!query) return true;
+        const texto = [
+          item.numeroNfe, item.serieNfe, item.chaveNfe, item.emitenteRazaoSocial,
+          item.emitenteNomeFantasia, item.emitenteCnpj, item.dataEmissao, item.valorTotal, item.placaXml,
+        ].join(" ");
+        return normalizeLookup(texto).includes(query);
+      })
+      .slice(0, 40);
+  }, [abastecimentoBusca, abastecimentoIds, abastecimentosDaPlaca]);
+
+  const adicionarAbastecimento = (id: string) => {
+    setAbastecimentoIds((atuais) => atuais.includes(id) ? atuais : [...atuais, id]);
+    setAbastecimentoBusca("");
+  };
+
+  const removerAbastecimento = (id: string) => {
+    setAbastecimentoIds((atuais) => atuais.filter((item) => item !== id));
+  };
 
   const localComissao = useMemo(
     () => locais.find((local) => normalizeCidadeLookup(local.cidade) === normalizeCidadeLookup(cidadeEntrega)),
     [cidadeEntrega, locais],
   );
   const valorComissaoAutomatica = Number(localComissao?.valorComissao ?? 0);
-  const valorAbastecimentoSelecionado = Number(abastecimentoSelecionado?.valorTotal ?? 0);
+  const valorAbastecimentoSelecionado = abastecimentosSelecionados.reduce((total, item) => total + Number(item?.valorTotal ?? 0), 0);
 
 
   useEffect(() => {
@@ -529,8 +555,10 @@ export default function Viagens() {
     // Alterar a placa não deve sobrescrever o motorista escolhido manualmente.
     setPlaca(novaPlaca);
     const veiculo = veiculos.find((item) => normalizeLookup(item.placa) === normalizeLookup(novaPlaca));
-    const selecionado = abastecimentos.find((item) => item.id === abastecimentoId);
-    if (selecionado && selecionado.veiculoId !== veiculo?.id) setAbastecimentoId("");
+    setAbastecimentoIds((atuais) => atuais.filter((id) => {
+      const selecionado = abastecimentos.find((item) => item.id === id);
+      return selecionado?.veiculoId === veiculo?.id;
+    }));
   };
 
   const handleOpenCreate = () => {
@@ -565,7 +593,8 @@ export default function Viagens() {
     setDistanciaKm(String(v.distanciaKm));
     setValorPedagio(String(v.valorPedagioManual ?? v.valorPedagio));
     setValorDiaria(String(v.valorDiaria));
-    setAbastecimentoId(v.abastecimentoId ?? "");
+    setAbastecimentoIds(v.abastecimentoIds?.length ? v.abastecimentoIds : (v.abastecimentoId ? [v.abastecimentoId] : []));
+    setAbastecimentoBusca("");
     setValorChapa(String(v.valorChapaManual ?? v.valorChapa));
     setValorMulta(String(v.valorMulta ?? 0));
     setValorCustoExtra(String(v.valorCustoExtra ?? 0));
@@ -586,7 +615,8 @@ export default function Viagens() {
     setTrechosRota([]);
     setValorPedagio("");
     setValorDiaria("");
-    setAbastecimentoId("");
+    setAbastecimentoIds([]);
+    setAbastecimentoBusca("");
     setValorChapa("");
     setValorMulta("");
     setValorCustoExtra("");
@@ -738,7 +768,8 @@ export default function Viagens() {
       distanciaKm: parseFloat(distanciaKm) || 0,
       valorPedagio: parseFloat(valorPedagio) || 0,
       valorDiaria: parseFloat(valorDiaria) || 0,
-      abastecimentoId: abastecimentoId || null,
+      abastecimentoIds,
+      abastecimentoId: abastecimentoIds[0] || null,
       valorAbastecimento: valorAbastecimentoSelecionado,
       valorComissao: valorComissaoAutomatica,
       valorChapa: parseFloat(valorChapa) || 0,
@@ -1335,21 +1366,70 @@ export default function Viagens() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Selecionar abastecimento</Label>
-                <Select value={abastecimentoId || "SEM_ABASTECIMENTO"} onValueChange={(value) => setAbastecimentoId(value === "SEM_ABASTECIMENTO" ? "" : value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um abastecimento da placa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="SEM_ABASTECIMENTO">Sem abastecimento vinculado</SelectItem>
-                    {abastecimentosDaPlaca.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {formatDate(item.dataEmissao)} · NF {item.numeroNfe || "—"} · {formatBRL(item.valorTotal)}
-                      </SelectItem>
+                <Label className="text-sm font-medium">Abastecimentos vinculados</Label>
+                <Popover open={abastecimentoPickerOpen} onOpenChange={setAbastecimentoPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" className="w-full justify-between font-normal">
+                      <span className="truncate">{abastecimentoIds.length ? `${abastecimentoIds.length} nota(s) vinculada(s)` : "Pesquisar e vincular abastecimentos"}</span>
+                      <Search className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[min(560px,calc(100vw-2rem))] p-0" align="start">
+                    <div className="border-b border-border p-3">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          autoFocus
+                          value={abastecimentoBusca}
+                          onChange={(event) => setAbastecimentoBusca(event.target.value)}
+                          placeholder="Pesquisar abastecimento por NF, posto, CNPJ, chave, data ou valor..."
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto p-2">
+                      {!veiculoSelecionado ? (
+                        <div className="px-3 py-6 text-center text-sm text-muted-foreground">Selecione primeiro a placa da viagem.</div>
+                      ) : abastecimentosFiltrados.length ? abastecimentosFiltrados.map((item) => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          onClick={() => adicionarAbastecimento(item.id)}
+                          className="flex w-full items-start justify-between gap-3 rounded-md px-3 py-2.5 text-left hover:bg-accent"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-medium">NF {item.numeroNfe || "—"} · {item.emitenteNomeFantasia || item.emitenteRazaoSocial || "Posto não informado"}</div>
+                            <div className="mt-0.5 text-xs text-muted-foreground">{formatDate(item.dataEmissao)}{item.emitenteCnpj ? ` · ${item.emitenteCnpj}` : ""}</div>
+                          </div>
+                          <span className="shrink-0 font-semibold">{formatBRL(item.valorTotal)}</span>
+                        </button>
+                      )) : (
+                        <div className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhum abastecimento encontrado para esta pesquisa.</div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {abastecimentosSelecionados.length > 0 && (
+                  <div className="space-y-2 rounded-md border border-border bg-muted/20 p-2">
+                    {abastecimentosSelecionados.map((item) => item && (
+                      <div key={item.id} className="flex items-center justify-between gap-3 rounded-md bg-background px-3 py-2 text-sm">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">NF {item.numeroNfe || "—"} · {item.emitenteNomeFantasia || item.emitenteRazaoSocial || "Posto não informado"}</div>
+                          <div className="text-xs text-muted-foreground">{formatDate(item.dataEmissao)} · {formatBRL(item.valorTotal)}</div>
+                        </div>
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removerAbastecimento(item.id)} title="Remover abastecimento">
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
                     ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Somente abastecimentos já cadastrados para a placa selecionada. Este valor não será duplicado no DRE Operacional.</p>
+                    <div className="flex items-center justify-between border-t border-border px-1 pt-2 text-sm font-semibold">
+                      <span>Total dos abastecimentos</span>
+                      <span>{formatBRL(valorAbastecimentoSelecionado)}</span>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Você pode vincular várias notas da mesma placa. Elas entram no custo da viagem, mas não são somadas novamente no DRE Operacional.</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Comissão automática (R$)</Label>

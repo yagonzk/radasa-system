@@ -11,8 +11,30 @@ const serialize = (item: any) => {
   const chapaImportada = despesas.filter((x: any) => x.tipo === "CHAPA").reduce((s: number, x: any) => s + number(x.valor), 0);
   const valorPedagioManual = number(item.valorPedagio);
   const valorChapaManual = number(item.valorChapa);
+  const abastecimentosVinculados = Array.isArray(item.abastecimentosVinculados)
+    ? item.abastecimentosVinculados.map((link: any) => ({
+        abastecimentoId: link.abastecimentoId,
+        valorVinculado: number(link.valorVinculado),
+        abastecimento: link.abastecimento ? {
+          id: link.abastecimento.id,
+          numeroNfe: link.abastecimento.numeroNfe,
+          serieNfe: link.abastecimento.serieNfe,
+          chaveNfe: link.abastecimento.chaveNfe,
+          emitenteRazaoSocial: link.abastecimento.emitenteRazaoSocial,
+          emitenteNomeFantasia: link.abastecimento.emitenteNomeFantasia,
+          emitenteCnpj: link.abastecimento.emitenteCnpj,
+          valorTotal: number(link.abastecimento.valorTotal),
+          dataEmissao: dateOnly(link.abastecimento.dataEmissao),
+        } : undefined,
+      }))
+    : [];
+  const abastecimentoIds = abastecimentosVinculados.length
+    ? abastecimentosVinculados.map((link: any) => link.abastecimentoId)
+    : (item.abastecimentoId ? [item.abastecimentoId] : []);
   return {
     ...item,
+    abastecimentoIds,
+    abastecimentosVinculados,
     valorFrete: number(item.valorFrete), distanciaKm: number(item.distanciaKm),
     valorPedagioManual, valorChapaManual,
     valorPedagioImportado: pedagioImportado, valorChapaImportado: chapaImportada,
@@ -190,23 +212,38 @@ const optionalMoney = (row: any, keys: string[]) => {
 const normalizeCidade = (value: unknown) => normalizeText(value).replace(/\s+(MT|PA)$/, "").trim();
 
 async function resolverCustosAutomaticosViagem(input: any, atual?: any) {
-  const abastecimentoId = Object.prototype.hasOwnProperty.call(input, "abastecimentoId")
-    ? (input.abastecimentoId || null)
-    : (atual?.abastecimentoId ?? null);
-  const placa = String(input.placa ?? atual?.placa ?? "");
-  let valorAbastecimento = 0;
+  const inputTemLista = Object.prototype.hasOwnProperty.call(input, "abastecimentoIds");
+  const inputTemLegado = Object.prototype.hasOwnProperty.call(input, "abastecimentoId");
+  const atuais = Array.isArray(atual?.abastecimentosVinculados)
+    ? atual.abastecimentosVinculados.map((link: any) => String(link.abastecimentoId))
+    : (atual?.abastecimentoId ? [String(atual.abastecimentoId)] : []);
 
-  if (abastecimentoId) {
-    const abastecimento = await prisma.abastecimento.findUnique({
-      where: { id: String(abastecimentoId) },
-      select: { id: true, valorTotal: true, veiculo: { select: { placa: true } } },
-    });
-    if (!abastecimento) throw new AppError(404, "Abastecimento selecionado não encontrado.");
-    if (normalizePlate(abastecimento.veiculo.placa) !== normalizePlate(placa)) {
-      throw new AppError(409, "O abastecimento selecionado pertence a outra placa.");
-    }
-    valorAbastecimento = number(abastecimento.valorTotal);
+  const idsBrutos = inputTemLista
+    ? input.abastecimentoIds
+    : inputTemLegado
+      ? (input.abastecimentoId ? [input.abastecimentoId] : [])
+      : atuais;
+  const abastecimentoIds = Array.from(new Set((Array.isArray(idsBrutos) ? idsBrutos : []).map((id) => String(id)).filter(Boolean)));
+  const placa = String(input.placa ?? atual?.placa ?? "");
+
+  const abastecimentosSelecionados = abastecimentoIds.length
+    ? await prisma.abastecimento.findMany({
+        where: { id: { in: abastecimentoIds } },
+        select: { id: true, valorTotal: true, veiculo: { select: { placa: true } } },
+      })
+    : [];
+
+  if (abastecimentosSelecionados.length !== abastecimentoIds.length) {
+    throw new AppError(404, "Um ou mais abastecimentos selecionados não foram encontrados.");
   }
+  const abastecimentoOutraPlaca = abastecimentosSelecionados.find(
+    (abastecimento) => normalizePlate(abastecimento.veiculo.placa) !== normalizePlate(placa),
+  );
+  if (abastecimentoOutraPlaca) {
+    throw new AppError(409, "Todos os abastecimentos selecionados devem pertencer à mesma placa da viagem.");
+  }
+
+  const valorAbastecimento = abastecimentosSelecionados.reduce((total, abastecimento) => total + number(abastecimento.valorTotal), 0);
 
   const cidadeEntrega = String(input.cidadeEntrega ?? atual?.cidadeEntrega ?? "");
   const locais = await prisma.local.findMany({ select: { cidade: true, uf: true, valorComissao: true } });
@@ -215,16 +252,31 @@ async function resolverCustosAutomaticosViagem(input: any, atual?: any) {
     ? valorComissaoPorDestino({ cidade: local.cidade, uf: local.uf, valorLegado: number(local.valorComissao) })
     : 0;
 
-  return { abastecimentoId, valorAbastecimento, valorComissao };
+  return { abastecimentoIds, abastecimentosSelecionados, valorAbastecimento, valorComissao };
 }
 
 const fingerprintExpense = (row: any, tipo: string) => createHash("sha256")
   .update([row.data, row.hora, row.colaborador, row.descricao, parseMoneyBR(row.valor).toFixed(2), tipo].join("|"))
   .digest("hex");
 
+const viagemInclude = {
+  despesasExtrato: true,
+  abastecimentosVinculados: {
+    include: {
+      abastecimento: {
+        select: {
+          id: true, numeroNfe: true, serieNfe: true, chaveNfe: true,
+          emitenteRazaoSocial: true, emitenteNomeFantasia: true, emitenteCnpj: true,
+          valorTotal: true, dataEmissao: true,
+        },
+      },
+    },
+  },
+} as const;
+
 export const viagensService = {
-  async list() { return (await prisma.viagem.findMany({ include: { despesasExtrato: true }, orderBy: { createdAt: "desc" } })).map(serialize); },
-  async get(id: string) { const item = await prisma.viagem.findUnique({ where: { id }, include: { despesasExtrato: true } }); if (!item) throw new AppError(404, "Viagem não encontrada."); return serialize(item); },
+  async list() { return (await prisma.viagem.findMany({ include: viagemInclude, orderBy: { createdAt: "desc" } })).map(serialize); },
+  async get(id: string) { const item = await prisma.viagem.findUnique({ where: { id }, include: viagemInclude }); if (!item) throw new AppError(404, "Viagem não encontrada."); return serialize(item); },
   async create(input: any) {
     await ensureMotoristaDisponivel(input.motoristaId);
     const count = await prisma.viagem.count();
@@ -233,18 +285,59 @@ export const viagensService = {
       codigo = `RAD-${String(Number(codigo.replace(/\D/g, "")) + 1).padStart(5, "0")}`;
     }
     const custosAutomaticos = await resolverCustosAutomaticosViagem(input);
-    const item=await prisma.viagem.create({ data: { ...data(input), ...custosAutomaticos, codigo } });
+    const { abastecimentoIds, abastecimentosSelecionados, ...custosViagem } = custosAutomaticos;
+    const payload = data(input);
+    delete payload.abastecimentoIds;
+    const item = await prisma.$transaction(async (tx) => {
+      const createdItem = await tx.viagem.create({
+        data: { ...payload, ...custosViagem, abastecimentoId: abastecimentoIds[0] ?? null, codigo },
+      });
+      if (abastecimentoIds.length) {
+        const valores = new Map(abastecimentosSelecionados.map((abastecimento) => [abastecimento.id, number(abastecimento.valorTotal)]));
+        await tx.viagemAbastecimento.createMany({
+          data: abastecimentoIds.map((abastecimentoId) => ({
+            viagemId: createdItem.id,
+            abastecimentoId,
+            valorVinculado: valores.get(abastecimentoId) ?? 0,
+          })),
+        });
+      }
+      return createdItem;
+    });
     const veiculo=await prisma.veiculo.findFirst({where:{placa:input.placa}});if(veiculo&&["CARREGANDO","EM_TRANSITO"].includes(item.status))await prisma.veiculo.update({where:{id:veiculo.id},data:{situacaoOperacional:"EM_VIAGEM"}}).catch(()=>undefined);
-    return serialize(item);
+    const completo = await prisma.viagem.findUnique({ where: { id: item.id }, include: viagemInclude });
+    return serialize(completo ?? item);
   },
   async update(id: string, input: any) {
-    const atual = await prisma.viagem.findUnique({ where: { id }, select: { motoristaId: true, placa: true, cidadeEntrega: true, abastecimentoId: true } });
+    const atual = await prisma.viagem.findUnique({
+      where: { id },
+      include: { abastecimentosVinculados: { select: { abastecimentoId: true } } },
+    });
     if (!atual) throw new AppError(404, "Viagem não encontrada.");
     const motoristaId = input.motoristaId ?? atual.motoristaId;
     await ensureMotoristaDisponivel(motoristaId, id);
     const custosAutomaticos = await resolverCustosAutomaticosViagem(input, atual);
+    const { abastecimentoIds, abastecimentosSelecionados, ...custosViagem } = custosAutomaticos;
     const { createdAt, id: _id, clienteId: _clienteId, ...rest } = data(input);
-    const item = await prisma.viagem.update({ where: { id }, data: { ...rest, ...custosAutomaticos } });
+    delete rest.abastecimentoIds;
+    const item = await prisma.$transaction(async (tx) => {
+      const updatedItem = await tx.viagem.update({
+        where: { id },
+        data: { ...rest, ...custosViagem, abastecimentoId: abastecimentoIds[0] ?? null },
+      });
+      await tx.viagemAbastecimento.deleteMany({ where: { viagemId: id } });
+      if (abastecimentoIds.length) {
+        const valores = new Map(abastecimentosSelecionados.map((abastecimento) => [abastecimento.id, number(abastecimento.valorTotal)]));
+        await tx.viagemAbastecimento.createMany({
+          data: abastecimentoIds.map((abastecimentoId) => ({
+            viagemId: id,
+            abastecimentoId,
+            valorVinculado: valores.get(abastecimentoId) ?? 0,
+          })),
+        });
+      }
+      return updatedItem;
+    });
     const veiculo = await prisma.veiculo.findFirst({ where: { placa: item.placa } });
     if (veiculo) {
       const sit = ["CARREGANDO", "EM_TRANSITO"].includes(item.status)
@@ -254,7 +347,8 @@ export const viagensService = {
           : veiculo.situacaoOperacional;
       await prisma.veiculo.update({ where: { id: veiculo.id }, data: { situacaoOperacional: sit } }).catch(() => undefined);
     }
-    return serialize(item);
+    const completo = await prisma.viagem.findUnique({ where: { id }, include: viagemInclude });
+    return serialize(completo ?? item);
   },
   async remove(id: string) { await prisma.viagem.delete({ where: { id } }); },
 

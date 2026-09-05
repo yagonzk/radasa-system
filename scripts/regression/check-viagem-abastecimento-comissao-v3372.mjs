@@ -13,7 +13,7 @@ assert.match(schema, /valorComissao\s+Decimal/);
 assert.match(service, /resolverCustosAutomaticosViagem/);
 assert.match(service, /abastecimentoId/);
 assert.match(service, /valorComissao/);
-assert.match(page, /Selecionar abastecimento/);
+assert.match(page, /Abastecimentos vinculados|Selecionar abastecimento/);
 assert.match(page, /Comissão automática/);
 assert.match(store, /abastecimentoId\?: string \| null/);
 assert.match(store, /valorComissao\?: number/);

@@ -473,6 +473,7 @@ model Viagem {
   updatedAt          DateTime  @updatedAt
   motorista          Motorista @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
   abastecimento      Abastecimento? @relation(fields: [abastecimentoId], references: [id], onDelete: SetNull)
+  abastecimentosVinculados ViagemAbastecimento[]
   despesasExtrato    ViagemDespesaExtrato[]
 
   @@index([motoristaId])
@@ -482,6 +483,19 @@ model Viagem {
   @@index([status])
   @@index([dataManifesto])
   @@map("viagens")
+}
+
+model ViagemAbastecimento {
+  viagemId         String
+  abastecimentoId  String
+  valorVinculado   Decimal       @db.Decimal(14, 2)
+  createdAt        DateTime      @default(now())
+  viagem           Viagem        @relation(fields: [viagemId], references: [id], onDelete: Cascade)
+  abastecimento    Abastecimento @relation(fields: [abastecimentoId], references: [id], onDelete: Cascade)
+
+  @@id([viagemId, abastecimentoId])
+  @@index([abastecimentoId])
+  @@map("viagem_abastecimentos")
 }
 
 model Fechamento {
@@ -706,6 +720,7 @@ model Abastecimento {
   veiculo                   Veiculo                @relation(fields: [veiculoId], references: [id], onDelete: Restrict)
   produtos                  AbastecimentoProduto[]
   viagens                   Viagem[]
+  viagensVinculadas         ViagemAbastecimento[]
 
   @@index([clienteId])
   @@index([veiculoId])
