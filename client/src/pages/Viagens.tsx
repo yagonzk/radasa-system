@@ -513,6 +513,10 @@ export default function Viagens() {
     (sum: number, v: Viagem) => sum + viagemTotalCusto(v),
     0,
   );
+  const totalLucroBruto = filteredViagens.reduce(
+    (sum: number, v: Viagem) => sum + viagemLucroBruto(v),
+    0,
+  );
 
   const columnFilterOptions = (key: ViagemFilterKey) => {
     let values: string[] = [];
@@ -909,15 +913,7 @@ export default function Viagens() {
         </div>
 
         {/* Summary cards */}
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Acertos Exibidos
-            </p>
-            <p className="mt-2 text-2xl font-bold text-foreground">
-              {filteredViagens.length}
-            </p>
-          </div>
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Total de Custos
@@ -937,6 +933,14 @@ export default function Viagens() {
                       filteredViagens.reduce((sum: number, v: Viagem) => sum + v.distanciaKm, 0)
                   )
                 : "—"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Lucro Bruto
+            </p>
+            <p className="mt-2 text-2xl font-bold text-foreground">
+              {formatBRL(totalLucroBruto)}
             </p>
           </div>
         </div>
