@@ -4,6 +4,7 @@ import { parseDateOnly } from "../utils/date.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
 import { createHash } from "node:crypto";
 import { valorComissaoPorDestino } from "../utils/comissao.js";
+import { assertEditVersion, diffIds } from "../utils/concurrency.js";
 
 const serialize = (item: any) => {
   const despesas = Array.isArray(item.despesasExtrato) ? item.despesasExtrato : [];
@@ -68,6 +69,8 @@ const data = (input: any) => {
   // Acerto de Viagem: origem operacional padronizada e status removido do formulário.
   result.cidadeOrigem = "Ipiranga do Norte, MT";
   delete result.status;
+  // Controle de concorrência é gerenciado exclusivamente pelo servidor.
+  delete result.editVersion;
 
   // Cliente foi removido do formulário de Viagens. Não force clienteId=null em edições:
   // bases antigas podem conservar um vínculo legado e o UPDATE deve preservar esse valor.
@@ -84,21 +87,20 @@ const data = (input: any) => {
   return result;
 };
 
-async function ensureMotoristaDisponivel(motoristaId: string, viagemId?: string) {
-  const motorista = await prisma.motorista.findUnique({
+async function ensureMotoristaDisponivel(
+  motoristaId: string,
+  viagemId?: string,
+  motoristaAtualId?: string | null,
+  db: any = prisma,
+) {
+  const motorista = await db.motorista.findUnique({
     where: { id: motoristaId },
     select: { status: true },
   });
   if (!motorista) throw new AppError(404, "Motorista não encontrado.");
   if (motorista.status === "ATIVO") return;
 
-  if (viagemId) {
-    const atual = await prisma.viagem.findUnique({
-      where: { id: viagemId },
-      select: { motoristaId: true },
-    });
-    if (atual?.motoristaId === motoristaId) return;
-  }
+  if (viagemId && motoristaAtualId === motoristaId) return;
 
   throw new AppError(409, "Motorista demitido não pode ser selecionado em uma nova viagem.");
 }
@@ -217,7 +219,7 @@ const optionalMoney = (row: any, keys: string[]) => {
 
 const normalizeCidade = (value: unknown) => normalizeText(value).replace(/\s+(MT|PA)$/, "").trim();
 
-async function resolverCustosAutomaticosViagem(input: any, atual?: any) {
+async function resolverCustosAutomaticosViagem(input: any, atual?: any, db: any = prisma) {
   const inputTemLista = Object.prototype.hasOwnProperty.call(input, "abastecimentoIds");
   const inputTemLegado = Object.prototype.hasOwnProperty.call(input, "abastecimentoId");
   const atuais = Array.isArray(atual?.abastecimentosVinculados)
@@ -233,7 +235,7 @@ async function resolverCustosAutomaticosViagem(input: any, atual?: any) {
   const placa = String(input.placa ?? atual?.placa ?? "");
 
   const abastecimentosSelecionados = abastecimentoIds.length
-    ? await prisma.abastecimento.findMany({
+    ? await db.abastecimento.findMany({
         where: { id: { in: abastecimentoIds } },
         select: { id: true, valorTotal: true, veiculo: { select: { placa: true } } },
       })
@@ -243,17 +245,17 @@ async function resolverCustosAutomaticosViagem(input: any, atual?: any) {
     throw new AppError(404, "Um ou mais abastecimentos selecionados não foram encontrados.");
   }
   const abastecimentoOutraPlaca = abastecimentosSelecionados.find(
-    (abastecimento) => normalizePlate(abastecimento.veiculo.placa) !== normalizePlate(placa),
+    (abastecimento: any) => normalizePlate(abastecimento.veiculo.placa) !== normalizePlate(placa),
   );
   if (abastecimentoOutraPlaca) {
     throw new AppError(409, "Todos os abastecimentos selecionados devem pertencer à mesma placa da viagem.");
   }
 
-  const valorAbastecimento = abastecimentosSelecionados.reduce((total, abastecimento) => total + number(abastecimento.valorTotal), 0);
+  const valorAbastecimento = abastecimentosSelecionados.reduce((total: number, abastecimento: any) => total + number(abastecimento.valorTotal), 0);
 
   const cidadeEntrega = String(input.cidadeEntrega ?? atual?.cidadeEntrega ?? "");
-  const locais = await prisma.local.findMany({ select: { cidade: true, uf: true, valorComissao: true } });
-  const local = locais.find((item) => normalizeCidade(item.cidade) === normalizeCidade(cidadeEntrega));
+  const locais = await db.local.findMany({ select: { cidade: true, uf: true, valorComissao: true } });
+  const local = locais.find((item: any) => normalizeCidade(item.cidade) === normalizeCidade(cidadeEntrega));
   const valorComissao = local
     ? valorComissaoPorDestino({ cidade: local.cidade, uf: local.uf, valorLegado: number(local.valorComissao) })
     : 0;
@@ -299,7 +301,7 @@ export const viagensService = {
         data: { ...payload, ...custosViagem, abastecimentoId: abastecimentoIds[0] ?? null, codigo },
       });
       if (abastecimentoIds.length) {
-        const valores = new Map(abastecimentosSelecionados.map((abastecimento) => [abastecimento.id, number(abastecimento.valorTotal)]));
+        const valores = new Map(abastecimentosSelecionados.map((abastecimento: any) => [abastecimento.id, number(abastecimento.valorTotal)]));
         await tx.viagemAbastecimento.createMany({
           data: abastecimentoIds.map((abastecimentoId) => ({
             viagemId: createdItem.id,
@@ -315,46 +317,88 @@ export const viagensService = {
     return serialize(completo ?? item);
   },
   async update(id: string, input: any) {
-    const atual = await prisma.viagem.findUnique({
-      where: { id },
-      include: { abastecimentosVinculados: { select: { abastecimentoId: true } } },
-    });
-    if (!atual) throw new AppError(404, "Viagem não encontrada.");
-    const motoristaId = input.motoristaId ?? atual.motoristaId;
-    await ensureMotoristaDisponivel(motoristaId, id);
-    const custosAutomaticos = await resolverCustosAutomaticosViagem(input, atual);
-    const { abastecimentoIds, abastecimentosSelecionados, ...custosViagem } = custosAutomaticos;
-    const { createdAt, id: _id, clienteId: _clienteId, ...rest } = data(input);
-    delete rest.abastecimentoIds;
-    const item = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
+      // Lock no PostgreSQL: protege a mesma viagem mesmo entre isolates diferentes
+      // do Cloudflare Worker. Requisições concorrentes ficam serializadas.
+      const locked = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+        'SELECT "id" FROM "viagens" WHERE "id" = $1 FOR UPDATE',
+        id,
+      );
+      if (!locked.length) throw new AppError(404, "Viagem não encontrada.");
+
+      const atual = await tx.viagem.findUnique({
+        where: { id },
+        include: { abastecimentosVinculados: { select: { abastecimentoId: true } } },
+      });
+      if (!atual) throw new AppError(404, "Viagem não encontrada.");
+
+      assertEditVersion(Number((atual as any).editVersion ?? 1), input?.editVersion);
+
+      const motoristaId = input.motoristaId ?? atual.motoristaId;
+      await ensureMotoristaDisponivel(motoristaId, id, atual.motoristaId, tx);
+
+      const custosAutomaticos = await resolverCustosAutomaticosViagem(input, atual, tx);
+      const { abastecimentoIds, abastecimentosSelecionados, ...custosViagem } = custosAutomaticos;
+      const { createdAt, id: _id, clienteId: _clienteId, ...rest } = data(input);
+      delete rest.abastecimentoIds;
+
+      const currentIds = (atual.abastecimentosVinculados ?? []).map((link) => String(link.abastecimentoId));
+      const { toAdd, toRemove } = diffIds(currentIds, abastecimentoIds);
+
       const updatedItem = await tx.viagem.update({
         where: { id },
-        data: { ...rest, ...custosViagem, abastecimentoId: abastecimentoIds[0] ?? null },
+        data: {
+          ...rest,
+          ...custosViagem,
+          abastecimentoId: abastecimentoIds[0] ?? null,
+          editVersion: { increment: 1 },
+        },
       });
-      await tx.viagemAbastecimento.deleteMany({ where: { viagemId: id } });
-      if (abastecimentoIds.length) {
-        const valores = new Map(abastecimentosSelecionados.map((abastecimento) => [abastecimento.id, number(abastecimento.valorTotal)]));
+
+      if (toRemove.length) {
+        await tx.viagemAbastecimento.deleteMany({
+          where: { viagemId: id, abastecimentoId: { in: toRemove } },
+        });
+      }
+
+      if (toAdd.length) {
+        const valores = new Map(
+          abastecimentosSelecionados.map((abastecimento: any) => [
+            abastecimento.id,
+            number(abastecimento.valorTotal),
+          ]),
+        );
         await tx.viagemAbastecimento.createMany({
-          data: abastecimentoIds.map((abastecimentoId) => ({
+          data: toAdd.map((abastecimentoId) => ({
             viagemId: id,
             abastecimentoId,
             valorVinculado: valores.get(abastecimentoId) ?? 0,
           })),
+          skipDuplicates: true,
         });
       }
-      return updatedItem;
-    });
-    const veiculo = await prisma.veiculo.findFirst({ where: { placa: item.placa } });
-    if (veiculo) {
-      const sit = ["CARREGANDO", "EM_TRANSITO"].includes(item.status)
+
+      const sit = ["CARREGANDO", "EM_TRANSITO"].includes(updatedItem.status)
         ? "EM_VIAGEM"
-        : ["ENTREGUE", "FINALIZADA", "CANCELADA"].includes(item.status)
+        : ["ENTREGUE", "FINALIZADA", "CANCELADA"].includes(updatedItem.status)
           ? "DISPONIVEL"
-          : veiculo.situacaoOperacional;
-      await prisma.veiculo.update({ where: { id: veiculo.id }, data: { situacaoOperacional: sit } }).catch(() => undefined);
-    }
-    const completo = await prisma.viagem.findUnique({ where: { id }, include: viagemInclude });
-    return serialize(completo ?? item);
+          : null;
+      if (sit) {
+        await tx.veiculo.updateMany({
+          where: { placa: updatedItem.placa },
+          data: { situacaoOperacional: sit as any },
+        });
+      }
+
+      const completo = await tx.viagem.findUnique({ where: { id }, include: viagemInclude });
+      if (!completo) throw new AppError(404, "Viagem não encontrada após atualização.");
+      return completo;
+    }, {
+      maxWait: 5_000,
+      timeout: 20_000,
+    });
+
+    return serialize(result);
   },
   async remove(id: string) { await prisma.viagem.delete({ where: { id } }); },
 
@@ -428,6 +472,10 @@ export const viagensService = {
       // Assim, PEDAGIO=345,00 na planilha sempre termina em R$ 345,00 na viagem,
       // mesmo que uma importação antiga tenha associado lançamentos incorretos.
       await prisma.$transaction(async (tx) => {
+        await tx.$queryRawUnsafe(
+          'SELECT "id" FROM "viagens" WHERE "id" = $1 FOR UPDATE',
+          viagem.id,
+        );
         const tiposParaLimpar: string[] = [];
         if (pedagio != null) tiposParaLimpar.push("PEDAGIO");
         if (chapa != null) tiposParaLimpar.push("CHAPA");
@@ -436,8 +484,11 @@ export const viagensService = {
             where: { viagemId: viagem.id, tipo: { in: tiposParaLimpar } },
           });
         }
-        await tx.viagem.update({ where: { id: viagem.id }, data: updateData });
-      });
+        await tx.viagem.update({
+          where: { id: viagem.id },
+          data: { ...updateData, editVersion: { increment: 1 } },
+        });
+      }, { maxWait: 5_000, timeout: 20_000 });
       atualizadas += 1;
     }
 

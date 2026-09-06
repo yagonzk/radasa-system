@@ -8,19 +8,68 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+
+async function mapWithLimit<T, R>(items: readonly T[], limit: number, worker: (item: T) => Promise<R>) {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.max(1, Math.min(limit, items.length || 1)) }, async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+function requestId(prefix: string) {
+  const uuid = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}-${uuid}`;
+}
+
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem(TOKEN_KEY);
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  config.headers["X-Request-Id"] = requestId("req");
+  const method = String(config.method ?? "get").toLowerCase();
+  if (!["get", "head", "options"].includes(method)) {
+    config.headers["X-Mutation-Id"] = requestId("mut");
+  }
   return config;
 });
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     console.error("Erro na API:", error.response?.data ?? error.message);
     if (error.response?.status === 401 && typeof window !== "undefined") {
       window.dispatchEvent(new Event("radasa:unauthorized"));
     }
+
+    // Somente GET é repetido automaticamente. Escritas nunca são repetidas,
+    // evitando duplicar um Acerto de Viagem quando a primeira request terminou
+    // no banco mas a resposta se perdeu no caminho.
+    const config = error.config as (typeof error.config & { __radasaRetry?: boolean }) | undefined;
+    const status = Number(error.response?.status ?? 0);
+    const canRetry =
+      config &&
+      String(config.method ?? "get").toLowerCase() === "get" &&
+      !config.__radasaRetry &&
+      [429, 502, 503, 504].includes(status);
+
+    if (canRetry) {
+      config.__radasaRetry = true;
+      const retryAfterSeconds = Number(error.response?.headers?.["retry-after"] ?? 0);
+      const delayMs = retryAfterSeconds > 0
+        ? Math.min(retryAfterSeconds * 1000, 3_000)
+        : 500 + Math.floor(Math.random() * 250);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return api.request(config);
+    }
+
     return Promise.reject(error);
   }
 );
@@ -153,7 +202,7 @@ async function flushResourceBatch() {
     const data = response.data?.data ?? {};
     const errors = response.data?.errors ?? {};
 
-    await Promise.all(resources.map(async (resource) => {
+    await mapWithLimit(resources, 3, async (resource) => {
       const waiters = batchWaiters.get(resource) ?? [];
       batchWaiters.delete(resource);
       if (Object.prototype.hasOwnProperty.call(data, resource)) {
@@ -170,10 +219,10 @@ async function flushResourceBatch() {
         const reason = errors[resource] ? new Error(errors[resource]) : error;
         waiters.forEach(({ reject }) => reject(reason));
       }
-    }));
+    });
   } catch {
     // Se o endpoint de batch estiver indisponível, preserva compatibilidade com a API antiga.
-    await Promise.all(resources.map(async (resource) => {
+    await mapWithLimit(resources, 3, async (resource) => {
       const waiters = batchWaiters.get(resource) ?? [];
       batchWaiters.delete(resource);
       try {
@@ -182,7 +231,7 @@ async function flushResourceBatch() {
       } catch (error) {
         waiters.forEach(({ reject }) => reject(error));
       }
-    }));
+    });
   }
 }
 

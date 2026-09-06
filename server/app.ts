@@ -8,6 +8,7 @@ import { sanitizeInputs } from "./middlewares/sanitize.js";
 import { notFound } from "./middlewares/not-found.js";
 import { errorHandler } from "./middlewares/error-handler.js";
 import { createRateLimiter } from "./middlewares/rate-limit.js";
+import { createMutationConcurrencyGate } from "./middlewares/concurrency-gate.js";
 import { prismaRequestContext } from "./lib/prisma.js";
 
 export function createApp() {
@@ -96,9 +97,24 @@ export function createApp() {
     res.setHeader("Expires", "0");
     next();
   });
+  // Limites vêm antes do Prisma para requests rejeitadas nem criarem pool local.
+  app.use("/api", createRateLimiter({
+    windowMs: 60 * 1000,
+    limit: 120,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    skip: (req) => ["GET", "HEAD", "OPTIONS"].includes(req.method),
+    message: { message: "Muitas gravações em pouco tempo. Aguarde alguns segundos e tente novamente." },
+  }));
+  app.use("/api", createRateLimiter({ windowMs: 15 * 60 * 1000, limit: 1000, standardHeaders: "draft-7", legacyHeaders: false }));
+  app.use("/api", createMutationConcurrencyGate({
+    maxActive: 8,
+    maxQueue: 40,
+    maxWaitMs: 8_000,
+  }));
   // Prisma/pg não deve compartilhar sockets entre requests no runtime edge.
   app.use("/api", prismaRequestContext);
-  app.use("/api", createRateLimiter({ windowMs: 15 * 60 * 1000, limit: 1000, standardHeaders: "draft-7", legacyHeaders: false }), apiRoutes);
+  app.use("/api", apiRoutes);
   return app;
 }
 

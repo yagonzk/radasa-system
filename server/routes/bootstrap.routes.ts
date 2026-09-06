@@ -12,6 +12,7 @@ import { fechamentosService } from "../services/fechamentos.service.js";
 import { manifestosService } from "../services/manifestos.service.js";
 import { abastecimentosService } from "../services/abastecimentos.service.js";
 import { pneusService } from "../services/pneus.service.js";
+import { mapWithConcurrency } from "../utils/concurrency.js";
 
 const loaders = {
   motoristas: () => motoristasService.list(),
@@ -45,21 +46,25 @@ bootstrapRoutes.get("/", async (req, res) => {
     return;
   }
 
-  const settled = await Promise.allSettled(
-    resources.map(async (resource) => [resource, await loaders[resource]()] as const),
-  );
+  // Evita que uma montagem de tela dispare 10+ consultas pesadas ao mesmo
+  // tempo. O limite 3 mantém a UI rápida sem criar rajada de conexões no Neon.
+  const settled = await mapWithConcurrency(resources, 3, async (resource) => {
+    try {
+      return { resource, ok: true as const, value: await loaders[resource]() };
+    } catch (error) {
+      return { resource, ok: false as const, error };
+    }
+  });
 
   const data: Record<string, unknown> = {};
   const errors: Record<string, string> = {};
 
-  for (let index = 0; index < settled.length; index += 1) {
-    const result = settled[index];
-    const resource = resources[index];
-    if (result.status === "fulfilled") {
-      data[result.value[0]] = result.value[1];
+  for (const result of settled) {
+    if (result.ok) {
+      data[result.resource] = result.value;
     } else {
-      errors[resource] = result.reason instanceof Error
-        ? result.reason.message
+      errors[result.resource] = result.error instanceof Error
+        ? result.error.message
         : "Falha ao carregar recurso.";
     }
   }

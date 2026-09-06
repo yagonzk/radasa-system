@@ -240,7 +240,7 @@ export const veiculoBody = z.object({
   createdAt: z.string().optional(),
 });
 export const viagemBody = z.object({
-  id: id.optional(), codigo: z.string().trim().max(30).optional().nullable(),
+  id: id.optional(), codigo: z.string().trim().max(30).optional().nullable(), editVersion: z.coerce.number().int().min(1).optional(),
   status: z.enum(["PLANEJADA","CARREGANDO","EM_TRANSITO","ENTREGUE","FINALIZADA","CANCELADA"]).optional().default("PLANEJADA"),
   placa: text(20), motoristaId: id, valorFrete: money,
   dataManifesto: dateOnly, cidadeOrigem: z.string().trim().max(160).optional().default(""), cidadeEntrega: text(), rotas: z.array(text()).default([]),

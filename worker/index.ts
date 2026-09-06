@@ -18,6 +18,8 @@ const hyperdrive = bindings.HYPERDRIVE;
 if (hyperdrive?.connectionString) {
   (globalThis as typeof globalThis & { __RADASA_DATABASE_URL?: string }).__RADASA_DATABASE_URL =
     hyperdrive.connectionString;
+} else {
+  console.warn("[database] HYPERDRIVE não configurado; usando DATABASE_URL direto. Configure Hyperdrive para reduzir churn de conexões em produção.");
 }
 
 

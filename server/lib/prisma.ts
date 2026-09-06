@@ -9,7 +9,8 @@ import type { RequestHandler } from "express";
  * por conta da Cloudflare. Localmente e como fallback, DATABASE_URL continua
  * sendo usada normalmente.
  */
-const requestPrisma = new AsyncLocalStorage<PrismaClient>();
+type RequestPrismaScope = { client?: PrismaClient };
+const requestPrisma = new AsyncLocalStorage<RequestPrismaScope>();
 let nodePrisma: PrismaClient | undefined;
 
 type RadasaGlobal = typeof globalThis & { __RADASA_DATABASE_URL?: string };
@@ -32,9 +33,11 @@ function createPrismaClient(connection: string) {
     connectionString: connection,
     // Hyperdrive já faz pooling global. O pequeno pool local só permite que
     // Promise.all dentro da mesma request execute algumas queries em paralelo.
-    max: isUsingHyperdrive() ? 3 : 2,
-    connectionTimeoutMillis: 10_000,
-    idleTimeoutMillis: 3_000,
+    // Um pool local pequeno evita multiplicar conexões quando várias requests
+    // chegam juntas. Com Hyperdrive, o pooling pesado acontece fora do Worker.
+    max: isUsingHyperdrive() ? 2 : 1,
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 2_000,
   });
 
   return new PrismaClient({
@@ -45,27 +48,30 @@ function createPrismaClient(connection: string) {
 
 function currentPrisma() {
   const scoped = requestPrisma.getStore();
-  if (scoped) return scoped;
+  if (scoped) {
+    if (!scoped.client) scoped.client = createPrismaClient(connectionString());
+    return scoped.client;
+  }
 
   if (!nodePrisma) nodePrisma = createPrismaClient(connectionString());
   return nodePrisma;
 }
 
-/** Deve ficar antes das rotas /api. */
+/** Deve ficar antes das rotas /api. O client só nasce no primeiro acesso ao Prisma. */
 export const prismaRequestContext: RequestHandler = (_req, res, next) => {
-  const client = createPrismaClient(connectionString());
+  const scope: RequestPrismaScope = {};
   let cleaned = false;
   const cleanup = () => {
     if (cleaned) return;
     cleaned = true;
-    void client.$disconnect().catch(() => undefined);
+    if (scope.client) void scope.client.$disconnect().catch(() => undefined);
   };
 
-  // Evita deixar pools/sockets locais vivos após a resposta, principalmente no
-  // fallback direto ao Neon. Hyperdrive mantém o pool de rede fora do Worker.
+  // Evita criar pool para rotas que não acessam banco e fecha qualquer pool local
+  // ao final da request. No Worker, não compartilhamos sockets entre requests.
   res.once("finish", cleanup);
   res.once("close", cleanup);
-  requestPrisma.run(client, next);
+  requestPrisma.run(scope, next);
 };
 
 export const prisma = new Proxy({} as PrismaClient, {

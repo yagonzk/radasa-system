@@ -469,6 +469,7 @@ model Viagem {
   custoExtraTag      String    @default("")
   valorCustoExtra    Decimal   @default(0) @db.Decimal(14, 2)
   observacoes        String    @default("") @db.Text
+  editVersion        Int       @default(1)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   motorista          Motorista @relation(fields: [motoristaId], references: [id], onDelete: Restrict)

@@ -777,6 +777,7 @@ export default function Viagens() {
     }
 
     const data = {
+      ...(editingViagem ? { editVersion: editingViagem.editVersion } : {}),
       placa,
       motoristaId,
       valorFrete: parseFloat(valorFrete) || 0,
