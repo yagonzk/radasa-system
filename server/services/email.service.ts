@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
+import { getRuntimeResendApiKey } from "../lib/runtime-bindings.js";
 
 type ResendApiResponse = {
   id?: string;
@@ -10,10 +11,7 @@ type ResendApiResponse = {
 };
 
 function getResendApiKey() {
-  const runtimeKey = (
-    globalThis as typeof globalThis & { __RADASA_RESEND_API_KEY?: string }
-  ).__RADASA_RESEND_API_KEY;
-  return runtimeKey || env.RESEND_API_KEY;
+  return getRuntimeResendApiKey() || env.RESEND_API_KEY;
 }
 
 function escapeHtml(value: string) {

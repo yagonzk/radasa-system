@@ -301,7 +301,12 @@ export const viagensService = {
         data: { ...payload, ...custosViagem, abastecimentoId: abastecimentoIds[0] ?? null, codigo },
       });
       if (abastecimentoIds.length) {
-        const valores = new Map(abastecimentosSelecionados.map((abastecimento: any) => [abastecimento.id, number(abastecimento.valorTotal)]));
+        const valores = new Map<string, number>(
+          abastecimentosSelecionados.map((abastecimento: any): [string, number] => [
+            String(abastecimento.id),
+            number(abastecimento.valorTotal),
+          ]),
+        );
         await tx.viagemAbastecimento.createMany({
           data: abastecimentoIds.map((abastecimentoId) => ({
             viagemId: createdItem.id,
@@ -362,9 +367,9 @@ export const viagensService = {
       }
 
       if (toAdd.length) {
-        const valores = new Map(
-          abastecimentosSelecionados.map((abastecimento: any) => [
-            abastecimento.id,
+        const valores = new Map<string, number>(
+          abastecimentosSelecionados.map((abastecimento: any): [string, number] => [
+            String(abastecimento.id),
             number(abastecimento.valorTotal),
           ]),
         );

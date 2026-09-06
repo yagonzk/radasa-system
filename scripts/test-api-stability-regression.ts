@@ -91,4 +91,32 @@ const appSource = fs.readFileSync(path.resolve("server/app.ts"), "utf8");
 assert.match(appSource, /createMutationConcurrencyGate/, "API deve limitar mutações concorrentes por isolate");
 assert.match(appSource, /maxActive:\s*8/, "gate deve limitar a 8 mutações simultâneas por isolate");
 
+
+const workerSource = fs.readFileSync(path.resolve("worker/index.ts"), "utf8");
+assert.doesNotMatch(
+  workerSource,
+  /import\s+\{\s*env\s+as\s+cloudflareEnv\s*\}\s+from\s+["']cloudflare:workers["']/,
+  "Worker não deve acessar env do Cloudflare no escopo global",
+);
+assert.match(
+  workerSource,
+  /runWithRuntimeBindings\(env,\s*\(\)\s*=>\s*httpHandler\.fetch\(request,\s*env,\s*ctx\)\)/s,
+  "bindings do Cloudflare devem ser associados ao contexto da request dentro de fetch()",
+);
+
+const runtimeBindingsSource = fs.readFileSync(path.resolve("server/lib/runtime-bindings.ts"), "utf8");
+assert.match(runtimeBindingsSource, /AsyncLocalStorage/, "bindings runtime devem ser request-scoped");
+assert.match(runtimeBindingsSource, /HYPERDRIVE\?\.connectionString/, "runtime deve expor connectionString do Hyperdrive");
+
+assert.match(
+  prismaSource,
+  /getRuntimeDatabaseUrl\(\)/,
+  "Prisma deve resolver Hyperdrive a partir do contexto runtime da request",
+);
+assert.doesNotMatch(
+  prismaSource,
+  /__RADASA_DATABASE_URL/,
+  "Prisma não deve depender de variável global mutável para Hyperdrive",
+);
+
 console.log("API stability regression: OK");

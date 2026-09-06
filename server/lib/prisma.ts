@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import type { RequestHandler } from "express";
+import { getRuntimeDatabaseUrl } from "./runtime-bindings.js";
 
 /**
  * No Worker cada request recebe um Prisma Client próprio. Quando Hyperdrive
@@ -13,10 +14,8 @@ type RequestPrismaScope = { client?: PrismaClient };
 const requestPrisma = new AsyncLocalStorage<RequestPrismaScope>();
 let nodePrisma: PrismaClient | undefined;
 
-type RadasaGlobal = typeof globalThis & { __RADASA_DATABASE_URL?: string };
-
 function connectionString() {
-  const hyperdriveUrl = (globalThis as RadasaGlobal).__RADASA_DATABASE_URL;
+  const hyperdriveUrl = getRuntimeDatabaseUrl();
   if (hyperdriveUrl) return hyperdriveUrl;
 
   const value = process.env.DATABASE_URL;
@@ -25,7 +24,7 @@ function connectionString() {
 }
 
 function isUsingHyperdrive() {
-  return Boolean((globalThis as RadasaGlobal).__RADASA_DATABASE_URL);
+  return Boolean(getRuntimeDatabaseUrl());
 }
 
 function createPrismaClient(connection: string) {
