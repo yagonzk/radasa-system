@@ -32,6 +32,7 @@ import { buildBulkPaymentTargets, isVasilhameName, orderRomaneioItemsByClient } 
 const EXPECTED_ROMANEIO_PARSER_VERSION = "2026.08.11.07";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 import {
+  ArrowLeft,
   Check,
   ChevronDown,
   CircleDollarSign,
@@ -53,6 +54,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+
+type LinkedNfe = { id:string; chave:string; numero:string; serie:string; dataEmissao:string; valorNota:number; arquivoNome:string; itens:number };
 interface PdfProduto {
   romaneio: string;
   data: string;
@@ -142,6 +145,15 @@ interface RomaneioColumnFilters {
   valorTotal: string;
 }
 
+function currentMonthColumnRange() {
+  const now = new Date();
+  const local = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return {
+    from: local(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: local(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+  };
+}
+const initialRomaneioMonth = currentMonthColumnRange();
 const emptyColumnFilters: RomaneioColumnFilters = {
   romaneio: "",
   dataInicio: "",
@@ -200,6 +212,16 @@ function reviewNumericValue(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function preClosingNumericValue(value: string) {
+  const normalized = value.trim().replace(/\s/g, "");
+  if (!normalized) return 0;
+  const decimal = normalized.includes(",") && normalized.includes(".")
+    ? normalized.replace(/\./g, "").replace(",", ".")
+    : normalized.replace(",", ".");
+  const parsed = Number(decimal);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function refreshReviewDocument(result: PdfResponse): PdfResponse {
   const romaneios = Array.from(new Set(result.sugestoes.produtos.map(({ produto }) => produto.romaneio).filter(Boolean)));
   const notasFiscais = Array.from(new Set(result.sugestoes.produtos.map(({ produto }) => produto.notaFiscal).filter(Boolean)));
@@ -221,7 +243,7 @@ function refreshReviewDocument(result: PdfResponse): PdfResponse {
 
 const BULK_PARSE_CONCURRENCY = 6;
 const BULK_PARSE_CHUNK_SIZE = 50;
-const BULK_SAVE_CHUNK_SIZE = 5;
+const BULK_SAVE_CHUNK_SIZE = 1;
 const BULK_SAVE_MAX_RETRIES = 4;
 
 function fileToDataUrl(file: File) {
@@ -242,6 +264,27 @@ function normalized(value: unknown) {
 
 function romaneioTotal(romaneio: Romaneio) {
   return romaneio.produtos.reduce((sum, item) => sum + item.valorTotal, 0);
+}
+
+function preFechamentoValorClientes(romaneio: Romaneio) {
+  return romaneio.produtos.reduce((sum, item) => {
+    const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
+    if (tipo !== "Receber c/ Cliente" || item.pagoCliente === true) return sum;
+    return sum + Number(item.valorTotal || 0);
+  }, 0);
+}
+
+function preFechamentoGastos(romaneio: Romaneio) {
+  return (romaneio.preFechamentoComissaoPaga ? 0 : Number(romaneio.preFechamentoComissao || 0))
+    + (romaneio.preFechamentoPedagioPago ? 0 : Number(romaneio.preFechamentoPedagio || 0))
+    + (romaneio.preFechamentoAbastecimentoPago ? 0 : Number(romaneio.preFechamentoAbastecimento || 0));
+}
+
+function preFechamentoCaixa(romaneio: Romaneio) {
+  const aReceber = preFechamentoValorClientes(romaneio);
+  const gastos = preFechamentoGastos(romaneio);
+  if (gastos <= 0) return 0;
+  return aReceber >= gastos ? gastos : aReceber - gastos;
 }
 
 function romaneioClientCount(romaneio: Romaneio) {
@@ -369,7 +412,7 @@ export default function Romaneios() {
   const toggleSummaryValue = (label: string) => {
     setVisibleSummaryValues((current) => ({ ...current, [label]: !current[label] }));
   };
-  const { items: sourceRomaneios, create, update, remove, removeMany, replaceLocalItem, refresh: refreshRomaneios } = useRomaneios();
+  const { items: sourceRomaneios, create, update, remove, removeMany, replaceLocalItem, refresh: refreshRomaneios, loadRange } = useRomaneios();
   const { items: clientes, refresh: refreshClientes } = useClientes();
   const { items: produtos, refresh: refreshProdutos } = useProdutos();
   const { items: veiculos, refresh: refreshVeiculos } = useVeiculos();
@@ -387,13 +430,44 @@ export default function Romaneios() {
   const [review, setReview] = useState<ImportReview | null>(null);
   const [bulkReview, setBulkReview] = useState<BulkImportEntry[] | null>(null);
   const [inspecting, setInspecting] = useState<Romaneio | null>(null);
+  const [preClosingOpen, setPreClosingOpen] = useState(false);
+  const [preClosingTarget, setPreClosingTarget] = useState<Romaneio | null>(null);
+  const [preClosingSaving, setPreClosingSaving] = useState(false);
+  const [preClosingForm, setPreClosingForm] = useState({
+    comissao: "",
+    pedagio: "",
+    abastecimento: "",
+    comissaoPaga: false,
+    pedagioPago: false,
+    abastecimentoPago: false,
+  });
   const [manualOpen, setManualOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [reportPlate, setReportPlate] = useState("");
+  const [reportDateFrom, setReportDateFrom] = useState(initialRomaneioMonth.from);
+  const [reportDateTo, setReportDateTo] = useState(initialRomaneioMonth.to);
   const [editing, setEditing] = useState<Romaneio | null>(null);
   const [manual, setManual] = useState<ManualForm>(emptyManual);
   const [draft, setDraft] = useState<ItemDraft>(emptyDraft);
   const [search, setSearch] = useState("");
-  const [columnFilters, setColumnFilters] = useState<RomaneioColumnFilters>(emptyColumnFilters);
+  const [columnFilters, setColumnFilters] = useState<RomaneioColumnFilters>(() => ({
+    ...emptyColumnFilters,
+    dataInicio: initialRomaneioMonth.from,
+    dataFim: initialRomaneioMonth.to,
+  }));
+  const periodFilterMounted = useRef(false);
+  useEffect(() => {
+    if (!periodFilterMounted.current) {
+      periodFilterMounted.current = true;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadRange(columnFilters.dataInicio, columnFilters.dataFim).catch(() => {
+        toast.error("Não foi possível carregar o período selecionado.");
+      });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [columnFilters.dataInicio, columnFilters.dataFim, loadRange]);
   const [activeColumnFilter, setActiveColumnFilter] = useState<RomaneioFilterKey | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState("");
   // Exibe os controles logo abaixo da tabela, como em Abastecimentos.
@@ -402,7 +476,86 @@ export default function Romaneios() {
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<string>>(new Set());
   const [deletingMany, setDeletingMany] = useState(false);
   const [markingPaidMany, setMarkingPaidMany] = useState(false);
+  const [nfTarget, setNfTarget] = useState<Romaneio | null>(null);
+  const [nfImporting, setNfImporting] = useState(false);
+  const [nfDragActive, setNfDragActive] = useState(false);
+  const nfInputRef = useRef<HTMLInputElement>(null);
+  const inspectingNfInputRef = useRef<HTMLInputElement>(null);
+  const [inspectingNfDragActive, setInspectingNfDragActive] = useState(false);
+  const [linkedNfes, setLinkedNfes] = useState<Record<string, LinkedNfe[]>>({});
+  const [linkedNfesLoading, setLinkedNfesLoading] = useState<Record<string, boolean>>({});
   const paymentRequestRevision = useRef<Record<string, number>>({});
+
+  const carregarNotasVinculadas = async (manifestoId: string) => {
+    setLinkedNfesLoading((current) => ({ ...current, [manifestoId]: true }));
+    try {
+      const response = await api.get(`/manifestos/${manifestoId}/notas-fiscais/vinculadas`);
+      setLinkedNfes((current) => ({ ...current, [manifestoId]: Array.isArray(response.data) ? response.data : [] }));
+    } catch {
+      toast.error("Não foi possível carregar as NF-e vinculadas.");
+    } finally {
+      setLinkedNfesLoading((current) => ({ ...current, [manifestoId]: false }));
+    }
+  };
+
+  const desvincularNotaFiscal = async (manifestoId: string, nfe: LinkedNfe) => {
+    if (!window.confirm(`Desvincular a NF-e ${nfe.numero}/${nfe.serie} deste romaneio?`)) return;
+    try {
+      await api.delete(`/manifestos/${manifestoId}/notas-fiscais/vinculadas/${nfe.id}`);
+      await carregarNotasVinculadas(manifestoId);
+      toast.success("NF-e desvinculada do romaneio.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? "Não foi possível desvincular a NF-e.");
+    }
+  };
+
+  const baixarNotaFiscalVinculada = async (manifestoId: string, nfe: LinkedNfe) => {
+    try {
+      const response = await api.get(`/manifestos/${manifestoId}/notas-fiscais/vinculadas/${nfe.id}/arquivo`, { responseType: "blob" });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `NFe-${nfe.numero}-${nfe.serie}.xml`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? "Não foi possível baixar a NF-e.");
+    }
+  };
+
+  useEffect(() => { if (nfTarget?.id) void carregarNotasVinculadas(nfTarget.id); }, [nfTarget?.id]);
+  useEffect(() => { if (inspecting?.id) void carregarNotasVinculadas(inspecting.id); }, [inspecting?.id]);
+
+  const importarNotasVinculadas = async (files: FileList | File[], targetOverride?: Romaneio) => {
+    const target = targetOverride ?? nfTarget;
+    if (!target) return;
+    const selected = Array.from(files).filter((file) => /\.(xml|pdf)$/i.test(file.name));
+    if (!selected.length) return toast.error("Selecione NF-e em PDF ou XML.");
+    setNfImporting(true);
+    try {
+      const items: Array<{ nome: string; tipo: "xml" | "pdf"; conteudo: string }> = [];
+      for (const file of selected) {
+        if (file.name.toLowerCase().endsWith(".xml")) {
+          items.push({ nome: file.name, tipo: "xml", conteudo: await file.text() });
+        } else {
+          const texto = await extrairTextoPdf(file, undefined, { forceOcr: false });
+          items.push({ nome: file.name, tipo: "pdf", conteudo: texto });
+        }
+      }
+      const response = await api.post(`/manifestos/${target.id}/notas-fiscais/importar`, { items }, { timeout: 240_000 });
+      const { importadas = 0, atualizadas = 0, falhas = [] } = response.data ?? {};
+      if (importadas || atualizadas) {
+        toast.success(`${importadas + atualizadas} NF-e vinculada(s) ao romaneio e enviada(s) ao BI.`);
+        await carregarNotasVinculadas(target.id);
+      }
+      if (falhas.length) toast.error(falhas.map((x: any) => `${x.nome}: ${x.erro}`).join(" | "));
+      if (!falhas.length && !targetOverride) setNfTarget(null);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? "Não foi possível vincular as notas fiscais.");
+    } finally { setNfImporting(false); setNfDragActive(false); }
+  };
 
   const clienteById = (id?: string | null) => clientes.find((item) => item.id === id);
   const produtoById = (id?: string | null) => produtos.find((item) => item.id === id);
@@ -655,9 +808,128 @@ export default function Romaneios() {
       );
   }, [clientes, columnFilters, produtos, romaneios, search]);
 
+  const reportPlateOptions = useMemo(() => Array.from(new Set(
+    romaneios.map((item) => formatPlate(item.placaVeiculo || "")).filter(Boolean),
+  )).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true })), [romaneios]);
+
+  const reportFiltered = useMemo(() => romaneios.filter((romaneio) => {
+    if (reportPlate && formatPlate(romaneio.placaVeiculo || "") !== reportPlate) return false;
+    if (reportDateFrom && romaneio.dataManifesto < reportDateFrom) return false;
+    if (reportDateTo && romaneio.dataManifesto > reportDateTo) return false;
+    return true;
+  }), [romaneios, reportPlate, reportDateFrom, reportDateTo]);
+
+  const prepareReportRows = async () => {
+    // A exportação usa diretamente a resposta do servidor para o intervalo
+    // solicitado. Assim, não depende do setState assíncrono de loadRange e não
+    // corre o risco de exportar apenas o último mês/período que estava na tela.
+    const loaded = await loadRange(reportDateFrom, reportDateTo);
+    return loaded.filter((romaneio) => {
+      if (reportPlate && formatPlate(romaneio.placaVeiculo || "") !== reportPlate) return false;
+      if (reportDateFrom && romaneio.dataManifesto < reportDateFrom) return false;
+      if (reportDateTo && romaneio.dataManifesto > reportDateTo) return false;
+      return true;
+    });
+  };
+
+  useEffect(() => {
+    if (!reportOpen || !reportDateFrom || !reportDateTo) return;
+    const timer = window.setTimeout(() => {
+      void loadRange(reportDateFrom, reportDateTo).catch(() => {
+        toast.error("Não foi possível carregar o período do relatório.");
+      });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [reportOpen, reportDateFrom, reportDateTo, loadRange]);
+
   useEffect(() => {
     setPage(1);
   }, [search, columnFilters, pageSize]);
+
+  const preClosingTotals = useMemo(() => {
+    return filtered.reduce(
+      (totals, romaneio) => {
+        totals.aReceber += preFechamentoValorClientes(romaneio);
+        totals.gastos += preFechamentoGastos(romaneio);
+        return totals;
+      },
+      { aReceber: 0, gastos: 0 },
+    );
+  }, [filtered]);
+
+  const preClosingTotalCaixa = preClosingTotals.gastos <= 0
+    ? 0
+    : preClosingTotals.aReceber >= preClosingTotals.gastos
+      ? preClosingTotals.gastos
+      : preClosingTotals.aReceber - preClosingTotals.gastos;
+
+  const openPreClosingDetails = (romaneio: Romaneio) => {
+    setPreClosingTarget(romaneio);
+    setPreClosingForm({
+      comissao: String(Number(romaneio.preFechamentoComissao || 0)),
+      pedagio: String(Number(romaneio.preFechamentoPedagio || 0)),
+      abastecimento: String(Number(romaneio.preFechamentoAbastecimento || 0)),
+      comissaoPaga: romaneio.preFechamentoComissaoPaga === true,
+      pedagioPago: romaneio.preFechamentoPedagioPago === true,
+      abastecimentoPago: romaneio.preFechamentoAbastecimentoPago === true,
+    });
+  };
+
+  const savePreClosing = async (
+    form = preClosingForm,
+    successMessage = "Pré-fechamento salvo.",
+  ) => {
+    if (!preClosingTarget) return;
+    const comissao = preClosingNumericValue(form.comissao);
+    const pedagio = preClosingNumericValue(form.pedagio);
+    const abastecimento = preClosingNumericValue(form.abastecimento);
+
+    if ([comissao, pedagio, abastecimento].some((value) => value < 0 || !Number.isFinite(value))) {
+      toast.error("Informe valores válidos para comissão, pedágio e abastecimento.");
+      return;
+    }
+
+    setPreClosingSaving(true);
+    try {
+      const response = await api.patch<Romaneio>(`/manifestos/${preClosingTarget.id}/pre-fechamento`, {
+        comissao,
+        pedagio,
+        abastecimento,
+        comissaoPaga: form.comissaoPaga,
+        pedagioPago: form.pedagioPago,
+        abastecimentoPago: form.abastecimentoPago,
+      });
+      replaceLocalItem(response.data);
+      setPreClosingTarget(response.data);
+      setPreClosingForm({
+        comissao: String(Number(response.data.preFechamentoComissao || 0)),
+        pedagio: String(Number(response.data.preFechamentoPedagio || 0)),
+        abastecimento: String(Number(response.data.preFechamentoAbastecimento || 0)),
+        comissaoPaga: response.data.preFechamentoComissaoPaga === true,
+        pedagioPago: response.data.preFechamentoPedagioPago === true,
+        abastecimentoPago: response.data.preFechamentoAbastecimentoPago === true,
+      });
+      toast.success(successMessage);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? "Não foi possível salvar o pré-fechamento.");
+    } finally {
+      setPreClosingSaving(false);
+    }
+  };
+
+  const updatePreClosingPaymentStatus = (
+    field: "comissaoPaga" | "pedagioPago" | "abastecimentoPago",
+    pago: boolean,
+    label: string,
+  ) => {
+    if (preClosingSaving) return;
+    const nextForm = { ...preClosingForm, [field]: pago };
+    setPreClosingForm(nextForm);
+    void savePreClosing(
+      nextForm,
+      pago ? `${label} marcada como paga e retirada da previsão.` : `${label} voltou para a previsão de pagamento.`,
+    );
+  };
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
@@ -906,8 +1178,8 @@ export default function Romaneios() {
     URL.revokeObjectURL(url);
   };
 
-  const downloadFilteredRomaneiosCsv = () => {
-    if (filtered.length === 0) {
+  const downloadFilteredRomaneiosCsv = (romaneiosDoRelatorio: Romaneio[]) => {
+    if (romaneiosDoRelatorio.length === 0) {
       toast.error("Não há romaneios nos filtros atuais para exportar.");
       return;
     }
@@ -921,7 +1193,7 @@ export default function Romaneios() {
 
     const summaryByMonthAndPlate = new Map<string, Map<string, TravelSummary>>();
 
-    filtered.forEach((romaneio) => {
+    romaneiosDoRelatorio.forEach((romaneio) => {
       const dateParts = romaneio.dataManifesto.split("-").map(Number);
       const year = dateParts[0];
       const month = dateParts[1];
@@ -1014,12 +1286,12 @@ export default function Romaneios() {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
-    toast.success(`Resumo de ${filtered.length} romaneio(s) exportado em CSV.`);
+    toast.success(`Resumo de ${rows.length} romaneio(s) exportado em CSV.`);
   };
 
 
-  const downloadFilteredRomaneiosPdf = () => {
-    if (filtered.length === 0) {
+  const downloadFilteredRomaneiosPdf = (rows: Romaneio[]) => {
+    if (rows.length === 0) {
       toast.error("Não há romaneios nos filtros atuais para exportar.");
       return;
     }
@@ -1033,7 +1305,7 @@ export default function Romaneios() {
 
     const summaryByMonthAndPlate = new Map<string, Map<string, TravelSummary>>();
 
-    filtered.forEach((romaneio) => {
+    rows.forEach((romaneio) => {
       const dateParts = romaneio.dataManifesto.split("-").map(Number);
       const year = dateParts[0];
       const month = dateParts[1];
@@ -1267,14 +1539,14 @@ export default function Romaneios() {
                 </div>
                 <div class="generated">
                   <strong>Relatório operacional</strong><br />
-                  ${filtered.length} romaneio(s) nos filtros atuais<br />
+                  ${rows.length} romaneio(s) nos filtros atuais<br />
                   Gerado em ${generatedAt.toLocaleDateString("pt-BR")} às ${generatedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                 </div>
               </div>
             </header>
 
             <section class="summary-grid">
-              <div class="card"><span>Romaneios</span><strong>${filtered.length}</strong></div>
+              <div class="card"><span>Romaneios</span><strong>${rows.length}</strong></div>
               <div class="card"><span>Veículos</span><strong>${placasUnicas}</strong></div>
               <div class="card primary"><span>Lebrinha</span><strong>${money(totalLebrinha)}</strong></div>
               <div class="card green"><span>Clientes</span><strong>${money(totalCliente)}</strong></div>
@@ -1297,7 +1569,7 @@ export default function Romaneios() {
     printWindow.document.close();
     printWindow.focus();
     window.setTimeout(() => printWindow.print(), 300);
-    toast.success(`Resumo visual de ${filtered.length} romaneio(s) preparado para PDF.`);
+    toast.success(`Resumo visual de ${rows.length} romaneio(s) preparado para PDF.`);
   };
 
   const saveImportedRomaneio = async (result: PdfResponse, file: File) => {
@@ -1732,9 +2004,10 @@ export default function Romaneios() {
           `Cadastrando romaneios: ${imported + failed.length}/${validEntries.length}...`,
         );
 
-        // Converte os PDFs deste pequeno lote em paralelo, sem manter os 249
-        // arquivos em base64 simultaneamente na memória do navegador.
-        const payloads = await Promise.all(chunk.map(async (entry) => {
+        // Envia um PDF por request. Isso evita manter multiplas copias base64
+        // simultaneamente na memoria do navegador e reduz o pico no Worker.
+        const payloads: any[] = [];
+        for (const entry of chunk) {
           const entries = entry.result.sugestoes.produtos;
           const first = entries[0];
           if (!first) throw new Error("O arquivo não possui itens válidos para cadastrar.");
@@ -1747,7 +2020,7 @@ export default function Romaneios() {
           const registeredVehicle = findRegisteredVehicleByPlate(documento.placaVeiculo);
           if (!registeredVehicle) throw new Error("A placa lida não corresponde a um veículo cadastrado.");
           const pdfUrl = await fileToDataUrl(entry.file);
-          return {
+          const payload = {
             clienteId: first.cliente.id,
             dataManifesto: documento.dataEmissao || first.produto.data,
             tipoManifesto: first.produto.tipoManifesto,
@@ -1775,7 +2048,8 @@ export default function Romaneios() {
               };
             }),
           };
-        }));
+          payloads.push(payload);
+        }
 
         try {
           const response = await postBulkSaveWithRetry(payloads);
@@ -1992,8 +2266,13 @@ export default function Romaneios() {
             <Button
               variant="outline"
               disabled={filtered.length === 0}
-              onClick={() => setReportOpen(true)}
-              title="Gerar relatório conforme os filtros atuais"
+              onClick={() => {
+                setReportPlate("");
+                setReportDateFrom(columnFilters.dataInicio || initialRomaneioMonth.from);
+                setReportDateTo(columnFilters.dataFim || initialRomaneioMonth.to);
+                setReportOpen(true);
+              }}
+              title="Gerar relatório por placa e período"
             >
               <FileText className="mr-2 h-4 w-4" />
               Relatório
@@ -2092,6 +2371,17 @@ export default function Romaneios() {
               <X className="mr-2 h-4 w-4" />Limpar filtros
             </Button>
           )}
+          <Button
+            type="button"
+            className="ml-auto"
+            onClick={() => {
+              setPreClosingTarget(null);
+              setPreClosingOpen(true);
+            }}
+          >
+            <CircleDollarSign className="mr-2 h-4 w-4" />
+            Pré-Fechamento
+          </Button>
         </div>
 
         {selectedDeleteIds.size > 0 && (
@@ -2266,6 +2556,7 @@ export default function Romaneios() {
                         <td className="whitespace-nowrap px-4 py-3 text-right">
                           <div className="inline-flex gap-1">
                             <Button size="icon" variant="ghost" title="Inspecionar romaneio" aria-label="Inspecionar romaneio" onClick={() => setInspecting(romaneio)}><Eye className="h-4 w-4 text-blue-500" /></Button>
+                            <Button size="icon" variant="ghost" title="Vincular NF-e" aria-label="Vincular NF-e" onClick={() => setNfTarget(romaneio)}><FileText className="h-4 w-4 text-amber-500" /></Button>
                             <Button size="icon" variant="ghost" title="Baixar CSV" aria-label="Baixar CSV do romaneio" onClick={() => downloadRomaneioCsv(romaneio)}><FileDown className="h-4 w-4 text-sky-600" /></Button>
                             {(romaneio.pdfUrl || romaneio.pdfStored) && <Button size="icon" variant="ghost" title="Baixar PDF" aria-label="Baixar PDF" onClick={() => void downloadPdf(romaneio)}><Download className="h-4 w-4 text-emerald-600" /></Button>}
                             <Button size="icon" variant="ghost" title="Excluir" aria-label="Excluir romaneio" onClick={async () => {
@@ -2321,6 +2612,302 @@ export default function Romaneios() {
         </div>
       </div>
 
+      <Dialog
+        open={preClosingOpen}
+        onOpenChange={(open) => {
+          setPreClosingOpen(open);
+          if (!open) setPreClosingTarget(null);
+        }}
+      >
+        <DialogContent className="max-h-[94vh] w-[96vw] max-w-[1450px] overflow-y-auto sm:max-w-[96vw] xl:max-w-[1450px]">
+          <DialogHeader>
+            <DialogTitle>{preClosingTarget ? `Pré-Fechamento • ${preClosingTarget.romaneios || "Sem número"}` : "Pré-Fechamento"}</DialogTitle>
+          </DialogHeader>
+
+          {preClosingTarget ? (
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Button type="button" variant="outline" size="sm" onClick={() => setPreClosingTarget(null)}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Voltar aos romaneios
+                </Button>
+                <div className="text-right text-sm text-muted-foreground">
+                  <div>{formatDate(preClosingTarget.dataManifesto)} • {preClosingTarget.placaVeiculo || "Sem placa"}</div>
+                  <div>{preClosingTarget.modeloVeiculo || "Modelo não informado"}</div>
+                </div>
+              </div>
+
+              {(() => {
+                const aReceber = preFechamentoValorClientes(preClosingTarget);
+                const comissao = preClosingNumericValue(preClosingForm.comissao);
+                const pedagio = preClosingNumericValue(preClosingForm.pedagio);
+                const abastecimento = preClosingNumericValue(preClosingForm.abastecimento);
+                const gastos = (preClosingForm.comissaoPaga ? 0 : comissao)
+                  + (preClosingForm.pedagioPago ? 0 : pedagio)
+                  + (preClosingForm.abastecimentoPago ? 0 : abastecimento);
+                const caixa = gastos <= 0 ? 0 : aReceber >= gastos ? gastos : aReceber - gastos;
+                const saldo = aReceber - gastos;
+
+                return (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-xl border bg-card p-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">A receber de clientes</p>
+                        <p className="mt-1 text-xl font-bold text-blue-500">{formatBRL(aReceber)}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Somente cobranças ainda não marcadas como pagas.</p>
+                      </div>
+                      <div className="rounded-xl border bg-card p-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Gastos previstos</p>
+                        <p className="mt-1 text-xl font-bold">{formatBRL(gastos)}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Somente comissão, pedágio e abastecimento ainda não pagos.</p>
+                      </div>
+                      <div className={`rounded-xl border p-4 ${caixa < 0 ? "border-red-500/40 bg-red-500/5" : "border-emerald-500/40 bg-emerald-500/5"}`}>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Caixa previsto para a carga</p>
+                        <p className={`mt-1 text-xl font-bold ${caixa < 0 ? "text-red-500" : "text-emerald-500"}`}>
+                          {caixa < 0 ? `-${formatBRL(Math.abs(caixa))}` : formatBRL(caixa)}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {caixa < 0 ? "Valor que falta para cobrir os gastos." : "Valor dos gastos coberto pelos recebimentos."}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border bg-card p-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Saldo após previsão</p>
+                        <p className={`mt-1 text-xl font-bold ${saldo < 0 ? "text-red-500" : "text-emerald-500"}`}>{formatBRL(saldo)}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Recebimentos pendentes menos os custos que ainda precisam ser pagos.</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border p-4">
+                      <div className="mb-4">
+                        <h3 className="font-semibold">Custos previstos da viagem</h3>
+                        <p className="text-sm text-muted-foreground">Preencha os valores antes da saída do caminhão para prever quanto a carga exige do caixa.</p>
+                      </div>
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="pre-closing-comissao">Comissão</Label>
+                          <div className="flex items-stretch gap-2">
+                            <Input
+                              id="pre-closing-comissao"
+                              inputMode="decimal"
+                              value={preClosingForm.comissao}
+                              onChange={(event) => setPreClosingForm((current) => ({ ...current, comissao: event.target.value }))}
+                              placeholder="0,00"
+                            />
+                            <div className="inline-flex shrink-0 overflow-hidden rounded-md border-2 border-border bg-background shadow-sm">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className={`h-10 w-10 rounded-none ${preClosingForm.comissaoPaga ? "bg-emerald-600 text-white shadow-inner hover:bg-emerald-700 hover:text-white" : "text-emerald-500 hover:bg-emerald-500/20 hover:text-emerald-600"}`}
+                                title="Comissão paga — retirar da previsão"
+                                aria-label="Marcar comissão como paga"
+                                aria-pressed={preClosingForm.comissaoPaga}
+                                onClick={() => updatePreClosingPaymentStatus("comissaoPaga", true, "Comissão")}
+                                disabled={preClosingSaving}
+                              >
+                                <Check className="h-5 w-5 stroke-[3]" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className={`h-10 w-10 rounded-none border-l-2 ${!preClosingForm.comissaoPaga ? "bg-red-600 text-white shadow-inner hover:bg-red-700 hover:text-white" : "text-red-500 hover:bg-red-500/20 hover:text-red-600"}`}
+                                title="Comissão pendente — manter na previsão"
+                                aria-label="Marcar comissão como ainda não paga"
+                                aria-pressed={!preClosingForm.comissaoPaga}
+                                onClick={() => updatePreClosingPaymentStatus("comissaoPaga", false, "Comissão")}
+                                disabled={preClosingSaving}
+                              >
+                                <X className="h-5 w-5 stroke-[3]" />
+                              </Button>
+                            </div>
+                          </div>
+                          <p className={`text-xs font-medium ${preClosingForm.comissaoPaga ? "text-emerald-500" : "text-red-500"}`}>
+                            {preClosingForm.comissaoPaga ? "Pago — fora da previsão" : "Pendente — entra na previsão"}
+                          </p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="pre-closing-pedagio">Pedágio</Label>
+                          <div className="flex items-stretch gap-2">
+                            <Input
+                              id="pre-closing-pedagio"
+                              inputMode="decimal"
+                              value={preClosingForm.pedagio}
+                              onChange={(event) => setPreClosingForm((current) => ({ ...current, pedagio: event.target.value }))}
+                              placeholder="0,00"
+                            />
+                            <div className="inline-flex shrink-0 overflow-hidden rounded-md border-2 border-border bg-background shadow-sm">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className={`h-10 w-10 rounded-none ${preClosingForm.pedagioPago ? "bg-emerald-600 text-white shadow-inner hover:bg-emerald-700 hover:text-white" : "text-emerald-500 hover:bg-emerald-500/20 hover:text-emerald-600"}`}
+                                title="Pedágio pago — retirar da previsão"
+                                aria-label="Marcar pedágio como pago"
+                                aria-pressed={preClosingForm.pedagioPago}
+                                onClick={() => updatePreClosingPaymentStatus("pedagioPago", true, "Pedágio")}
+                                disabled={preClosingSaving}
+                              >
+                                <Check className="h-5 w-5 stroke-[3]" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className={`h-10 w-10 rounded-none border-l-2 ${!preClosingForm.pedagioPago ? "bg-red-600 text-white shadow-inner hover:bg-red-700 hover:text-white" : "text-red-500 hover:bg-red-500/20 hover:text-red-600"}`}
+                                title="Pedágio pendente — manter na previsão"
+                                aria-label="Marcar pedágio como ainda não pago"
+                                aria-pressed={!preClosingForm.pedagioPago}
+                                onClick={() => updatePreClosingPaymentStatus("pedagioPago", false, "Pedágio")}
+                                disabled={preClosingSaving}
+                              >
+                                <X className="h-5 w-5 stroke-[3]" />
+                              </Button>
+                            </div>
+                          </div>
+                          <p className={`text-xs font-medium ${preClosingForm.pedagioPago ? "text-emerald-500" : "text-red-500"}`}>
+                            {preClosingForm.pedagioPago ? "Pago — fora da previsão" : "Pendente — entra na previsão"}
+                          </p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="pre-closing-abastecimento">Abastecimento</Label>
+                          <div className="flex items-stretch gap-2">
+                            <Input
+                              id="pre-closing-abastecimento"
+                              inputMode="decimal"
+                              value={preClosingForm.abastecimento}
+                              onChange={(event) => setPreClosingForm((current) => ({ ...current, abastecimento: event.target.value }))}
+                              placeholder="0,00"
+                            />
+                            <div className="inline-flex shrink-0 overflow-hidden rounded-md border-2 border-border bg-background shadow-sm">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className={`h-10 w-10 rounded-none ${preClosingForm.abastecimentoPago ? "bg-emerald-600 text-white shadow-inner hover:bg-emerald-700 hover:text-white" : "text-emerald-500 hover:bg-emerald-500/20 hover:text-emerald-600"}`}
+                                title="Abastecimento pago — retirar da previsão"
+                                aria-label="Marcar abastecimento como pago"
+                                aria-pressed={preClosingForm.abastecimentoPago}
+                                onClick={() => updatePreClosingPaymentStatus("abastecimentoPago", true, "Abastecimento")}
+                                disabled={preClosingSaving}
+                              >
+                                <Check className="h-5 w-5 stroke-[3]" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className={`h-10 w-10 rounded-none border-l-2 ${!preClosingForm.abastecimentoPago ? "bg-red-600 text-white shadow-inner hover:bg-red-700 hover:text-white" : "text-red-500 hover:bg-red-500/20 hover:text-red-600"}`}
+                                title="Abastecimento pendente — manter na previsão"
+                                aria-label="Marcar abastecimento como ainda não pago"
+                                aria-pressed={!preClosingForm.abastecimentoPago}
+                                onClick={() => updatePreClosingPaymentStatus("abastecimentoPago", false, "Abastecimento")}
+                                disabled={preClosingSaving}
+                              >
+                                <X className="h-5 w-5 stroke-[3]" />
+                              </Button>
+                            </div>
+                          </div>
+                          <p className={`text-xs font-medium ${preClosingForm.abastecimentoPago ? "text-emerald-500" : "text-red-500"}`}>
+                            {preClosingForm.abastecimentoPago ? "Pago — fora da previsão" : "Pendente — entra na previsão"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex justify-end">
+                        <Button type="button" onClick={() => void savePreClosing()} disabled={preClosingSaving}>
+                          {preClosingSaving && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
+                          Salvar pré-fechamento
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border bg-card p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">A receber de clientes</p>
+                  <p className="mt-1 text-xl font-bold text-blue-500">{formatBRL(preClosingTotals.aReceber)}</p>
+                </div>
+                <div className="rounded-xl border bg-card p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Gastos previstos</p>
+                  <p className="mt-1 text-xl font-bold">{formatBRL(preClosingTotals.gastos)}</p>
+                </div>
+                <div className={`rounded-xl border p-4 ${preClosingTotalCaixa < 0 ? "border-red-500/40 bg-red-500/5" : "border-emerald-500/40 bg-emerald-500/5"}`}>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Caixa previsto</p>
+                  <p className={`mt-1 text-xl font-bold ${preClosingTotalCaixa < 0 ? "text-red-500" : "text-emerald-500"}`}>
+                    {preClosingTotalCaixa < 0 ? `-${formatBRL(Math.abs(preClosingTotalCaixa))}` : formatBRL(preClosingTotalCaixa)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Verde quando os recebimentos cobrem os gastos; vermelho mostra o valor que falta.</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border">
+                <table className="w-full min-w-[940px] text-sm">
+                  <thead className="bg-muted/30 text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Romaneio</th>
+                      <th className="px-4 py-3 text-left">Data</th>
+                      <th className="px-4 py-3 text-left">Veículo</th>
+                      <th className="px-4 py-3 text-right">A receber clientes</th>
+                      <th className="px-4 py-3 text-right">Gastos previstos</th>
+                      <th className="px-4 py-3 text-right">Caixa previsto</th>
+                      <th className="px-4 py-3 text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((romaneio) => {
+                      const aReceber = preFechamentoValorClientes(romaneio);
+                      const gastos = preFechamentoGastos(romaneio);
+                      const caixa = preFechamentoCaixa(romaneio);
+                      return (
+                        <tr key={`pre-${romaneio.id}`} className="border-t hover:bg-muted/20">
+                          <td className="px-4 py-3">
+                            <p className="font-semibold">{romaneio.romaneios || "Sem número"}</p>
+                            <p className="text-xs text-muted-foreground">{romaneio.transportadoraNome || "Sem transportadora"}</p>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3">{formatDate(romaneio.dataManifesto)}</td>
+                          <td className="px-4 py-3">
+                            <p className="font-semibold">{romaneio.placaVeiculo || "Sem placa"}</p>
+                            <p className="text-xs text-muted-foreground">{romaneio.modeloVeiculo || "Modelo não informado"}</p>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-blue-500">{formatBRL(aReceber)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">{formatBRL(gastos)}</td>
+                          <td className={`whitespace-nowrap px-4 py-3 text-right font-bold ${caixa < 0 ? "text-red-500" : "text-emerald-500"}`}>
+                            {caixa < 0 ? `-${formatBRL(Math.abs(caixa))}` : formatBRL(caixa)}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              title="Ver viagem e preencher pré-fechamento"
+                              aria-label="Ver viagem e preencher pré-fechamento"
+                              onClick={() => openPreClosingDetails(romaneio)}
+                            >
+                              <Eye className="h-4 w-4 text-blue-500" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filtered.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+                          Nenhum romaneio encontrado para os filtros atuais.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
@@ -2328,16 +2915,45 @@ export default function Romaneios() {
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Escolha o formato do relatório. A exportação respeita os filtros aplicados na tela.
+              Selecione a placa e o período que devem entrar no relatório.
             </p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="report-plate">Placa</Label>
+                <select
+                  id="report-plate"
+                  aria-label="Placa do relatório"
+                  value={reportPlate}
+                  onChange={(event) => setReportPlate(event.target.value)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                >
+                  <option value="">Todas as placas</option>
+                  {reportPlateOptions.map((plate) => <option key={plate} value={plate}>{plate}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="report-date-from">Data inicial</Label>
+                <Input id="report-date-from" aria-label="Data inicial do relatório" type="date" value={reportDateFrom} onChange={(event) => setReportDateFrom(event.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="report-date-to">Data final</Label>
+                <Input id="report-date-to" aria-label="Data final do relatório" type="date" value={reportDateTo} onChange={(event) => setReportDateTo(event.target.value)} />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">{reportFiltered.length} romaneio(s) no relatório selecionado.</p>
             <div className="grid gap-3 sm:grid-cols-[0.9fr_1.1fr]">
               <Button
                 type="button"
                 variant="outline"
                 className="h-auto justify-start py-4"
-                onClick={() => {
-                  setReportOpen(false);
-                  downloadFilteredRomaneiosCsv();
+                onClick={async () => {
+                  try {
+                    const rows = await prepareReportRows();
+                    downloadFilteredRomaneiosCsv(rows);
+                    if (rows.length) setReportOpen(false);
+                  } catch {
+                    toast.error("Não foi possível carregar todo o período do relatório.");
+                  }
                 }}
               >
                 <FileDown className="mr-3 h-5 w-5" />
@@ -2350,9 +2966,14 @@ export default function Romaneios() {
                 type="button"
                 variant="outline"
                 className="h-auto justify-start py-4"
-                onClick={() => {
-                  setReportOpen(false);
-                  downloadFilteredRomaneiosPdf();
+                onClick={async () => {
+                  try {
+                    const rows = await prepareReportRows();
+                    downloadFilteredRomaneiosPdf(rows);
+                    if (rows.length) setReportOpen(false);
+                  } catch {
+                    toast.error("Não foi possível carregar todo o período do relatório.");
+                  }
                 }}
               >
                 <FileText className="mr-3 h-5 w-5" />
@@ -2442,8 +3063,8 @@ export default function Romaneios() {
                 </table>
               </div>
 
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div className="w-full overflow-hidden rounded-lg border lg:max-w-xl">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="flex h-full w-full flex-col overflow-hidden rounded-lg border">
                   <div className="border-b bg-muted/30 px-3 py-2">
                     <p className="text-xs font-semibold uppercase text-muted-foreground">Resumo por cobrança</p>
                   </div>
@@ -2473,7 +3094,62 @@ export default function Romaneios() {
                   </table>
                 </div>
 
-                <div className="flex flex-wrap justify-end gap-2">
+                <div className="flex h-full w-full flex-col">
+                  <input
+                    ref={inspectingNfInputRef}
+                    type="file"
+                    accept=".xml,.pdf,application/xml,text/xml,application/pdf"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => { if (e.target.files?.length) void importarNotasVinculadas(e.target.files, inspecting); e.currentTarget.value = ""; }}
+                  />
+                  <div className="flex h-full min-h-[190px] flex-col overflow-hidden rounded-lg border bg-background">
+                    <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2">
+                      <p className="text-xs font-semibold uppercase text-muted-foreground">Notas fiscais</p>
+                      {!!linkedNfes[inspecting.id]?.length && (
+                        <Button type="button" size="sm" variant="outline" disabled={nfImporting} onClick={() => inspectingNfInputRef.current?.click()}>
+                          <Plus className="mr-1 h-4 w-4" />Adicionar NF
+                        </Button>
+                      )}
+                    </div>
+                    {linkedNfesLoading[inspecting.id] ? (
+                      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground"><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />Carregando notas...</div>
+                    ) : linkedNfes[inspecting.id]?.length ? (
+                      <div className="max-h-[250px] flex-1 space-y-2 overflow-y-auto p-3">
+                        {linkedNfes[inspecting.id].map((nfe) => (
+                          <div key={nfe.id} className="flex items-center gap-2 rounded-md border p-2 text-xs">
+                            <FileText className="h-5 w-5 shrink-0 text-primary" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold">NF-e {nfe.numero}/{nfe.serie}</p>
+                              <p>{formatDate(nfe.dataEmissao)} · {formatBRL(nfe.valorNota)} · {nfe.itens} item(ns)</p>
+                              <p className="truncate text-muted-foreground" title={nfe.chave}>{nfe.chave}</p>
+                            </div>
+                            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0" title="Baixar NF-e" onClick={() => void baixarNotaFiscalVinculada(inspecting.id, nfe)}><Download className="h-4 w-4" /></Button>
+                            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0" title="Excluir vínculo" onClick={() => void desvincularNotaFiscal(inspecting.id, nfe)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div
+                        className={`flex flex-1 flex-col items-center justify-center border-2 border-dashed border-transparent p-5 text-center transition-colors ${inspectingNfDragActive ? "bg-primary/10" : "bg-primary/5"}`}
+                        onDragEnter={(e) => { e.preventDefault(); if (!nfImporting) setInspectingNfDragActive(true); }}
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; if (!nfImporting) setInspectingNfDragActive(true); }}
+                        onDragLeave={(e) => { e.preventDefault(); if (e.currentTarget === e.target) setInspectingNfDragActive(false); }}
+                        onDrop={(e) => { e.preventDefault(); setInspectingNfDragActive(false); if (!nfImporting) void importarNotasVinculadas(e.dataTransfer.files, inspecting); }}
+                      >
+                        <FileText className="mb-2 h-8 w-8 text-primary" />
+                        <p className="font-semibold">Vincular notas fiscais</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Arraste NF-e em PDF/XML ou selecione os arquivos.</p>
+                        <Button type="button" size="sm" variant="outline" className="mt-3" disabled={nfImporting} onClick={() => inspectingNfInputRef.current?.click()}>
+                          {nfImporting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                          {nfImporting ? "Lendo notas..." : "Selecionar PDF/XML"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-nowrap justify-end gap-2 lg:col-span-2">
                   <Button variant="outline" onClick={() => downloadRomaneioCsv(inspecting)}><FileDown className="mr-2 h-4 w-4" />Baixar CSV</Button>
                   {(inspecting.pdfUrl || inspecting.pdfStored) && <Button variant="outline" onClick={() => void downloadPdf(inspecting)}><Download className="mr-2 h-4 w-4" />Baixar PDF</Button>}
                   <Button onClick={() => {
@@ -2766,6 +3442,33 @@ export default function Romaneios() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(nfTarget)} onOpenChange={(open) => !open && !nfImporting && setNfTarget(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader><DialogTitle>Vincular notas fiscais ao romaneio {nfTarget?.romaneios || ""}</DialogTitle></DialogHeader>
+          <input ref={nfInputRef} type="file" accept=".xml,.pdf,application/xml,text/xml,application/pdf" multiple className="hidden" onChange={(e) => { if (e.target.files?.length) void importarNotasVinculadas(e.target.files); e.currentTarget.value = ""; }} />
+          {nfTarget && (linkedNfesLoading[nfTarget.id] ? (
+            <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground"><LoaderCircle className="mx-auto mb-2 h-5 w-5 animate-spin" />Carregando notas...</div>
+          ) : linkedNfes[nfTarget.id]?.length ? (
+            <div className="rounded-lg border">
+              <div className="flex items-center justify-between border-b px-3 py-2"><p className="font-semibold">Notas fiscais</p><Button size="sm" variant="outline" onClick={() => nfInputRef.current?.click()}><Plus className="mr-1 h-4 w-4" />Adicionar NF</Button></div>
+              <div className="max-h-64 space-y-2 overflow-y-auto p-3">{linkedNfes[nfTarget.id].map((nfe) => (
+                <div key={nfe.id} className="flex items-center gap-3 rounded-md border p-3 text-sm">
+                  <FileText className="h-5 w-5 shrink-0 text-primary"/><div className="min-w-0 flex-1"><p className="font-semibold">NF-e {nfe.numero}/{nfe.serie}</p><p>{formatDate(nfe.dataEmissao)} · {formatBRL(nfe.valorNota)} · {nfe.itens} item(ns)</p><p className="truncate text-xs text-muted-foreground" title={nfe.chave}>{nfe.chave}</p></div>
+                  <Button type="button" size="icon" variant="ghost" title="Baixar NF-e" onClick={() => void baixarNotaFiscalVinculada(nfTarget.id, nfe)}><Download className="h-4 w-4" /></Button><Button type="button" size="icon" variant="ghost" title="Excluir vínculo" onClick={() => void desvincularNotaFiscal(nfTarget.id, nfe)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                </div>
+              ))}</div>
+            </div>
+          ) : (
+            <div className={`rounded-xl border-2 border-dashed p-8 text-center transition-colors ${nfDragActive ? "border-primary bg-primary/10" : "border-primary/30 bg-primary/5"}`}
+              onDragEnter={(e)=>{e.preventDefault();if(!nfImporting)setNfDragActive(true)}} onDragOver={(e)=>{e.preventDefault();e.dataTransfer.dropEffect="copy"}} onDragLeave={(e)=>{e.preventDefault();setNfDragActive(false)}}
+              onDrop={(e)=>{e.preventDefault();setNfDragActive(false);if(!nfImporting)void importarNotasVinculadas(e.dataTransfer.files)}}>
+              <FileText className="mx-auto mb-3 h-9 w-9 text-primary" /><p className="font-semibold">Vincular NF-e em PDF ou XML</p><p className="mt-1 text-sm text-muted-foreground">Arraste os arquivos aqui ou selecione. Um PDF pode conter várias NF-e.</p>
+              <Button type="button" variant="outline" className="mt-4" disabled={nfImporting} onClick={()=>nfInputRef.current?.click()}>{nfImporting ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4"/>}{nfImporting ? "Lendo notas..." : "Selecionar PDF/XML"}</Button>
+            </div>
+          ))}
         </DialogContent>
       </Dialog>
 

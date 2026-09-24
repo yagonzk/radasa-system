@@ -103,6 +103,11 @@ type LancamentoForm = {
 const money = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const today = () => new Date().toISOString().slice(0, 10);
+const currentMonthRange = () => {
+  const now = new Date();
+  const local = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return { from: local(new Date(now.getFullYear(), now.getMonth(), 1)), to: local(new Date(now.getFullYear(), now.getMonth()+1, 0)) };
+};
 const empty = {
   tipo: "DESPESA" as const,
   descricao: "",
@@ -298,15 +303,15 @@ export default function Financeiro() {
   const [novoCentro, setNovoCentro] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<LancamentoForm>({ ...empty, centroCustoId: "" });
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [from, setFrom] = useState(() => currentMonthRange().from);
+  const [to, setTo] = useState(() => currentMonthRange().to);
   const [activeTab, setActiveTab] = useState<"GERAL" | "RECEBER" | "PAGAR" | "MOVIMENTACOES" | "CENTROS">("GERAL");
   const [deletingAll, setDeletingAll] = useState(false);
 
   const load = async () => {
     try {
       const [a, b, c, d, e] = await Promise.all([
-        api.get("/financeiro"),
+        api.get("/financeiro", { params: { from, to } }),
         api.get("/financeiro/resumo/dre", {
           params: { from: from || undefined, to: to || undefined },
         }),
@@ -448,7 +453,7 @@ export default function Financeiro() {
       <div className="space-y-6 p-4 md:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold">Financeiro</h1>
+            <h1 className="text-2xl font-bold">DRE Operacional</h1>
             <p className="text-sm text-muted-foreground">
               Gestão financeira organizada por áreas, sem repetir informação na mesma tela.
             </p>

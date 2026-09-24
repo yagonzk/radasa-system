@@ -77,12 +77,6 @@ export interface Veiculo {
   rntrc?: string; crlvPdfNome?: string; crlvPdfStored?: boolean; observacoes?: string; createdAt: string;
 }
 
-export type StatusMulta = "PENDENTE" | "PAGO" | "EM_RECURSO" | "CANCELADO";
-export interface Multa {
-  id: string; veiculoId: string; motoristaId?: string | null; autoInfracao: string; codigoInfracao: string; orgaoAutuador: string; dataInfracao: string; hora: string; local: string; descricao: string; pontos: number; valorOriginal: number; valorAtual: number; vencimento?: string | null; status: StatusMulta; observacoes: string; documentoUrl?: string | null; documentoNome?: string | null; documentoStored?: boolean; createdAt: string;
-  veiculo: Pick<Veiculo, "id"|"placa"|"renavam"|"modelo"|"marca">; motorista?: Pick<Motorista, "id"|"nome"|"cpf"> | null;
-}
-
 export interface ViagemDespesaExtrato { id:string; viagemId:string; tipo:"PEDAGIO"|"CHAPA"; data:string; hora:string; valor:number; descricao:string; colaborador:string; origem:string; fingerprint:string; createdAt:string; }
 export interface Viagem { id: string; codigo?: string | null; editVersion?: number; status?: "PLANEJADA"|"CARREGANDO"|"EM_TRANSITO"|"ENTREGUE"|"FINALIZADA"|"CANCELADA"; placa: string; motoristaId: string; clienteId?: string | null; valorFrete: number; dataManifesto: string; cidadeOrigem?: string; cidadeEntrega: string; rotas: string[]; distanciaKm: number; kmSaida?: number | null; kmChegada?: number | null; dataSaida?: string | null; previsaoChegada?: string | null; dataChegada?: string | null; valorPedagio: number; valorPedagioManual?: number; valorPedagioImportado?: number; valorDiaria: number; valorAbastecimento: number; abastecimentoId?: string | null; abastecimentoIds?: string[]; abastecimentosVinculados?: Array<{ abastecimentoId: string; valorVinculado: number; abastecimento?: Abastecimento }>; valorComissao?: number; valorChapa: number; valorChapaManual?: number; valorChapaImportado?: number; valorMulta?: number; custoExtraTag?: string; valorCustoExtra?: number; despesasExtrato?: ViagemDespesaExtrato[]; observacoes?: string; createdAt: string; }
 export type TipoManifesto = "Bonificação - Lebrinha" | "Acertar c/ Lebrinha" | "Receber c/ Cliente" | "Vasilhame";
@@ -96,7 +90,22 @@ export interface ManifestoMetadata {
   romaneios?: string;
   notasFiscais?: string;
 }
-export interface Manifesto extends ManifestoMetadata { id: string; clienteId: string; dataManifesto: string; produtos: ManifestoProduto[]; tipoManifesto: TipoManifesto; pdfUrl?: string; pdfStored?: boolean; createdAt: string; }
+export interface Manifesto extends ManifestoMetadata {
+  id: string;
+  clienteId: string;
+  dataManifesto: string;
+  produtos: ManifestoProduto[];
+  tipoManifesto: TipoManifesto;
+  pdfUrl?: string;
+  pdfStored?: boolean;
+  preFechamentoComissao?: number;
+  preFechamentoPedagio?: number;
+  preFechamentoAbastecimento?: number;
+  preFechamentoComissaoPaga?: boolean;
+  preFechamentoPedagioPago?: boolean;
+  preFechamentoAbastecimentoPago?: boolean;
+  createdAt: string;
+}
 export type RomaneioItem = ManifestoProduto;
 export type Romaneio = Manifesto;
 export interface AbastecimentoProduto { produtoId: string; quantidadeLitros: number; valorUnitario: number; valorTotal: number; }
@@ -326,6 +335,23 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string, opti
 
   const refresh = useCallback(async () => load(true), [load]);
 
+  // Permite que telas históricas busquem outro período no servidor sem voltar
+  // a carregar todo o histórico na montagem. Datas vazias significam "todo o período".
+  const loadRange = useCallback(async (from?: string, to?: string) => {
+    const revisionAtStart = mutationRevision.current;
+    try {
+      const response = await api.get<unknown>(`/${resource}`, {
+        params: { from: from || undefined, to: to || undefined },
+      });
+      const collection = requireCollection<T>(response.data, entityName);
+      if (revisionAtStart === mutationRevision.current) setItems(collection);
+      return collection;
+    } catch (error) {
+      console.error(`Falha ao carregar período de ${entityName}.`, error);
+      throw error;
+    }
+  }, [resource, entityName]);
+
   useEffect(() => {
     // A montagem usa cache compartilhado e agrupa recursos do mesmo frame em
     // uma única chamada /api/bootstrap. Navegar entre telas deixa de refazer
@@ -433,7 +459,7 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string, opti
   }, [resource, sourceId]);
 
   const getById = useCallback((id: string) => items.find(item => item.id === id), [items]);
-  return { items, create, update, remove, removeMany, getById, entityName, refresh, replaceLocalItem };
+  return { items, create, update, remove, removeMany, getById, entityName, refresh, loadRange, replaceLocalItem };
 }
 
 export const useMotoristas = () => useApiCrud<Motorista>("motoristas", "Motorista");
@@ -447,17 +473,6 @@ export const useEstoqueSubcategorias = () => useApiCrud<EstoqueSubcategoria>("es
 export const useEstoqueProdutos = () => useApiCrud<EstoqueProduto>("estoque/produtos", "Produto do almoxarifado");
 export const useLocais = () => useApiCrud<Local>("locais", "Local");
 export const useVeiculos = () => useApiCrud<Veiculo>("veiculos", "Veículo");
-
-export function useMultas() {
-  const [items, setItems] = useState<Multa[]>([]);
-  const refresh = useCallback(async () => setItems((await api.get<Multa[]>("/multas")).data), []);
-  useEffect(() => { void refresh(); }, [refresh]);
-  const create = useCallback(async (data: Omit<Multa, "id"|"veiculo"|"motorista"|"createdAt">) => { const item=(await api.post<Multa>("/multas",data)).data; await refresh(); return item; }, [refresh]);
-  const update = useCallback(async (id:string, data: Omit<Multa, "id"|"veiculo"|"motorista"|"createdAt">) => { const item=(await api.put<Multa>(`/multas/${id}`,data)).data; await refresh(); return item; }, [refresh]);
-  const remove = useCallback(async (id:string) => { await api.delete(`/multas/${id}`); await refresh(); }, [refresh]);
-  const consultarVeiculo = useCallback(async (veiculoId:string) => (await api.get<{ integracaoAutomatica:boolean; fonte:string; mensagem:string; multas:Multa[] }>(`/multas/${veiculoId}/consultar`)).data, []);
-  return { items, refresh, create, update, remove, consultarVeiculo };
-}
 
 export const useViagens = () => useApiCrud<Viagem>("viagens", "Viagem");
 export type DemandaInput = Omit<Demanda, "id" | "createdAt" | "updatedAt" | "ordem" | "arquivada"> & {

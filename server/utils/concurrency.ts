@@ -47,3 +47,20 @@ export async function mapWithConcurrency<T, R>(
   await Promise.all(runners);
   return results;
 }
+
+type AsyncTask<T = unknown> = () => Promise<T>;
+
+/**
+ * Executa consultas heterogeneas respeitando o pequeno pool local do Prisma.
+ * Mantem a ordem dos resultados para permitir destructuring com tipagem de tupla.
+ */
+export async function runWithConcurrency<T extends readonly AsyncTask<any>[]>(
+  tasks: T,
+  limit = 2,
+): Promise<{ [K in keyof T]: T[K] extends AsyncTask<infer R> ? R : never }> {
+  const results = new Array<unknown>(tasks.length);
+  await mapWithConcurrency(tasks, limit, async (task, index) => {
+    results[index] = await task();
+  });
+  return results as { [K in keyof T]: T[K] extends AsyncTask<infer R> ? R : never };
+}

@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma.js";
 import { parseDateOnly } from "../utils/date.js";
 import { number, dateOnly, created } from "../utils/serialize.js";
 import { AppError } from "../utils/app-error.js";
+import { runWithConcurrency } from "../utils/concurrency.js";
 
 const money=(v:any)=>Number(v||0);
 const proposal=(x:any)=>({...x,distanciaKm:number(x.distanciaKm),valorFrete:number(x.valorFrete),custoEstimado:number(x.custoEstimado),margemPrevista:number(x.margemPrevista),validade:x.validade?dateOnly(x.validade):null,createdAt:created(x.createdAt)});
@@ -10,7 +11,7 @@ const contract=(x:any)=>({...x,inicio:dateOnly(x.inicio),fim:x.fim?dateOnly(x.fi
 
 export const comercialService={
  async dashboard(){
-  const [propostas,contratos,tabelas]=await Promise.all([prisma.comercialProposta.findMany(),prisma.comercialContrato.findMany(),prisma.comercialTabelaFrete.findMany()]);
+  const [propostas,contratos,tabelas]=await runWithConcurrency([() => prisma.comercialProposta.findMany(),() => prisma.comercialContrato.findMany(),() => prisma.comercialTabelaFrete.findMany()] as const, 2);
   const abertas=propostas.filter(x=>["RASCUNHO","ENVIADA","NEGOCIACAO"].includes(x.status));
   const aprovadas=propostas.filter(x=>x.status==="APROVADA");
   return{propostasAbertas:abertas.length,propostasAprovadas:aprovadas.length,valorEmNegociacao:abertas.reduce((s,x)=>s+money(x.valorFrete),0),contratosAtivos:contratos.filter(x=>x.status==="ATIVO").length,tabelasAtivas:tabelas.length};

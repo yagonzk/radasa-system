@@ -1,0 +1,698 @@
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8">
+  <title>gov.br - Acesse sua conta</title>
+  <meta property="creator.productor" content="http://estruturaorganizacional.dados.gov.br/id/unidade-organizacional/2981">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+
+  <link rel="icon" href="/assets/govbr/img/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="/assets/govbr/fontawesome/css/all.min.css">
+  <link rel="stylesheet" href="/assets/govbr/fonts/rawline/rawline.css">
+  <link rel="stylesheet" href="/assets/govbr/css/govbr-highcontrast.css">
+  <link rel="stylesheet" href="/assets/govbr/css/govbr-templates.css?v=15">
+  <link rel="stylesheet" href="/assets/govbr/css/govbr-modal.css?v=9">
+  <link rel="stylesheet" href="/assets/govbr/css/govbr-eula.css?v=4">
+  <script src="/assets/govbr/js/contrast.class.js"></script>
+  <script src="/assets/govbr/js/modal.js"></script>
+</head>
+
+<body>
+    <a tabindex="0" href="#conteudo" class="sr-only sr-only-focusable" aria-label="Pular para o conteÃºdo principal. Navegue sempre com a tecla TAB">Pular para o conteÃºdo principal</a>
+
+    <header>
+        <a href="https://www.gov.br"><img src="/assets/govbr/img/govbr.png" alt="Logomarca GovBR" /></a>
+        <div id="acessibilidade">
+            <span>
+                <a href="#" onClick="contrastScript().toggleContrast(event)"><i class="fas fa-adjust"></i><span>Alto Contraste</span></a>
+            </span>
+            <span>
+                <a href="//www.vlibras.gov.br" target="_BLANK"><i class="fas fa-deaf"></i><span>VLibras</span></a>
+            </span>
+        </div>
+        
+    </header>
+<style>
+  .hidden-error {
+      display: none;
+  }
+  .br-message.error {
+    margin-bottom: 1em;
+    background: #fde0db;
+    border: 1px solid #f86;
+    max-width: 1440px !important;
+    width: 100%;
+  }
+  .br-message p {
+    margin-top: 1em;
+    margin-bottom: 1em;
+  }
+  .br-message .icon {
+    margin: 1.3em 0 0 0;
+  }
+  .br-message.error .icon i {
+    color: #e52207
+  }
+  
+  .login-offline-two-factor {
+    margin: 3em 8em;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    align-content: stretch;
+  }
+  
+  .login-offline-two-factor .mfa-recovery-section {
+    display: flex; 
+    flex-direction: row;
+    gap: 0.5rem;
+  }
+  .login-offline-two-factor .mfa-recovery-link-loading {
+     text-decoration: none;
+     display: none;
+     position: relative;
+     top: 0.1em;
+     width: fit-content;
+     height: fit-content;
+  }
+  .login-offline-two-factor .mfa-recovery-loading-active {
+     display: block;
+     font-weight: bold;
+     opacity: 0.6 !important;
+     cursor: not-allowed !important;
+     animation: spin 1.3s infinite linear;
+  }
+  
+  .login-offline-two-factor .main-container {
+    display: flex;
+    align-items: flex-start; 
+    gap: 1rem;
+    max-width: 1440px !important;
+  }
+  
+  .login-offline-two-factor .main-container main {
+    display: flex; 
+    flex-direction: column;
+    
+  }
+  .login-offline-two-factor .main-container section {
+    margin-bottom: 1.5em;
+  }
+  .login-offline-two-factor .main-container main > h1 {
+    font-size: 2em;
+    letter-spacing: 0.02em;
+    color: #1351b4;
+    margin-bottom: 1.5em;
+    max-width: 530px;
+  }
+  
+  .login-offline-two-factor .disclaimer {
+    display: flex;
+    flex-direction: column;
+    gap: 1em;
+  }
+  
+  .login-offline-two-factor .disclaimer > input {
+    min-width: 200px;
+    max-width: 300px;
+    border: 1px solid #000 !important;
+    border-radius: 8px !important;
+    padding: 1em !important;
+    box-shadow: 0px 1px 5px rgba(0, 0, 0, 0.05), 0px 2px 4px rgba(0, 0, 0, 0.2) !important;
+  }
+  
+  .login-offline-two-factor .disclaimer p{
+    font-size: 1rem;
+  }
+  .login-offline-two-factor .disclaimer a {
+  	color: #1351b4; 
+  	font-size: 1rem; 
+  	font-weight: 600;
+  	text-decoration: underline;
+  }
+  
+  .login-offline-two-factor .disclaimer .button-link {
+    border: none;
+    background: none;
+    box-shadow: none;
+    padding: 0;
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1351b4;
+    letter-spacing: 0.02em;
+    text-decoration: underline;
+    text-align: left;
+  }
+  
+  .login-offline-two-factor .disclaimer .remember-device {
+    display: flex;
+    align-items: center;
+    margin-top: 2.5em;
+  }
+  
+  .login-offline-two-factor .disclaimer .remember-device label{
+    width: fit-content;
+    cursor: pointer;
+  }
+  
+  .login-offline-two-factor .disclaimer .remember-device .gdd-checkbox-input-default {
+  	height: 1.5em;
+	width: 1.5em;
+	margin: 3px 15px 3px 4px !important;
+	cursor: pointer;
+  }
+  
+  .login-offline-two-factor .actions {
+    margin: 0.5em 0 6.5em 0 !important;
+    display: flex;
+    gap: 1rem;
+  }
+  
+  .login-offline-two-factor .main-container main .instructions {
+    padding: 1em;
+    max-width: 700px;
+  }
+  
+  .login-offline-two-factor .main-container main .instructions h1 {
+    font-weight: 600;
+    font-size: 1.2em;
+    color: rgba(19, 81, 180, 1);
+    letter-spacing: 0.02em;
+    margin: 0 !important;
+  }
+  .login-offline-two-factor .main-container main .instructions hr {
+    margin: 0.5em 0;
+  }
+  
+  .login-offline-two-factor .main-container main .instructions li {
+    margin-top: 1em;
+    font-weight: bold;
+  }
+  
+  .login-offline-two-factor .main-container main .instructions .ready {
+    margin-top: 1em;
+    font-weight: bold;
+  }
+  
+  .login-offline-two-factor .main-container main .instructions .instructions-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5em;
+  }
+  
+  .login-offline-two-factor .main-container main .instructions .content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.2s ease-out;
+    position: relative;
+  }
+  
+  .login-offline-two-factor .main-container main .instructions .collapsible {
+	cursor: pointer;
+	width: 100%;
+	outline: none;
+  }
+  
+  .login-offline-two-factor .main-container main .instructions .instructions-warning {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1rem;
+	margin-top: 1rem;
+  }
+  
+  .login-offline-two-factor .main-container main .instructions .instructions-warning > p {
+    padding: 1rem;
+    background-color: rgba(255, 245, 194, 1)
+	  
+  }
+  
+  .login-offline-two-factor .main-container main .generate-code-mobile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    font-weight: bold;
+  }
+  .login-offline-two-factor .main-container main .generate-code-mobile > div{
+    text-align: center;
+    font-weight: 400;
+    margin: 0 1rem;
+  }
+  .login-offline-two-factor .main-container main .generate-code-mobile > p{
+    text-align: center;
+    margin: 0 1rem;
+  }
+  
+  .login-offline-two-factor .main-container main .instructions h1,
+  .login-offline-two-factor .main-container main .instructions ol {
+    list-style-position: inside;
+    padding-left: 0;
+    margin: 0;
+  }
+  
+  .login-offline-two-factor .main-container main .instructions ol li::marker {
+    font-weight: 700;
+  }
+  .login-offline-two-factor .main-container aside {
+    flex: initial;
+    text-align: center;
+    padding: 2em;
+  }
+  .login-offline-two-factor .main-container aside .qrcode-instructions-desktop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .login-offline-two-factor .main-container aside .qrcode-instructions-mobile {
+    display: none;
+  }
+  .login-offline-two-factor .main-container aside section > p {
+    margin-bottom: 1em;
+  }
+  
+  .login-offline-two-factor .actions .button-ok:disabled {
+    opacity: 0.6 !important;
+    cursor: not-allowed !important;
+    color: transparent !important;
+    position: relative;
+  }
+  .login-offline-two-factor .actions .button-ok:disabled::after {
+    animation: spin 1.3s infinite linear;
+    border: 2px solid white;
+    border-radius: 50%;
+    border-right-color: transparent;
+    content: "";
+    display: block;
+    height: 1.2em;
+    left: calc(50% - 0.6em);
+    position: absolute;
+    top: calc(50% - 0.6em);
+    width: 1.2em;
+  }
+  
+  .login-offline-two-factor .actions .button-ok,
+  .login-offline-two-factor .actions .button-cancel {
+    min-width: 220px;
+  }
+  
+  
+  /* modal */
+  
+  .modal-content {
+    min-width: 40em;
+    font-size: 1em;
+  }
+  .modal-content p{
+    font-size: 1em;
+  }
+  .modal-hint-recover2fa h1{
+    font-size: 1.4em;
+    color: #1351b4;
+    letter-spacing: 0.02em;
+  }
+  
+  .modal-hint-recover2fa h2{
+    font-size: 1.1em;
+    margin-top: 1em;
+  }
+  
+  .modal-actions {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    gap: 1rem;
+    margin: 2em 0;
+  }
+  .modal-content button{
+    min-width: 220px;
+  }
+  
+  /* resolutions */  
+  
+  @media (min-width: 2560px) {
+    .login-offline-two-factor {
+      margin: 3em 15em;
+    }
+  }
+  
+  @media (max-width: 1400px) {
+    img {
+     max-height: 600px;
+    }
+  }
+  
+  @media (max-width: 1200px) {
+    .login-offline-two-factor {
+      margin: 2rem 3rem;
+    }
+    img {
+     max-height: 480px;
+    }
+  }
+  
+  @media (max-width: 975px) {
+    .login-offline-two-factor {
+      margin: 1rem 2rem;
+      min-width: 800px;
+    }
+    .login-offline-two-factor .main-container {
+      min-width: 400px;
+    }
+    .login-offline-two-factor .main-container main {
+      min-width: 400px;
+    }
+    img {
+     max-width: 310px;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .br-message.error {
+      margin: 1rem 0 1rem 0;
+    }
+    
+    .login-offline-two-factor {
+      margin: 1rem 2rem;
+      min-width: 300px;
+    }
+    .login-offline-two-factor .main-container {
+      min-width: 300px;
+    }
+    .login-offline-two-factor .mfa-recovery-section {
+      flex-direction: column;
+	  gap: 0.25rem;
+	}
+    .login-offline-two-factor .main-container main {
+      min-width: auto;
+    }
+    .login-offline-two-factor .main-container main > h1 {
+      font-size: 1.4rem;
+    }
+    .login-offline-two-factor .disclaimer > input {
+      width: 100%;
+      max-width: none;
+      margin: 0.5em 0;
+    }
+    
+    .login-offline-two-factor .main-container main .instructions {
+      max-width: 100%;
+      min-width: 0;
+    }
+    .login-offline-two-factor .disclaimer .remember-device {
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    
+    .login-offline-two-factor .main-container {
+      flex-direction: column;
+    }
+    .login-offline-two-factor .actions  {
+      flex-direction: column-reverse;
+      align-items: center;
+      width: 100%;
+      gap: 1.25rem;
+      margin: 0 0 2rem 0 !important;
+    }
+    .login-offline-two-factor .actions button {
+      width: 100%;
+    }
+    
+    img {
+      max-width: 100%;
+    }
+    
+    
+    
+    
+    /* @media modal */
+    .modal-actions {
+      flex-direction: column-reverse;
+    }
+    .modal-content {
+      min-width: 0;
+      width: 90%;
+      font-size: 1rem;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal-content p{
+      font-size: 1rem;
+    }
+    .modal-content button{
+      width: 100%;
+    }
+  }
+  
+</style>
+
+<form id="twoFactorForm" action="https://sso.acesso.gov.br/login?client_id=portalservicos.denatran.serpro.gov.br&amp;authorization_id=1a080cdc0c5" method="post" autocomplete="off" novalidate>
+  <input type="hidden" name="_csrf" value="b15d3621-12cb-4051-a782-ea1707be03a7" />
+  <input type="hidden" id="token" name="token" value="eyJraWQiOiJsb2dpbkZsb3ciLCJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..dxQytTD-SfRdxAxG.5RFDVaKCwTMTAtdG8RtqpeRuwJKCZtgVfxLkZP0iRJikl2eaOIfKZ_oSJFSUiOxv_e5-_0Hc_vBhkUUnS9O_w_C-DLd58gJvLSAgrmQF7N6rtdHs-FYFxVadvF_l3gCWoFahkT98aY50cV5FrPjKCJ9ITyudjFUdqU9m-UqHMrGc5rvkzQTIyMUOr1oBsCY1ssb_eVcMdAvqAvR1jhhbqc4A34q2AABM8aCNiVAAKPytIPhF5Aye12C8GYtFumpz5Um-MPys9GugX8NfMUMWELsy75Alq8IiKwOJaIDfl_CqJ8chfFTDPiu7PervRkbcRyfbZvZfA1NN1U_DJfyTXnRuaD-dvt9Xe5g_bm9GwDb5Cs7lp1VE9CmkUMiTjku1cydhHgXO0Hf853xetxf2Gdv1jZgap7E2Nc8AVXr42tSZ8bdiV0UPBfpZxUXPHB2N92kSxdWbbM3AHMBo7gC-f1Ik-ztb3qpHhIh1AtPspRNnOb-qPThvL-ucdX0h7bW7hOcuyWr80xbgB1SDjewSfY_OgiP-BCk2U_-NH9BbHLCAvjZU6e7fI15HiCzP06NDRpXtiLQHaJxlAxmGe19FgU0oDiQ4pGKuD1ur7DGyN7MRFMU8CpV9Ai_TkjxVNZiGPy_L_SWQB-ZLVFxL6d1mAzJ54tmQftuqcXk4fjHc0zJe5ORfbeJ5jWQxJA8yKIwIyod8jsaHOEde0MRkmWS8nO3u-KMcoIpqxoMUPyzdlpBmyrWFDb_O7QM4ZrGBFlqJ69EgMkpcze6Zp-42exrakbmHpJsAAKZ4J0XYvlNbuLd3D36jpkKbKS9GZ19CPSg0XeBIgnBmzyWy_-Kgi5dsNWcSinZ0eAhz_HzltriOrq1g5l--tIvRqDDe9hujTQdXY8LFZs97As0XGoXJPk_yFbw8WTr9Iipp8c9AWz3BC_l_e7VzMHZXbhJFIlHqyXfw1BOszTB4aBHci3Mlc8cCND06Xmt1rSP6HnB7DelqFaY8dL6Xr4UiASaQLKDn4gpfB4xd5P6Q_tW3lthNVvztUncD2GMRDOqkcTsacrh9fY94X476Ua4tjSB7S0zqV8tNMgeSpJv1MFoIqkvFF3IL6jt_dWDXLrLheZDXcth4BtauXA6zy8Y9iW6TvrUQ84pkriXePGS1sybIsJQGYlfCDkP4Uv9FXqcMmJYE-AsDoSsglPCXsn-_99Zrck2zW03eLtufgpb9L9zwX3yLmuwz_1-fWQq2Tqfn5uyXS8dcS0JI3BzXkMY8TLZSZrkWl0nrRbIB-qWPQ7PB3Fbus5uGxghfLCKC9sfeaqFo23u5xTM5Rxac0f40HyW539QZWJkjsk4CW24mbWkK1vm4M100asRLyzy9tGkR3dalD4yVmaXAO7EhZOhccXvTS66WXTwZBu-91Oa7rhxElRugQfgInNqVE7E35QX76qQ1baLDVr9f2aOY3n_5iiD407iOoWD7SV3sRjnnxHiCJ_hTyMEZRPfxkdQeyEL9OOqHIV8icE4kmdO9_BUbfUaV8_WhRvSyEsIs9abIuFDXPSeHqwLXM7Sb5lZW9XsZWRendaPrMMDY6veukLIhqPrYcxwN0DV_e9ibBR0-qMAN2LSB3F7ZtZ9rdS1Dqbu6fabHvbU5A0E3DQS5EdQ5DqysWMqqZ8pW_sYYDVNOvUQDGVOKM6rKa_IqADXMiEW1xiapy59PPhTXzVVeuHACdryWE1qLc7_YH9TYutN8hK2SDCpFgooeAokVTi_RoKb1x6keELxEGsHD4OMrp1UN3xxbVbKl5WGN8pziCzqgnHZW_vUr3lGNG9ILLMHBkAZDh2fZfTSHPfZ76Jte7Y7sTdOgFcof1hhhF6CCeX4rnv8G7Ry9MGtdh8q-JN0FS0OG0sxxP5hhLIjPnzXPxulMwkytf0YCREmOT7gdXw0BDXmrX0uvCFPnuOkEYRWLRCslhohTYru9IgGq5zFmS0i95lLrS2X63jkzJbRdi1pAWI88G3QikJvNLY9-dRdMV3LO_XV9YSMCfpEe5YFaHnPjh2zZcrpsm7ujoLsAEU1lG03k7wcOQDX5AuPGoMmN6POJI8k2PCKk8COi9YtC1h4IKoIdt5kHnzV8uLXVv0osXcnk2qg6Fg18wE_lNn_xTZqDRa7oklwNGCIKwCrJ23pzpVteLofnFNk9GgWUfj7l5lvbWf0fg6wMd49YQ2Nv-qXt5-lvzOjQxN-D06IJOTREWcCy6VHi70WSU_hO91fH--hCyv2JmMz1BSBsjH1ON8uVp7vjpH_ytzfYLk9zU68sD6fK4E2s4lORJjIc7iwsE-1C4TpH9UcdaugJ9O4jWDgltHMpvz2628_ql-nozdSCUpJbN8dSFP6z2XFebKSr1hXWSU7vcoFJBmC4Pue5JPN8zuLeGUkCh1addoasEL3ZOO1gZ3_AXVHx58HfIdEoaQHofW0HglOPOpbxtbSBWb7cTofcbdvfXIiwrp_JR8hZpP0WA4c3-SkjQT_Qn5CgTpaQxzsvjvwMAefeFBIlsFJj7RoMBL0T71g6GAark04B2YWZOgXzrSdzgcWeVFGyfUQyHVwvnwzBk64TOUNhKh_ekUizBuT1iZm_sQUXdfodnPT8EId_flBJ38AjkxjRzFpYhaNmHiikGwGhiEmFlkUVLdKCbhulIE6zbQs4t6-8TmqeOoIb6JXLVMC5e6qTXoF8blc-b48BqLfwSJUvHG8_5i5QaWhXdTECKtyRXZ5Ivh3k-NlAmO77oUoiKnf-bW58lMHEVlU_sc_AyWOHsSpEDCk42K9gE21_pkmx5BcVl9aLCvBvyArIFi-5PBHWqfSo9ABx7exUXNM0Nzr-UsN-69SAzKlSP5M-VIG631uc6DLPpfHoLnl3SAjrXzob0Ar5hzEXp4OYr2MqywnvmfvrIzLv85ktA-Pniwsgbe9KzOrwG4irDP01Xud-pAJvvKJQ-n524EsIrKqpnYy6uOL0CjtAw1_cN9Na8Fyreu4qRANs9syICs2bZ2FYhHe_OgNnbH1wIvPFeZdPoOKgsLBFcXbCD-mMXtLB7UuKO3OQD10yUogvLn9BmZgbpaDcN0Kz-t1Xx4cp9lSgjsu0wbzN-dqkyn3t4p_A-t-qrAV3Wmjb47pXAMH8bU0T0Yogmg-3wh9RIO_9JSAIKBOmbPNZMvj0fBbj_gn4vhU6cX1tNndZnTAmU7uYOZ-6uVfOiEvt_ruRKmfxic-XPS90lPjtC4-UsVu0znFDH9UR8IALCwOejNYvdR4c5EuUFtPAWxag_9Gol7FnXwKQpgqTYzlLdVYFDv7p1wHrB_oH2oH-_e7WH5DWhj7kRbTbDwTn9-BnhqwTLuKIQqUMYu3hK0yMZBiCEoCHJ1eB_Kosi1qOpTQz9ci8zvYlUDkU9O2Fi854ZSKPQAQqmEEjvvqCAzuhhbYTk7OMstnir6GBJ1EIdhJw5ypb615OHzJFN80kxGDPpCyTQSXFsteQ9ELjAMqvS5UDp4ydFr49x5PLdqbZ8_h_4G1n26eAjUMZilGcJnjihUjDOO4xjTPy32igpcgpjxbCv4irb3Ky_Kw7tFBsvTdj-bWnWzwkZo6j2dahlKlVjzSq9RW72arCM1CF_j8wT1K-JzYaIvtfOqjULP0soD6EgHlveZYnXJGgo88IfzBpmg-iiG-CfEmU_1ZNT2Qu344Hc_mXZ2T6cJ3lwBiOECUDWuuaedr2ZV9xQfocy8zCVZfZ-CTS6xwYBqx0pbS8OIasqrEOAOKMBvmK336uM1k1SZN7pBI_GqB-t2HMBM7Tyigt_pUlbPHPec-VhVldTVdBgF6JofGiEA678XlCXVkFjmh04TRsj5bbjkKTCKYjqbccW-GvYpQoEgxwQp_DvKemtn6KBulqLKIEzyV9988zwyFlHSPXTsO4i6Cq4-w0cerKw1X66Ava8dslkuI-gjSeE8rUDANeY9vVs4TFpgLOVvzQGBGXIxziCGQJGr229PiY37zmdxsWFc-dopT7bm0ECzkMZ_GXShlKhWtEPJAdlQkM0t18xSCOoY8ctlzIijBlQvsNBjqcjvhw2j6LW7n_E5L4_kTYuyVpx67zzVNMWDW2gpwnQZ-1vzNEHTJ4_IHXa-x5fqMZfNsasZ6rcrjhlLuPxWKVBH5dJ2i-nQVrV0-ccI4lXDId4b1SxYiHKQY_M1WgoSlfOK-p8RFcjYlnnUEd4WEgTJakCXRthBtRQWSDKwSZr8XvzdhDpdvhApk63nxP1Rniajus5yC0JfFJQQ9IhgVBcwkueJkRSaeEPrHM3Or4SzqWStXwUp7bbY1El4cVlWx0q439VJLNnlZMGhrki1YWLr-UPpXpV1juHm4mfJqZ9PbDBSXiufyXPawLqaAFfko6CmGiInAw5x4ff1wR5Mrgcthdg5rJGVsbPRN4OJeSs3kfEyRuXKgaQo_FxDFThjn_x7uwBPLH-2ugujSlyLeyeI83fMcVGIhxH6IvCEJkGDnjisgeqK_zidDptsgkLL1EzMtw7Ly1qgwh4y_8MTJmrQKNSAXYNgsuIvjt9a7HFug9bGa20DF4hUX_X7myIlkZAOULWikFU3DsupjBlmq0lJTcMmI80oo4_DVXnlsPPMMOikuz3jWBLbh4pkf10xbWIhmQwNZtH1jEtrAj3rmaDij5PajCNbNC6Jw_AZwAB6XiKcHmVryvdYZNe1Hmsqif_1Ys-uFXk9SE4MS0LAqkirmumm1R8UgrXJL-S17Yg31r03B0Dn4MIz19z4oQ3PSx4K4EpcAz7bPaKC97WclMpKO1_Fu4dDVn3Z_rNOo6xTZ_dJPZecEz-xYwQRYCjTbU--ZknTIGtxqlyr4NSkVE1QySKT4mTxgk0UMgjXmiACD-lLyi6W03vgzLjIbd3JtHkR9aeu6vNXMUk6mS9DwIM3bsr6NSzxB6Cw5eGkgGcUY50UPNSJdQbYs8y2FGWj9fKmL-de8l2CF4vrq8pqAbRv36w7gU_3wC8Un98F167ZBCn7O5rwvn9drB589mkw1Sdlrlm2iPRPcjKxNHWwLT9I02b0htz0OMtncoT5RaZJkSUNkTezrUStFs-GYvRRFz8nZl4u86m1kMUiXEGcKSNY6F4ck2gSERXc0QEApqaixw2CP34CmqA89WkaYZGcJDXGpKz0tVhKsWuEZWQYF8WtQVSqRNSMPo2Btw5O32D8oVVzkqKg0KMHfI2uWpfu4azhcYlU-O6I-2rl0aeLbq9zv_MGvvMkicp9TEKE8KjpYzqNfr3aSBqpQadnRgEokaX1q76hnMXbdSXoATJgKdaiJ7SnIsCQpexZnFlYXbF1UhkYNzqZMW-5WEXtkh2YKhGOMAEa4qYt7JFwL7LHlF6n3mALd4G63ScFnCagyiSxmDcUxTmxc9upmnjjRky5Ds8hIsQsolLE6eVNU3nblUjahCpFkOzEAufiIeiKkMJT3PTvLkisKtgWPJfitjf3__bdFlDx2dJ6ncDygzRQieCrENopzCClJtjisFJuwC2tv4shwQjeM2iSOPHxjn-ScoNDLn5mrQDlD6VfJAM9HWU9o_HUlqItp_nNGScCuNUUtfxhDhxlOhCCGfFCeXwXd7gWf2dqkKTsRPCLoUYd4xG4Yt8hzxcZDxLDy-vHNsKfDgI-JkslyidADjuZRKpVN7mXQRXRpXxmhgOdv81ZShaZVWOlNxvW9K4yRCDFSS0de9zg7Ptcl0ZfLNix3xGk5Q8nBxMkhd0H4-EvxnAaZU7bzt9rLPIiKSUu8inrX0_HbRk60kfvODTSPvFnhPR-hEGFFKgFeRMTFjm2TKzh5Bkl-3j7ohWLnzYSjSwzx_o1TsTT5uGedj6AR7uu67huwMGgeHTRX4O7o0q4WWjKUcJcp6iWd2MzLC8uQioMP8NqsHHrGiHVFzAKZfn4zAWsG-31WjqBr_rRP6STDKt3JT7MVkPDR6rHbcaym0BjIgUidBjF7TDj5Ijd-Hxv22fk88RKtObVA8TdRwUUWkD34c2daT0OuJpKJgizL14JtiXIywMsVqgSD4bhLka0piRHfXO_fnWpT7LPvI-YMi4KfEfxjDdx5BFohrSCPxuBvvpacl0bJkWWvcmV-Fgw.JzaoE89bWD9gIz43o5g2zw" />   
+  <input type="hidden" id="operation-field" />
+  
+  <section class="login-offline-two-factor">
+    
+    <div id="front-error-panel" class="hidden-error">
+  	  <div class="icon"><i class="fas fa-times-circle" aria-hidden="true"></i></div>
+  	  <p id="front-error-message"></p>
+  	</div> 
+    <section class="main-container">
+      <main>
+        
+          <h1>Confirme sua identidade com a Verificação em duas etapas</h1>
+        
+        <section class="disclaimer">
+        
+          <p>Clique em <strong>Gerar código de acesso</strong> em seu aplicativo gov.br e digite abaixo o código gerado.</p>
+          <input tabindex="1" onkeypress="submitOnEnterKeyPress('enter-offline-2fa-code')" name="otpInput" id="otpInput" type="text" value="" inputmode="numeric" placeholder="Código de acesso" autocomplete="off" min="0" max="999999" maxlength="6" />
+          <div class="mfa-recovery-section">
+	          <a href="#"  class="button-link" onclick="verifyMfaRecoveryAvailability('b15d3621-12cb-4051-a782-ea1707be03a7');" tabindex="2">
+	  	        Estou com dificuldades para gerar o código
+	          </a>
+	 	      <span id="mfa-recovery-link-id" class="mfa-recovery-link-loading">
+	 	          <i class="fas fa-spinner"></i>
+	          </span>
+          </div>  
+            
+          <section class="remember-device">
+              <input class="gdd-checkbox-input-default" type="checkbox" id="device" name="device" value="authorized">
+           	    <label for="device"> Não solicitar verificação em duas etapas novamente neste navegador</label>
+              </section>
+          </section>
+        
+        <section class="actions">
+          <button type="button" onclick="submitOperationForm('twoFactorForm', 'cancel');"  name="operation" value="cancel" class="button-cancel" tabindex="3">Cancelar</button>
+  	      <button type="submit" id="enter-offline-2fa-code"  name="operation" value="enter-offline-2fa-code" class="button-ok" tabindex="2">Confirmar</button>
+  	      <script>document.getElementById("enter-offline-2fa-code").addEventListener("click", e=>onOtpSubmit(e))</script>
+  	    </section>
+  	    
+  	    <section class="instructions">
+  	      <div class="collapsible">
+  	          <div class="instructions-header">
+  	         <h1 >Veja o passo a passo completo:</h1>
+  	           <i id="instructions-chevron-id" class="fas fa-chevron-down" aria-hidden="true"></i>
+  	          </div>
+  	       <hr/>
+  	      </div>
+  	      <div class="content">
+  	        <ol>
+  	          <li>Acesse o seu aplicativo gov.br</li>
+  	          <p>Abra o aplicativo no seu celular, não é necessário acessar para gerar o código de acesso. </p>
+  	          
+  	          <li>Clique em "Gerar código de acesso"</li>
+  	          <p>O botão está localizado na parte de baixo da tela inicial do aplicativo. </p>
+  	          
+  	          <li>Insira o código no campo indicado acima</li>
+  	          <p>Uma vez com o código na tela, digite no campo indicado e depois clique em "Confirmar" para acessar sua conta.</p>
+  	        </ol>
+  	        <p class="ready">Pronto! Verificação realizada!</p>
+  	        <hr/>
+  	        </div>
+  	    </section>
+  	    
+      </main>
+      
+      <aside>
+  	      <img src="/assets/govbr/img/2fa-instructions.png" alt="Ilustração de um celular mostrando o processo de geração do código de acesso no aplicativo gov.br" />
+  	    </aside>
+      </section>
+    
+  </section>
+  
+  <!-- Modal de ajuda para recuperação de 2FA -->
+  
+  <section class="modal-hint-recover2fa">
+    <section class="modal-content" >
+  		<a href="javascript:void(0);" onclick="closeModal('modal-hint-recover2fa')">
+  			<i class="fas fa-times xmark-modal-button" aria-hidden="true"></i>
+  		</a>
+  		                
+        <h1 class="colored-link" style="margin-top: 1em;">Está com dificuldades para gerar o código?</h1>
+        <p>Siga as instruções abaixo para resolver rapidamente.</p>
+        <ul>
+            <li><strong>Não estou recebendo o código.</strong></li>
+            <p>O código não é enviado por SMS. Para obtê-lo, acesse o aplicativo gov.br e toque em "Gerar código de acesso".</p> 
+            
+            <li><strong>O código de acesso que informei não está funcionando.</strong></li>
+            <p>Para que a verificação em duas etapas funcione corretamente, verifique se o seu celular está com data e hora automáticas ativadas. Você pode ajustar isso nas Configurações do aparelho ou usar a hora fornecida pela rede.</p> 
+        </ul>
+        <hr/>
+        
+        
+        <div id="account-enabled-to-recover-panel">
+          <h2>Ainda está com dificuldades?</h2>
+          <p>Você pode recuperar a Verificação em duas etapas de forma simples e rápida utilizando o seu aplicativo gov.br.</p> 
+          
+          <section class="modal-actions" >
+          	<button class="button-cancel" type="button" id="btn-close-modal-hint-recover2fa" onclick="closeModal('modal-hint-recover2fa')">Cancelar</button>
+          	<button class="button-ok" type="button" onclick="submitOperationForm('twoFactorForm', 'generate-2fa-recovery-qrcode');"  name="operation" value="generate-recover2fa-qrcode">Iniciar Recuperação</button>
+  		  </section>
+        </div>
+        
+        <div id="account-not-enabled-to-recover-panel">
+          <h2>Recuperar acesso à conta gov.br</h2>
+          <p>Para recuperar o acesso à sua conta gov.br entre em contato com a central de atendimento.</p> 
+          
+          <section class="modal-actions" >
+          	<button type="button" class="button-cancel" onclick="closeModal('modal-hint-recover2fa')">Cancelar</button>
+          	<button type="button" class="button-ok" onclick="window.location.href='https://e.gov.br/2fa';" >Solicitar Atendimento</button>
+  		  </section>
+        </div>
+  	</section>	
+  </section>
+    
+</form>
+
+
+
+
+
+<footer> </footer>
+<script src="/assets/vendors/jquery/jquery-2.2.4.min.js"></script>
+<script src="/assets/govbr/js/scripts.js"></script>
+<script src="/assets/govbr/js/operations-strategy.js"></script>
+<script src="/assets/vendors/jquery/jquery.maskedinput.js"></script>
+</body>
+
+</html><script>
+    focusOnLoad('otpInput');
+
+    function onOtpSubmit(event) {
+    	var otp = document.getElementById('otpInput').value;
+
+    	var emptyOtp = !otp || otp.trim().length === 0;  
+        var nonNumericOtp = /\D/.test(otp);
+        var invalidLengthOtp = otp.trim().length != 6;
+
+        if(!emptyOtp && !nonNumericOtp && !invalidLengthOtp) {
+        	document.getElementById("enter-offline-2fa-code").disabled = true;
+        	submitOperationForm('twoFactorForm', 'enter-offline-2fa-code');
+            return;
+        }
+    	
+        document.getElementById("front-error-panel").classList.remove("hidden-error");
+        document.getElementById("front-error-panel").classList.add("br-message");
+        document.getElementById("front-error-panel").classList.add("error");
+        document.getElementById("backend-error-panel")?.classList.add("hidden-error");
+        event.preventDefault();
+
+        if (emptyOtp) {
+            document.getElementById("front-error-message").innerHTML = "O código deve ser informado.";
+            return;
+    	}
+        if (invalidLengthOtp) {
+            document.getElementById("front-error-message").innerHTML = "O código deve conter 6 dígitos.";
+            return;
+        }
+        if (nonNumericOtp) {
+            document.getElementById("front-error-message").innerHTML = "O código deve conter apenas números.";
+            return;
+        } 
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const checkbox = document.getElementById("device");
+
+        // Detecta o sistema operacional pelo user agent
+        const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+        if (/android/i.test(userAgent)) {
+            checkbox.classList.remove("gdd-checkbox-input-default");
+            checkbox.classList.add("gdd-checkbox-input-android"); // Aplica a classe '.gdd-checkbox-input-android' para dispositivos Android
+        } else if (/iPad|iPhone|iPod/.test(userAgent)) {
+            checkbox.classList.remove("gdd-checkbox-input-default");
+            checkbox.classList.add("gdd-checkbox-input-ios"); // Aplica a classe '.gdd-checkbox-input-ios' para dispositivos iOS
+        }
+    });
+
+    var coll = document.getElementsByClassName("collapsible");
+    var i;
+
+    for (i = 0; i < coll.length; i++) {
+      coll[i].addEventListener("click", function() {
+        this.classList.toggle("active");
+        var content = this.nextElementSibling;
+        if (content.style.maxHeight){
+          content.style.maxHeight = null;
+          document.getElementById("instructions-chevron-id").classList.remove("fa-chevron-up");
+          document.getElementById("instructions-chevron-id").classList.add("fa-chevron-down");
+        } else {
+          content.style.maxHeight = content.scrollHeight + "px";
+          document.getElementById("instructions-chevron-id").classList.remove("fa-chevron-down");
+          document.getElementById("instructions-chevron-id").classList.add("fa-chevron-up");
+        } 
+      });
+    }
+    function verifyMfaRecoveryAvailability(csrfToken) {
+      document.getElementById('mfa-recovery-link-id').classList.add("mfa-recovery-loading-active");
+   	  $.ajax({
+   	    url: '/login?operation=verify-mfa-recovery-availability',
+   	    type: "POST",
+   	    dataType: 'json', 
+   	    data: JSON.stringify({
+  	   	   token: 'eyJraWQiOiJsb2dpbkZsb3ciLCJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..dxQytTD-SfRdxAxG.5RFDVaKCwTMTAtdG8RtqpeRuwJKCZtgVfxLkZP0iRJikl2eaOIfKZ_oSJFSUiOxv_e5-_0Hc_vBhkUUnS9O_w_C-DLd58gJvLSAgrmQF7N6rtdHs-FYFxVadvF_l3gCWoFahkT98aY50cV5FrPjKCJ9ITyudjFUdqU9m-UqHMrGc5rvkzQTIyMUOr1oBsCY1ssb_eVcMdAvqAvR1jhhbqc4A34q2AABM8aCNiVAAKPytIPhF5Aye12C8GYtFumpz5Um-MPys9GugX8NfMUMWELsy75Alq8IiKwOJaIDfl_CqJ8chfFTDPiu7PervRkbcRyfbZvZfA1NN1U_DJfyTXnRuaD-dvt9Xe5g_bm9GwDb5Cs7lp1VE9CmkUMiTjku1cydhHgXO0Hf853xetxf2Gdv1jZgap7E2Nc8AVXr42tSZ8bdiV0UPBfpZxUXPHB2N92kSxdWbbM3AHMBo7gC-f1Ik-ztb3qpHhIh1AtPspRNnOb-qPThvL-ucdX0h7bW7hOcuyWr80xbgB1SDjewSfY_OgiP-BCk2U_-NH9BbHLCAvjZU6e7fI15HiCzP06NDRpXtiLQHaJxlAxmGe19FgU0oDiQ4pGKuD1ur7DGyN7MRFMU8CpV9Ai_TkjxVNZiGPy_L_SWQB-ZLVFxL6d1mAzJ54tmQftuqcXk4fjHc0zJe5ORfbeJ5jWQxJA8yKIwIyod8jsaHOEde0MRkmWS8nO3u-KMcoIpqxoMUPyzdlpBmyrWFDb_O7QM4ZrGBFlqJ69EgMkpcze6Zp-42exrakbmHpJsAAKZ4J0XYvlNbuLd3D36jpkKbKS9GZ19CPSg0XeBIgnBmzyWy_-Kgi5dsNWcSinZ0eAhz_HzltriOrq1g5l--tIvRqDDe9hujTQdXY8LFZs97As0XGoXJPk_yFbw8WTr9Iipp8c9AWz3BC_l_e7VzMHZXbhJFIlHqyXfw1BOszTB4aBHci3Mlc8cCND06Xmt1rSP6HnB7DelqFaY8dL6Xr4UiASaQLKDn4gpfB4xd5P6Q_tW3lthNVvztUncD2GMRDOqkcTsacrh9fY94X476Ua4tjSB7S0zqV8tNMgeSpJv1MFoIqkvFF3IL6jt_dWDXLrLheZDXcth4BtauXA6zy8Y9iW6TvrUQ84pkriXePGS1sybIsJQGYlfCDkP4Uv9FXqcMmJYE-AsDoSsglPCXsn-_99Zrck2zW03eLtufgpb9L9zwX3yLmuwz_1-fWQq2Tqfn5uyXS8dcS0JI3BzXkMY8TLZSZrkWl0nrRbIB-qWPQ7PB3Fbus5uGxghfLCKC9sfeaqFo23u5xTM5Rxac0f40HyW539QZWJkjsk4CW24mbWkK1vm4M100asRLyzy9tGkR3dalD4yVmaXAO7EhZOhccXvTS66WXTwZBu-91Oa7rhxElRugQfgInNqVE7E35QX76qQ1baLDVr9f2aOY3n_5iiD407iOoWD7SV3sRjnnxHiCJ_hTyMEZRPfxkdQeyEL9OOqHIV8icE4kmdO9_BUbfUaV8_WhRvSyEsIs9abIuFDXPSeHqwLXM7Sb5lZW9XsZWRendaPrMMDY6veukLIhqPrYcxwN0DV_e9ibBR0-qMAN2LSB3F7ZtZ9rdS1Dqbu6fabHvbU5A0E3DQS5EdQ5DqysWMqqZ8pW_sYYDVNOvUQDGVOKM6rKa_IqADXMiEW1xiapy59PPhTXzVVeuHACdryWE1qLc7_YH9TYutN8hK2SDCpFgooeAokVTi_RoKb1x6keELxEGsHD4OMrp1UN3xxbVbKl5WGN8pziCzqgnHZW_vUr3lGNG9ILLMHBkAZDh2fZfTSHPfZ76Jte7Y7sTdOgFcof1hhhF6CCeX4rnv8G7Ry9MGtdh8q-JN0FS0OG0sxxP5hhLIjPnzXPxulMwkytf0YCREmOT7gdXw0BDXmrX0uvCFPnuOkEYRWLRCslhohTYru9IgGq5zFmS0i95lLrS2X63jkzJbRdi1pAWI88G3QikJvNLY9-dRdMV3LO_XV9YSMCfpEe5YFaHnPjh2zZcrpsm7ujoLsAEU1lG03k7wcOQDX5AuPGoMmN6POJI8k2PCKk8COi9YtC1h4IKoIdt5kHnzV8uLXVv0osXcnk2qg6Fg18wE_lNn_xTZqDRa7oklwNGCIKwCrJ23pzpVteLofnFNk9GgWUfj7l5lvbWf0fg6wMd49YQ2Nv-qXt5-lvzOjQxN-D06IJOTREWcCy6VHi70WSU_hO91fH--hCyv2JmMz1BSBsjH1ON8uVp7vjpH_ytzfYLk9zU68sD6fK4E2s4lORJjIc7iwsE-1C4TpH9UcdaugJ9O4jWDgltHMpvz2628_ql-nozdSCUpJbN8dSFP6z2XFebKSr1hXWSU7vcoFJBmC4Pue5JPN8zuLeGUkCh1addoasEL3ZOO1gZ3_AXVHx58HfIdEoaQHofW0HglOPOpbxtbSBWb7cTofcbdvfXIiwrp_JR8hZpP0WA4c3-SkjQT_Qn5CgTpaQxzsvjvwMAefeFBIlsFJj7RoMBL0T71g6GAark04B2YWZOgXzrSdzgcWeVFGyfUQyHVwvnwzBk64TOUNhKh_ekUizBuT1iZm_sQUXdfodnPT8EId_flBJ38AjkxjRzFpYhaNmHiikGwGhiEmFlkUVLdKCbhulIE6zbQs4t6-8TmqeOoIb6JXLVMC5e6qTXoF8blc-b48BqLfwSJUvHG8_5i5QaWhXdTECKtyRXZ5Ivh3k-NlAmO77oUoiKnf-bW58lMHEVlU_sc_AyWOHsSpEDCk42K9gE21_pkmx5BcVl9aLCvBvyArIFi-5PBHWqfSo9ABx7exUXNM0Nzr-UsN-69SAzKlSP5M-VIG631uc6DLPpfHoLnl3SAjrXzob0Ar5hzEXp4OYr2MqywnvmfvrIzLv85ktA-Pniwsgbe9KzOrwG4irDP01Xud-pAJvvKJQ-n524EsIrKqpnYy6uOL0CjtAw1_cN9Na8Fyreu4qRANs9syICs2bZ2FYhHe_OgNnbH1wIvPFeZdPoOKgsLBFcXbCD-mMXtLB7UuKO3OQD10yUogvLn9BmZgbpaDcN0Kz-t1Xx4cp9lSgjsu0wbzN-dqkyn3t4p_A-t-qrAV3Wmjb47pXAMH8bU0T0Yogmg-3wh9RIO_9JSAIKBOmbPNZMvj0fBbj_gn4vhU6cX1tNndZnTAmU7uYOZ-6uVfOiEvt_ruRKmfxic-XPS90lPjtC4-UsVu0znFDH9UR8IALCwOejNYvdR4c5EuUFtPAWxag_9Gol7FnXwKQpgqTYzlLdVYFDv7p1wHrB_oH2oH-_e7WH5DWhj7kRbTbDwTn9-BnhqwTLuKIQqUMYu3hK0yMZBiCEoCHJ1eB_Kosi1qOpTQz9ci8zvYlUDkU9O2Fi854ZSKPQAQqmEEjvvqCAzuhhbYTk7OMstnir6GBJ1EIdhJw5ypb615OHzJFN80kxGDPpCyTQSXFsteQ9ELjAMqvS5UDp4ydFr49x5PLdqbZ8_h_4G1n26eAjUMZilGcJnjihUjDOO4xjTPy32igpcgpjxbCv4irb3Ky_Kw7tFBsvTdj-bWnWzwkZo6j2dahlKlVjzSq9RW72arCM1CF_j8wT1K-JzYaIvtfOqjULP0soD6EgHlveZYnXJGgo88IfzBpmg-iiG-CfEmU_1ZNT2Qu344Hc_mXZ2T6cJ3lwBiOECUDWuuaedr2ZV9xQfocy8zCVZfZ-CTS6xwYBqx0pbS8OIasqrEOAOKMBvmK336uM1k1SZN7pBI_GqB-t2HMBM7Tyigt_pUlbPHPec-VhVldTVdBgF6JofGiEA678XlCXVkFjmh04TRsj5bbjkKTCKYjqbccW-GvYpQoEgxwQp_DvKemtn6KBulqLKIEzyV9988zwyFlHSPXTsO4i6Cq4-w0cerKw1X66Ava8dslkuI-gjSeE8rUDANeY9vVs4TFpgLOVvzQGBGXIxziCGQJGr229PiY37zmdxsWFc-dopT7bm0ECzkMZ_GXShlKhWtEPJAdlQkM0t18xSCOoY8ctlzIijBlQvsNBjqcjvhw2j6LW7n_E5L4_kTYuyVpx67zzVNMWDW2gpwnQZ-1vzNEHTJ4_IHXa-x5fqMZfNsasZ6rcrjhlLuPxWKVBH5dJ2i-nQVrV0-ccI4lXDId4b1SxYiHKQY_M1WgoSlfOK-p8RFcjYlnnUEd4WEgTJakCXRthBtRQWSDKwSZr8XvzdhDpdvhApk63nxP1Rniajus5yC0JfFJQQ9IhgVBcwkueJkRSaeEPrHM3Or4SzqWStXwUp7bbY1El4cVlWx0q439VJLNnlZMGhrki1YWLr-UPpXpV1juHm4mfJqZ9PbDBSXiufyXPawLqaAFfko6CmGiInAw5x4ff1wR5Mrgcthdg5rJGVsbPRN4OJeSs3kfEyRuXKgaQo_FxDFThjn_x7uwBPLH-2ugujSlyLeyeI83fMcVGIhxH6IvCEJkGDnjisgeqK_zidDptsgkLL1EzMtw7Ly1qgwh4y_8MTJmrQKNSAXYNgsuIvjt9a7HFug9bGa20DF4hUX_X7myIlkZAOULWikFU3DsupjBlmq0lJTcMmI80oo4_DVXnlsPPMMOikuz3jWBLbh4pkf10xbWIhmQwNZtH1jEtrAj3rmaDij5PajCNbNC6Jw_AZwAB6XiKcHmVryvdYZNe1Hmsqif_1Ys-uFXk9SE4MS0LAqkirmumm1R8UgrXJL-S17Yg31r03B0Dn4MIz19z4oQ3PSx4K4EpcAz7bPaKC97WclMpKO1_Fu4dDVn3Z_rNOo6xTZ_dJPZecEz-xYwQRYCjTbU--ZknTIGtxqlyr4NSkVE1QySKT4mTxgk0UMgjXmiACD-lLyi6W03vgzLjIbd3JtHkR9aeu6vNXMUk6mS9DwIM3bsr6NSzxB6Cw5eGkgGcUY50UPNSJdQbYs8y2FGWj9fKmL-de8l2CF4vrq8pqAbRv36w7gU_3wC8Un98F167ZBCn7O5rwvn9drB589mkw1Sdlrlm2iPRPcjKxNHWwLT9I02b0htz0OMtncoT5RaZJkSUNkTezrUStFs-GYvRRFz8nZl4u86m1kMUiXEGcKSNY6F4ck2gSERXc0QEApqaixw2CP34CmqA89WkaYZGcJDXGpKz0tVhKsWuEZWQYF8WtQVSqRNSMPo2Btw5O32D8oVVzkqKg0KMHfI2uWpfu4azhcYlU-O6I-2rl0aeLbq9zv_MGvvMkicp9TEKE8KjpYzqNfr3aSBqpQadnRgEokaX1q76hnMXbdSXoATJgKdaiJ7SnIsCQpexZnFlYXbF1UhkYNzqZMW-5WEXtkh2YKhGOMAEa4qYt7JFwL7LHlF6n3mALd4G63ScFnCagyiSxmDcUxTmxc9upmnjjRky5Ds8hIsQsolLE6eVNU3nblUjahCpFkOzEAufiIeiKkMJT3PTvLkisKtgWPJfitjf3__bdFlDx2dJ6ncDygzRQieCrENopzCClJtjisFJuwC2tv4shwQjeM2iSOPHxjn-ScoNDLn5mrQDlD6VfJAM9HWU9o_HUlqItp_nNGScCuNUUtfxhDhxlOhCCGfFCeXwXd7gWf2dqkKTsRPCLoUYd4xG4Yt8hzxcZDxLDy-vHNsKfDgI-JkslyidADjuZRKpVN7mXQRXRpXxmhgOdv81ZShaZVWOlNxvW9K4yRCDFSS0de9zg7Ptcl0ZfLNix3xGk5Q8nBxMkhd0H4-EvxnAaZU7bzt9rLPIiKSUu8inrX0_HbRk60kfvODTSPvFnhPR-hEGFFKgFeRMTFjm2TKzh5Bkl-3j7ohWLnzYSjSwzx_o1TsTT5uGedj6AR7uu67huwMGgeHTRX4O7o0q4WWjKUcJcp6iWd2MzLC8uQioMP8NqsHHrGiHVFzAKZfn4zAWsG-31WjqBr_rRP6STDKt3JT7MVkPDR6rHbcaym0BjIgUidBjF7TDj5Ijd-Hxv22fk88RKtObVA8TdRwUUWkD34c2daT0OuJpKJgizL14JtiXIywMsVqgSD4bhLka0piRHfXO_fnWpT7LPvI-YMi4KfEfxjDdx5BFohrSCPxuBvvpacl0bJkWWvcmV-Fgw.JzaoE89bWD9gIz43o5g2zw'
+   	    }),	
+   	    contentType: 'application/json; charset=utf-8',
+   	    headers: {
+   	      "X-CSRF-TOKEN": csrfToken
+   	    },
+   	    success: function(result) {
+   	      document.getElementById('mfa-recovery-link-id').classList.remove("mfa-recovery-loading-active");
+
+    	  document.getElementById("front-error-panel").classList.add("hidden-error");
+          document.getElementById("front-error-panel").classList.remove("br-message");
+          document.getElementById("front-error-panel").classList.remove("error");
+          document.getElementById("backend-error-panel")?.classList.remove("hidden-error");
+   	   	    
+          if(result.accountEnabledToRecover) {
+            document.getElementById("account-enabled-to-recover-panel").style.display = "block";
+            document.getElementById("account-not-enabled-to-recover-panel").style.display = "none";
+          } else {
+            document.getElementById("account-enabled-to-recover-panel").style.display = "none";
+            document.getElementById("account-not-enabled-to-recover-panel").style.display = "block";
+          }
+          $("#token").val(result.token);
+          
+     	  showModal('modal-hint-recover2fa');
+   	    },
+   	    error: function(xhr, response, text) {
+  	      document.getElementById('mfa-recovery-link-id').classList.remove("mfa-recovery-loading-active");
+  	      
+		  document.getElementById("front-error-panel").classList.remove("hidden-error");
+  	      document.getElementById("front-error-panel").classList.add("br-message");
+  	      document.getElementById("front-error-panel").classList.add("error");
+  	      document.getElementById("front-error-message").innerHTML = "Sistema indisponível no momento. Por favor tente novamente em alguns minutos. (FERL000001)";
+  	      document.getElementById("backend-error-panel")?.classList.add("hidden-error");
+   	    }
+   	  });
+   	}
+
+</script>

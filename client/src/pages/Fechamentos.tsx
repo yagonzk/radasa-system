@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
 import {
   useFechamentos,
@@ -24,11 +24,20 @@ import { toast } from "sonner";
 import FechamentoForm from "@/components/fechamentos/FechamentoForm";
 import DetalheFechamento from "@/components/fechamentos/DetalheFechamento";
 
+function currentMonthFechamentoRange() {
+  const now = new Date();
+  const local = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return {
+    from: local(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: local(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+  };
+}
+
 export default function Fechamentos() {
-  const { items: fechamentos, create, update, remove } = useFechamentos();
+  const { items: fechamentos, create, update, remove, loadRange } = useFechamentos();
   const { items: motoristas } = useMotoristas();
   const { items: locais } = useLocais();
-  const { items: viagensCadastradas } = useViagens();
+  const { items: viagensCadastradas, loadRange: loadViagensRange } = useViagens();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingFechamento, setEditingFechamento] = useState<Fechamento | null>(null);
@@ -36,8 +45,23 @@ export default function Fechamentos() {
 
   // Filters
   const [filterMotorista, setFilterMotorista] = useState("todos");
-  const [filterInicio, setFilterInicio] = useState("");
-  const [filterFim, setFilterFim] = useState("");
+  const initialMonth = useMemo(() => currentMonthFechamentoRange(), []);
+  const [filterInicio, setFilterInicio] = useState(initialMonth.from);
+  const [filterFim, setFilterFim] = useState(initialMonth.to);
+  const periodFilterMounted = useRef(false);
+
+  useEffect(() => {
+    if (!periodFilterMounted.current) {
+      periodFilterMounted.current = true;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadRange(filterInicio, filterFim).catch(() => {
+        toast.error("Não foi possível carregar o período selecionado.");
+      });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [filterInicio, filterFim, loadRange]);
 
   const motoristasAtivos = useMemo(
     () => motoristas.filter((motorista) => motorista.status === "ATIVO"),
@@ -289,6 +313,7 @@ export default function Fechamentos() {
         motoristas={motoristas}
         locais={locais}
         viagensCadastradas={viagensCadastradas}
+        loadViagensRange={loadViagensRange}
         editingFechamento={editingFechamento}
         onCreate={create}
         onUpdate={update}

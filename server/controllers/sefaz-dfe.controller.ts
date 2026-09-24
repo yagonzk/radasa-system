@@ -53,6 +53,16 @@ export const sefazDfeController = {
     }
   },
 
+  importPendingLocal: async (req: Request, res: Response) => {
+    try {
+      const rawLimit = Number(req.body?.limit ?? 50);
+      const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(200, Math.trunc(rawLimit))) : 50;
+      res.json(await sefazDfeService.retryPendingFuelImports(String(req.body?.empresaId || "") || undefined, limit));
+    } catch (error) {
+      mapSefazError(error);
+    }
+  },
+
   sync: async (req: Request, res: Response) => {
     try {
       res.json(await sefazDfeService.sync(String(req.body?.empresaId || "") || undefined));

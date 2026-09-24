@@ -543,10 +543,17 @@ model Manifesto {
   modeloVeiculo         String             @default("")
   romaneios             String             @default("") @db.Text
   notasFiscais          String             @default("") @db.Text
+  preFechamentoComissao            Decimal @default(0) @db.Decimal(14, 2)
+  preFechamentoPedagio             Decimal @default(0) @db.Decimal(14, 2)
+  preFechamentoAbastecimento       Decimal @default(0) @db.Decimal(14, 2)
+  preFechamentoComissaoPaga        Boolean @default(false)
+  preFechamentoPedagioPago         Boolean @default(false)
+  preFechamentoAbastecimentoPago   Boolean @default(false)
   createdAt             DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   cliente       Cliente            @relation(fields: [clienteId], references: [id], onDelete: Restrict)
   produtos      ManifestoProduto[]
+  nfesBi        BiNfe[]
 
   @@index([clienteId])
   @@index([dataManifesto])
@@ -1310,12 +1317,20 @@ model BiNfe {
   valorProdutos   Decimal     @default(0) @db.Decimal(14, 2)
   valorNota       Decimal     @default(0) @db.Decimal(14, 2)
   arquivoNome     String      @default("")
+  manifestoId     String?
+  naturezaOperacao String     @default("")
+  municipio       String      @default("")
+  uf              String      @default("")
+  placaVeiculo    String      @default("")
+  dadosEsqueleto  Json?
+  manifesto       Manifesto?  @relation(fields: [manifestoId], references: [id], onDelete: SetNull)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   itens           BiNfeItem[]
 
   @@index([numero, serie])
   @@index([dataEmissao])
+  @@index([manifestoId])
   @@map("bi_nfes")
 }
 
@@ -1326,6 +1341,7 @@ model BiNfeItem {
   descricao     String   @default("")
   ncm           String   @default("")
   cfop          String   @default("")
+  cst           String   @default("")
   unidade       String   @default("")
   quantidade    Decimal  @default(0) @db.Decimal(14, 3)
   valorUnitario Decimal  @default(0) @db.Decimal(14, 4)

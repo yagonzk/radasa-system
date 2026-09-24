@@ -7,6 +7,7 @@ import { veiculosService } from "../services/veiculos.service.js";
 import { interpretarCrlvTexto } from "../services/crlv-text.service.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { AppError } from "../utils/app-error.js";
+import { renavamConsultaService } from "../services/renavam-consulta.service.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -19,6 +20,9 @@ const upload = multer({
 });
 
 export const veiculosRoutes = Router();
+veiculosRoutes.get("/consultar-renavam/:renavam", asyncHandler(async (req, res) => {
+  res.json(await renavamConsultaService.consultar(req.params.renavam, req.query.placa));
+}));
 veiculosRoutes.post("/crlv-texto/interpretar", asyncHandler(async (req, res) => {
   res.json(interpretarCrlvTexto(req.body?.texto));
 }));

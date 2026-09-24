@@ -85,6 +85,14 @@ const resourceInflight = new Map<string, Promise<unknown>>();
 const batchWaiters = new Map<string, Array<{ resolve: (value: unknown) => void; reject: (reason?: unknown) => void }>>();
 let batchScheduled = false;
 
+
+const CURRENT_MONTH_RESOURCES = new Set(["viagens", "fechamentos", "manifestos", "abastecimentos"]);
+function currentMonthParams() {
+  const now = new Date();
+  const local = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return { from: local(new Date(now.getFullYear(), now.getMonth(), 1)), to: local(new Date(now.getFullYear(), now.getMonth()+1, 0)) };
+}
+
 const BATCHABLE_RESOURCES = new Set([
   "motoristas", "chapas", "clientes", "fornecedores", "empresa", "produtos", "locais",
   "veiculos", "viagens", "fechamentos", "manifestos", "abastecimentos", "pneus",
@@ -186,7 +194,7 @@ export function invalidateResourceCache(resource?: string) {
 }
 
 async function fetchResourceDirect(resource: string) {
-  const response = await api.get<unknown>(`/${resource}`);
+  const response = await api.get<unknown>(`/${resource}`, { params: CURRENT_MONTH_RESOURCES.has(resource) ? currentMonthParams() : undefined });
   return saveResource(resource, response.data);
 }
 
@@ -197,12 +205,12 @@ async function flushResourceBatch() {
 
   try {
     const response = await api.get<BootstrapResponse>("/bootstrap", {
-      params: { resources: resources.join(",") },
+      params: { resources: resources.join(","), ...(resources.some((resource) => CURRENT_MONTH_RESOURCES.has(resource)) ? currentMonthParams() : {}) },
     });
     const data = response.data?.data ?? {};
     const errors = response.data?.errors ?? {};
 
-    await mapWithLimit(resources, 3, async (resource) => {
+    await mapWithLimit(resources, 2, async (resource) => {
       const waiters = batchWaiters.get(resource) ?? [];
       batchWaiters.delete(resource);
       if (Object.prototype.hasOwnProperty.call(data, resource)) {
@@ -222,7 +230,7 @@ async function flushResourceBatch() {
     });
   } catch {
     // Se o endpoint de batch estiver indisponível, preserva compatibilidade com a API antiga.
-    await mapWithLimit(resources, 3, async (resource) => {
+    await mapWithLimit(resources, 2, async (resource) => {
       const waiters = batchWaiters.get(resource) ?? [];
       batchWaiters.delete(resource);
       try {

@@ -4,7 +4,7 @@ import { parseDateOnly } from "../utils/date.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
 import { createHash } from "node:crypto";
 import { valorComissaoPorDestino } from "../utils/comissao.js";
-import { assertEditVersion, diffIds } from "../utils/concurrency.js";
+import { assertEditVersion, diffIds, runWithConcurrency } from "../utils/concurrency.js";
 
 const serialize = (item: any) => {
   const despesas = Array.isArray(item.despesasExtrato) ? item.despesasExtrato : [];
@@ -217,7 +217,7 @@ const optionalMoney = (row: any, keys: string[]) => {
 };
 
 
-const normalizeCidade = (value: unknown) => normalizeText(value).replace(/\s+(MT|PA)$/, "").trim();
+const normalizeCidade = (value: unknown) => normalizeText(value).replace(/\s*[\/,-]?\s*(MT|PA)$/i, "").trim();
 
 async function resolverCustosAutomaticosViagem(input: any, atual?: any, db: any = prisma) {
   const inputTemLista = Object.prototype.hasOwnProperty.call(input, "abastecimentoIds");
@@ -267,6 +267,12 @@ const fingerprintExpense = (row: any, tipo: string) => createHash("sha256")
   .update([row.data, row.hora, row.colaborador, row.descricao, parseMoneyBR(row.valor).toFixed(2), tipo].join("|"))
   .digest("hex");
 
+function listDateRange(query?: Record<string, unknown>) {
+  const from = typeof query?.from === "string" && query.from ? parseDateOnly(query.from) : undefined;
+  const to = typeof query?.to === "string" && query.to ? parseDateOnly(query.to) : undefined;
+  return from || to ? { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } : undefined;
+}
+
 const viagemInclude = {
   despesasExtrato: true,
   abastecimentosVinculados: {
@@ -283,7 +289,7 @@ const viagemInclude = {
 } as const;
 
 export const viagensService = {
-  async list() { return (await prisma.viagem.findMany({ include: viagemInclude, orderBy: { createdAt: "desc" } })).map(serialize); },
+  async list(query?: Record<string, unknown>) { const range = listDateRange(query); return (await prisma.viagem.findMany({ where: range ? { dataManifesto: range } : undefined, include: viagemInclude, orderBy: { createdAt: "desc" } })).map(serialize); },
   async get(id: string) { const item = await prisma.viagem.findUnique({ where: { id }, include: viagemInclude }); if (!item) throw new AppError(404, "Viagem não encontrada."); return serialize(item); },
   async create(input: any) {
     await ensureMotoristaDisponivel(input.motoristaId);
@@ -509,11 +515,11 @@ export const viagensService = {
 
   async previewExtratoTruckPag(arquivos: Array<{ nome?: string; texto?: string }>) {
     if (!Array.isArray(arquivos) || !arquivos.length) throw new AppError(400, "Selecione ao menos um extrato TruckPag.");
-    const [motoristas, viagens, fingerprints] = await Promise.all([
-      prisma.motorista.findMany({ select: { id: true, nome: true } }),
-      prisma.viagem.findMany({ select: { id: true, codigo: true, motoristaId: true, placa: true, dataManifesto: true }, orderBy: { dataManifesto: "asc" } }),
-      prisma.viagemDespesaExtrato.findMany({ select: { fingerprint: true } }),
-    ]);
+    const [motoristas, viagens, fingerprints] = await runWithConcurrency([
+      () => prisma.motorista.findMany({ select: { id: true, nome: true } }),
+      () => prisma.viagem.findMany({ select: { id: true, codigo: true, motoristaId: true, placa: true, dataManifesto: true }, orderBy: { dataManifesto: "asc" } }),
+      () => prisma.viagemDespesaExtrato.findMany({ select: { fingerprint: true } }),
+    ] as const, 2);
     const existing = new Set(fingerprints.map((x) => x.fingerprint));
     const items: any[] = [];
     let ignorados = 0;
@@ -598,6 +604,23 @@ export const viagensService = {
           0,
         )
       : number(viagem.valorAbastecimento);
+    // Registros legados podem ter valorComissao=0 mesmo quando a comissão do
+    // destino aparece corretamente na visualização. A rentabilidade precisa usar
+    // a mesma regra de resolução para que Custo Total/Custo por KM não fiquem zerados.
+    const comissaoPersistida = number(viagem.valorComissao);
+    let valorComissaoRentabilidade = comissaoPersistida;
+    if (valorComissaoRentabilidade === 0) {
+      const locais = await prisma.local.findMany({ select: { cidade: true, uf: true, valorComissao: true } });
+      const localComissao = locais.find((item) => normalizeCidade(item.cidade) === normalizeCidade(viagem.cidadeEntrega));
+      if (localComissao) {
+        valorComissaoRentabilidade = valorComissaoPorDestino({
+          cidade: localComissao.cidade,
+          uf: localComissao.uf,
+          valorLegado: number(localComissao.valorComissao),
+        });
+      }
+    }
+
     const extrato = await prisma.viagemDespesaExtrato.findMany({ where: { viagemId: id }, select: { tipo: true, valor: true } });
     const pedagioImportado = extrato.filter((x) => x.tipo === "PEDAGIO").reduce((s, x) => s + number(x.valor), 0);
     const chapaImportada = extrato.filter((x) => x.tipo === "CHAPA").reduce((s, x) => s + number(x.valor), 0);
@@ -608,7 +631,7 @@ export const viagensService = {
       { categoria: "Chapa", valor: number(viagem.valorChapa) + chapaImportada },
       { categoria: "Multas", valor: number(viagem.valorMulta) },
       { categoria: "Custo Extra", valor: number(viagem.valorCustoExtra) },
-      { categoria: "Comissão", valor: number(viagem.valorComissao) },
+      { categoria: "Comissão", valor: valorComissaoRentabilidade },
     ];
     const despesasBase = custosBase.reduce((total, item) => total + item.valor, 0);
     const receitasAdicionais = lancamentos

@@ -30,6 +30,11 @@ export const requestLogger: RequestHandler = (req, res, next) => {
     }, aborted ? "Requisição encerrada antes da resposta" : "Requisição concluída");
   };
   res.once("finish", () => writeLog(false));
-  res.once("close", () => writeLog(!res.writableEnded));
+  res.once("close", () => {
+    // Em adapters edge o evento close pode ocorrer mesmo após os headers/resposta
+    // terem sido entregues. req.aborted é o sinal confiável de abandono do cliente.
+    const aborted = Boolean(req.aborted || (!res.headersSent && !res.writableEnded));
+    writeLog(aborted);
+  });
   next();
 };

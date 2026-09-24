@@ -1,4 +1,3 @@
-import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
@@ -6,6 +5,7 @@ import { env } from "../config/env.js";
 import { AppError } from "../utils/app-error.js";
 import { emailService } from "./email.service.js";
 import { logger } from "../config/logger.js";
+import { hashPassword, verifyPassword } from "./password-hash.service.js";
 
 function publicUser(user: {
   id: string;
@@ -68,7 +68,7 @@ export const authService = {
       },
     });
 
-    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    if (!user || !(await verifyPassword(password, user.passwordHash))) {
       throw new AppError(401, "Usuário, e-mail ou senha inválidos.");
     }
 
@@ -105,7 +105,7 @@ export const authService = {
         name: input.name.trim(),
         username,
         email,
-        passwordHash: await bcrypt.hash(input.password, 12),
+        passwordHash: await hashPassword(input.password),
         role: "VISUALIZACAO",
         active: false,
       },
@@ -176,11 +176,11 @@ export const authService = {
       throw new AppError(400, "Este link de recuperação é inválido ou expirou.");
     }
 
-    if (await bcrypt.compare(newPassword, resetToken.user.passwordHash)) {
+    if (await verifyPassword(newPassword, resetToken.user.passwordHash)) {
       throw new AppError(400, "A nova senha deve ser diferente da senha atual.");
     }
 
-    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+    const newPasswordHash = await hashPassword(newPassword);
 
     await prisma.$transaction(async (tx) => {
       const claim = await tx.passwordResetToken.updateMany({
@@ -215,13 +215,13 @@ export const authService = {
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
       throw new AppError(400, "A senha atual está incorreta.");
     }
     if (currentPassword === newPassword) throw new AppError(400, "A nova senha deve ser diferente da atual.");
     const changedAt = new Date();
     await prisma.$transaction([
-      prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(newPassword, 12) } }),
+      prisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(newPassword) } }),
       prisma.passwordResetToken.updateMany({ where: { userId, usedAt: null }, data: { usedAt: changedAt } }),
       prisma.auditLog.create({ data: { userId, action: "Alterou a própria senha", method: "PUT", path: "/api/auth/change-password" } }),
     ]);

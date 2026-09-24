@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { Eye, EyeOff, LockKeyhole, Moon, Sun, Truck, User, Mail, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +17,7 @@ export default function Auth() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const loginInFlightRef = useRef(false);
   const [loginData, setLoginData] = useState({ identifier: "", password: "" });
   const [registerData, setRegisterData] = useState({
     name: "",
@@ -28,6 +29,8 @@ export default function Auth() {
 
   const submitLogin = async (event: FormEvent) => {
     event.preventDefault();
+    if (loginInFlightRef.current) return;
+    loginInFlightRef.current = true;
     setSubmitting(true);
     try {
       await login(loginData.identifier, loginData.password);
@@ -35,6 +38,7 @@ export default function Auth() {
     } catch (error) {
       toast.error(getApiMessage(error, "Não foi possível entrar."));
     } finally {
+      loginInFlightRef.current = false;
       setSubmitting(false);
     }
   };

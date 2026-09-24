@@ -1,6 +1,6 @@
-import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
+import { hashPassword } from "./password-hash.service.js";
 
 const select = {
   id: true,
@@ -56,7 +56,7 @@ export const usuariosService = {
   },
 
   async create(data: any) {
-    const passwordHash = await bcrypt.hash(data.password, 12);
+    const passwordHash = await hashPassword(data.password);
     return prisma.user.create({
       select,
       data: {
@@ -71,7 +71,7 @@ export const usuariosService = {
 
   async update(id: string, data: any) {
     const passwordHash = data.password
-      ? await bcrypt.hash(data.password, 12)
+      ? await hashPassword(data.password)
       : undefined;
 
     return prisma.user.update({

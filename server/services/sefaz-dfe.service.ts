@@ -563,10 +563,10 @@ export const sefazDfeService = {
   async retryPendingFuelImports(empresaId?: string, limit = 50) {
     const company = await getCompany(empresaId);
 
-    // Corrige automaticamente registros antigos que ficaram como PENDENTE.
-    // Resumos (resNFe) aguardam o XML completo; documentos não-abastecimento
-    // são finalizados como IGNORADO. Assim PENDENTE fica reservado apenas a
-    // estados transitórios e não permanece indefinidamente no painel.
+    // Corrige registros antigos que ficaram como PENDENTE. Resumos (resNFe)
+    // continuam aguardando o XML completo. Para NFe completas, reinterpretamos
+    // o XML armazenado sem confiar na classificação antiga: isso permite que
+    // uma nota previamente mal classificada ainda seja salva em Abastecimentos.
     const normalizedSummaries = await prisma.sefazDocumento.updateMany({
       where: {
         empresaId: company.id,
@@ -579,22 +579,9 @@ export const sefazDfeService = {
       },
     });
 
-    const normalizedNonFuel = await prisma.sefazDocumento.updateMany({
-      where: {
-        empresaId: company.id,
-        status: "PENDENTE",
-        classificacao: { not: "ABASTECIMENTO" },
-      },
-      data: {
-        status: "IGNORADO",
-        erro: "Documento finalizado automaticamente: não classificado como abastecimento.",
-      },
-    });
-
     const docs = await prisma.sefazDocumento.findMany({
       where: {
         empresaId: company.id,
-        classificacao: "ABASTECIMENTO",
         tipo: "NFE",
         status: { in: ["NOVO", "PENDENTE"] },
         xmlUrl: { not: "" },
@@ -646,7 +633,7 @@ export const sefazDfeService = {
       imported,
       ignored,
       errors,
-      normalized: normalizedSummaries.count + normalizedNonFuel.count,
+      normalized: normalizedSummaries.count,
       awaitingXml: normalizedSummaries.count,
     };
   },

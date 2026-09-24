@@ -3098,6 +3098,16 @@ interface Filters {
   hodometro: string;
 }
 
+function currentMonthFilterRange() {
+  const now = new Date();
+  const local = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return {
+    from: local(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: local(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+  };
+}
+
+const initialMonthFilter = currentMonthFilterRange();
 const emptyFilters: Filters = {
   cliente: "",
   emissao: "",
@@ -3203,7 +3213,7 @@ function formatSubcategoriaVeiculo(value: unknown) {
 }
 
 export default function Abastecimentos() {
-  const { items, create, update, remove, removeMany } = useAbastecimentos();
+  const { items, create, update, remove, removeMany, refresh, loadRange } = useAbastecimentos();
   const { items: clientes, create: createCliente } = useClientes();
   const { items: produtos } = useProdutos();
   const { items: veiculos } = useVeiculos();
@@ -3213,6 +3223,7 @@ export default function Abastecimentos() {
   const [sefazStatus, setSefazStatus] = useState<SefazStatusResponse | null>(null);
   const [loadingSefazStatus, setLoadingSefazStatus] = useState(false);
   const [forcingSefazSync, setForcingSefazSync] = useState(false);
+  const [processingPendingSefaz, setProcessingPendingSefaz] = useState(false);
   const [sefazStatusError, setSefazStatusError] = useState("");
   const [editing, setEditing] = useState<Abastecimento | null>(null);
   const [viewing, setViewing] = useState<Abastecimento | null>(null);
@@ -3221,7 +3232,24 @@ export default function Abastecimentos() {
   const [pdfPreview, setPdfPreview] = useState<{ url: string; title: string } | null>(null);
   const [relatorioOpen, setRelatorioOpen] = useState(false);
   const [relatorioOpcoes, setRelatorioOpcoes] = useState<RelatorioAbastecimentoOpcoes>(relatorioPadrao);
-  const [filters, setFilters] = useState<Filters>(emptyFilters);
+  const [filters, setFilters] = useState<Filters>(() => ({
+    ...emptyFilters,
+    emissao: initialMonthFilter.from,
+    emissaoAte: initialMonthFilter.to,
+  }));
+  const periodFilterMounted = useRef(false);
+  useEffect(() => {
+    if (!periodFilterMounted.current) {
+      periodFilterMounted.current = true;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadRange(filters.emissao, filters.emissaoAte).catch(() => {
+        toast.error("Não foi possível carregar o período selecionado.");
+      });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [filters.emissao, filters.emissaoAte, loadRange]);
   const [activeFilter, setActiveFilter] = useState<keyof Filters | null>(null);
   const [filterSearch, setFilterSearch] = useState("");
   const [pageSize, setPageSize] = useState(15);
@@ -3246,6 +3274,46 @@ export default function Abastecimentos() {
       );
     } finally {
       setLoadingSefazStatus(false);
+    }
+  };
+
+  const processPendingSefazDocuments = async () => {
+    if (processingPendingSefaz) return;
+    setProcessingPendingSefaz(true);
+    setSefazStatusError("");
+    try {
+      const response = await api.post<{ checked?: number; imported?: number; ignored?: number; errors?: number; normalized?: number; awaitingXml?: number }>(
+        "/sefaz/documentos/pendentes/importar-local",
+        { limit: 100 },
+      );
+      const imported = Number(response.data?.imported || 0);
+      const ignored = Number(response.data?.ignored || 0);
+      const errors = Number(response.data?.errors || 0);
+      const awaitingXml = Number(response.data?.awaitingXml || 0);
+      const checked = Number(response.data?.checked || 0);
+
+      if (imported > 0) {
+        toast.success(`${imported} NF-e${imported === 1 ? "" : "s"} salva${imported === 1 ? "" : "s"} diretamente em Abastecimentos.`);
+      } else if (checked === 0 && awaitingXml === 0) {
+        toast.info("Não há XML completo pendente para importar.");
+      } else if (awaitingXml > 0 && checked === 0) {
+        toast.info(`${awaitingXml} documento${awaitingXml === 1 ? "" : "s"} ainda depende${awaitingXml === 1 ? "" : "m"} do XML completo.`);
+      } else if (errors > 0) {
+        toast.warning(`Nenhum abastecimento foi criado. ${errors} documento${errors === 1 ? "" : "s"} precisa${errors === 1 ? "" : "m"} de correção de cadastro ou identificação.`);
+      } else if (ignored > 0) {
+        toast.info("Os documentos pendentes foram processados, mas não eram NF-e de abastecimento.");
+      } else {
+        toast.info("Pendências processadas. Nenhum novo abastecimento precisou ser criado.");
+      }
+
+      await refresh();
+      await loadSefazStatus();
+    } catch (error: any) {
+      const message = error?.response?.data?.message ?? error?.message ?? "Não foi possível importar as pendências armazenadas.";
+      setSefazStatusError(message);
+      toast.error(message);
+    } finally {
+      setProcessingPendingSefaz(false);
     }
   };
 
@@ -4247,11 +4315,12 @@ export default function Abastecimentos() {
                 type="button"
                 variant="outline"
                 className="border-amber-500/50 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
-                onClick={() => setStatusOpen(true)}
-                title={`${sefazPendingCount} nota${sefazPendingCount === 1 ? "" : "s"} pendente${sefazPendingCount === 1 ? "" : "s"} de processamento`}
+                onClick={() => void processPendingSefazDocuments()}
+                disabled={processingPendingSefaz}
+                title={`${sefazPendingCount} nota${sefazPendingCount === 1 ? "" : "s"} pendente${sefazPendingCount === 1 ? "" : "s"} — clique para importar o XML já armazenado sem consultar a SEFAZ`}
               >
-                <AlertTriangle className="mr-2 h-4 w-4" />
-                Pendente
+                {processingPendingSefaz ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <AlertTriangle className="mr-2 h-4 w-4" />}
+                {processingPendingSefaz ? "Importando" : "Pendente"}
                 <span className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-amber-500/20 px-1.5 text-[11px] font-bold">{sefazPendingCount}</span>
               </Button>
             )}

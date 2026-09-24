@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+const pdf=fs.readFileSync('server/services/nfe-pdf.service.ts','utf8');
+const svc=fs.readFileSync('server/services/bi-nfe.service.ts','utf8');
+const routes=fs.readFileSync('server/routes/manifestos.routes.ts','utf8');
+const page=fs.readFileSync('client/src/pages/Romaneios.tsx','utf8');
+if(!pdf.includes('export function interpretarNfesPdf')) throw new Error('PDF ainda não suporta várias NF-e por arquivo');
+if(!svc.includes('async vinculadas(')) throw new Error('Serviço ainda não lista NF-e vinculadas');
+if(!svc.includes('async desvincular(')) throw new Error('Serviço ainda não desvincula NF-e');
+if(!routes.includes('/notas-fiscais/vinculadas')) throw new Error('Rota de listagem das NF-e vinculadas ausente');
+if(!page.includes('Notas fiscais')) throw new Error('UI ainda não exibe a lista individual de NF-e vinculadas');
+if(!page.includes('Baixar NF-e')) throw new Error('UI ainda não permite baixar NF-e vinculada');
+if(!page.includes('desvincularNotaFiscal')) throw new Error('UI ainda não permite desvincular NF-e');
+console.log('OK: múltiplas NF-e por PDF são vinculadas e exibidas individualmente.');

@@ -4,6 +4,7 @@ type GateOptions = {
   maxActive: number;
   maxQueue: number;
   maxWaitMs: number;
+  skip?: (req: Request) => boolean;
 };
 
 type QueueEntry = {
@@ -61,7 +62,7 @@ export function createMutationConcurrencyGate(options: GateOptions): RequestHand
   };
 
   return (req, res, next) => {
-    if (!isMutation(req.method)) {
+    if (!isMutation(req.method) || options.skip?.(req)) {
       next();
       return;
     }

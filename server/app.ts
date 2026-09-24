@@ -111,6 +111,8 @@ export function createApp() {
     maxActive: 8,
     maxQueue: 40,
     maxWaitMs: 8_000,
+    // Login só faz autenticação e não deve aguardar importações/gravações pesadas.
+    skip: (req) => req.path === "/auth/login" || req.originalUrl.split("?")[0] === "/api/auth/login",
   }));
   // Prisma/pg não deve compartilhar sockets entre requests no runtime edge.
   app.use("/api", prismaRequestContext);

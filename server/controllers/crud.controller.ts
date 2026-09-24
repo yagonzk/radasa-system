@@ -1,9 +1,9 @@
 import type { Request, Response } from "express";
 import { requestParam } from "../utils/request-param.js";
 
-export type CrudService = { list(): Promise<unknown>; get(id: string): Promise<unknown>; create(data: any): Promise<unknown>; update(id: string, data: any): Promise<unknown>; remove(id: string): Promise<unknown> };
+export type CrudService = { list(query?: Record<string, unknown>): Promise<unknown>; get(id: string): Promise<unknown>; create(data: any): Promise<unknown>; update(id: string, data: any): Promise<unknown>; remove(id: string): Promise<unknown> };
 export const crudController = (service: CrudService) => ({
-  list: async (_req: Request, res: Response) => res.json(await service.list()),
+  list: async (req: Request, res: Response) => res.json(await service.list(req.query as Record<string, unknown>)),
   get: async (req: Request, res: Response) => res.json(await service.get(requestParam(req.params.id))),
   create: async (req: Request, res: Response) => res.status(201).json(await service.create(req.body)),
   update: async (req: Request, res: Response) => res.json(await service.update(requestParam(req.params.id), req.body)),

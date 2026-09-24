@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { runWithConcurrency } from "../utils/concurrency.js";
 import { formatDateOnly, parseDateOnly } from "../utils/date.js";
 import { number } from "../utils/serialize.js";
 import { AppError } from "../utils/app-error.js";
@@ -161,8 +162,8 @@ export const fiscalService = {
   async resumo(period: FiscalPeriod = {}) {
     const range = dateRange(period.from, period.to);
 
-    const [manifestos, abastecimentos, fechamentos, almoxarifado, pneusCompras, recapagens, consertos, viagens] = await Promise.all([
-      prisma.manifesto.findMany({
+    const [manifestos, abastecimentos, fechamentos, almoxarifado, pneusCompras, recapagens, consertos, viagens] = await runWithConcurrency([
+      () => prisma.manifesto.findMany({
         where: range ? { dataManifesto: range } : undefined,
         select: {
           id: true,
@@ -177,34 +178,34 @@ export const fiscalService = {
           },
         },
       }),
-      prisma.abastecimento.findMany({
+      () => prisma.abastecimento.findMany({
         where: range ? { dataEmissao: range } : undefined,
         select: { id: true, dataEmissao: true, valorTotal: true },
       }),
-      prisma.fechamento.findMany({
+      () => prisma.fechamento.findMany({
         where: range ? { dataFim: range } : undefined,
         select: { id: true, dataFim: true, valorTotal: true },
       }),
-      prisma.estoqueMovimentacao.findMany({
+      () => prisma.estoqueMovimentacao.findMany({
         where: {
           tipo: "ENTRADA",
           ...(range ? { data: range } : {}),
         },
         select: { id: true, data: true, valorTotal: true },
       }),
-      prisma.pneu.findMany({
+      () => prisma.pneu.findMany({
         where: range ? { dataCompra: range } : undefined,
         select: { id: true, dataCompra: true, valorCompra: true },
       }),
-      prisma.pneuRecapagem.findMany({
+      () => prisma.pneuRecapagem.findMany({
         where: range ? { dataEnvio: range } : undefined,
         select: { id: true, dataEnvio: true, valor: true },
       }),
-      prisma.pneuConserto.findMany({
+      () => prisma.pneuConserto.findMany({
         where: range ? { data: range } : undefined,
         select: { id: true, data: true, valor: true },
       }),
-      prisma.viagem.findMany({
+      () => prisma.viagem.findMany({
         where: range ? { dataManifesto: range } : undefined,
         select: {
           id: true,
@@ -214,7 +215,7 @@ export const fiscalService = {
           valorChapa: true,
         },
       }),
-    ]);
+    ] as const, 2);
 
     const meses = new Map<string, MonthRow>();
 

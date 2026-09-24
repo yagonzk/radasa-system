@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { runWithConcurrency } from "../utils/concurrency.js";
 import { AppError } from "../utils/app-error.js";
 import { parseDateOnly } from "../utils/date.js";
 import { dateOnly, number, created } from "../utils/serialize.js";
@@ -184,22 +185,22 @@ async function nextOsNumber() {
 export const manutencaoService = {
   async dashboard() {
     const limite = new Date(); limite.setDate(limite.getDate() + 30);
-    const [planos, osAbertas, custoAggregate, documentos, docsAlertas] = await Promise.all([
-      prisma.planoManutencao.findMany({
+    const [planos, osAbertas, custoAggregate, documentos, docsAlertas] = await runWithConcurrency([
+      () => prisma.planoManutencao.findMany({
         where: { ativo: true },
         select: { veiculoId: true, nome: true, proximoKm: true, proximaData: true },
       }),
-      prisma.ordemServico.count({ where: { status: { notIn: ["CONCLUIDA", "CANCELADA"] } } }),
-      prisma.ordemServico.aggregate({
+      () => prisma.ordemServico.count({ where: { status: { notIn: ["CONCLUIDA", "CANCELADA"] } } }),
+      () => prisma.ordemServico.aggregate({
         where: { status: "CONCLUIDA" },
         _sum: { valorPecas: true, valorMaoObra: true, valorOutros: true, desconto: true },
       }),
-      prisma.documentoFrota.count(),
-      prisma.documentoFrota.findMany({
+      () => prisma.documentoFrota.count(),
+      () => prisma.documentoFrota.findMany({
         where: { validade: { lte: limite } },
         select: { veiculoId: true, tipo: true, validade: true },
       }),
-    ]);
+    ] as const, 2);
 
     const vehicleIds = [...new Set(planos.map((p) => p.veiculoId))];
     const abastecimentos = vehicleIds.length ? await prisma.abastecimento.findMany({

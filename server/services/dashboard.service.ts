@@ -6,9 +6,9 @@ import { number, dateOnly } from "../utils/serialize.js";
 const daysUntil=(d:Date|null|undefined)=>{if(!d)return null;const a=new Date(d);a.setHours(0,0,0,0);const b=new Date();b.setHours(0,0,0,0);return Math.ceil((a.getTime()-b.getTime())/86400000)};
 const nivel=(dias:number|null)=>dias==null?null:dias<0?"VENCIDO":dias<=30?"ATENCAO":null;
 async function buildAlertas(){
-  const [motoristas,veiculos,manut]=await Promise.all([
-   prisma.motorista.findMany({where:{status:"ATIVO"}}),prisma.veiculo.findMany(),manutencaoService.dashboard()
-  ]);
+  const motoristas=await prisma.motorista.findMany({where:{status:"ATIVO"}});
+  const veiculos=await prisma.veiculo.findMany();
+  const manut=await manutencaoService.dashboard();
   const rows:any[]=[];
   const pushMissing=(id:string,origem:string,titulo:string,detalhe:string,href:string)=>rows.push({id,origem,nivel:"ATENCAO",titulo,detalhe,href});
 
@@ -47,17 +47,39 @@ async function buildAlertas(){
   const unique=Array.from(new Map(rows.map((row:any)=>[row.id,row])).values());
   return unique.sort((a:any,b:any)=>a.nivel==="VENCIDO"&&b.nivel!=="VENCIDO"?-1:b.nivel==="VENCIDO"&&a.nivel!=="VENCIDO"?1:String(a.titulo).localeCompare(String(b.titulo),"pt-BR"));
 }
+
+async function runSettledWithConcurrency(tasks:Array<()=>Promise<any>>,limit:number){
+  const results:PromiseSettledResult<any>[] = new Array(tasks.length);
+  let next=0;
+  const worker=async()=>{
+    while(true){
+      const index=next++;
+      if(index>=tasks.length)return;
+      try{results[index]={status:"fulfilled",value:await tasks[index]()};}
+      catch(reason){results[index]={status:"rejected",reason};}
+    }
+  };
+  await Promise.all(Array.from({length:Math.min(limit,tasks.length)},()=>worker()));
+  return results;
+}
 export const dashboardService={
  alertas: buildAlertas,
  async gerencial(){
   const now=new Date();const from=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);const to=new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().slice(0,10);
-  const [dre,fluxo,analise,alertas,viagens,veiculos,abastecimentos,ordens]=await Promise.all([
-   financeiroService.resumo(from,to),financeiroService.fluxoCaixa(),financeiroService.analise(from,to),buildAlertas(),
-   prisma.viagem.findMany({where:{dataManifesto:{gte:new Date(from+'T00:00:00Z'),lte:new Date(to+'T00:00:00Z')}},orderBy:{createdAt:"desc"}}),
-   prisma.veiculo.findMany(),prisma.abastecimento.findMany({where:{dataEmissao:{gte:new Date(from+'T00:00:00Z'),lte:new Date(to+'T00:00:00Z')}}}),prisma.ordemServico.findMany({where:{status:{notIn:["CONCLUIDA","CANCELADA"]}}})
-  ]);
+  const safeResult=(result:any,fallback:any)=>result.status==="fulfilled"?result.value:fallback;
+  const taskNames=["financeiro","fluxo","analise","alertas","viagens","veiculos","abastecimentos","ordens"];
+  const tasks:Array<()=>Promise<any>>=[
+   ()=>financeiroService.resumo(from,to),()=>financeiroService.fluxoCaixa(),()=>financeiroService.analise(from,to),()=>buildAlertas(),
+   ()=>prisma.viagem.findMany({where:{dataManifesto:{gte:new Date(from+'T00:00:00Z'),lte:new Date(to+'T23:59:59.999Z')}},orderBy:{createdAt:"desc"}}),
+   ()=>prisma.veiculo.findMany(),()=>prisma.abastecimento.findMany({where:{dataEmissao:{gte:new Date(from+'T00:00:00Z'),lte:new Date(to+'T23:59:59.999Z')}}}),()=>prisma.ordemServico.findMany({where:{status:{notIn:["CONCLUIDA","CANCELADA"]}}})
+  ];
+  const results=await runSettledWithConcurrency(tasks,2);
+  results.forEach((result,index)=>{if(result.status==="rejected")console.error(`[dashboard] bloco ${taskNames[index]} falhou:`,result.reason);});
+  const dre:any=safeResult(results[0],{});const fluxo:any=safeResult(results[1],{});const analise:any=safeResult(results[2],{porVeiculo:[],porCliente:[]});
+  const alertas:any[]=safeResult(results[3],[] as any[]);const viagens:any[]=safeResult(results[4],[] as any[]);const veiculos:any[]=safeResult(results[5],[] as any[]);const abastecimentos:any[]=safeResult(results[6],[] as any[]);const ordens:any[]=safeResult(results[7],[] as any[]);
+  const indisponiveis=taskNames.filter((_,i)=>results[i].status==="rejected");
   const km=viagens.reduce((a,x)=>a+number(x.distanciaKm),0);const combustivel=abastecimentos.reduce((a,x)=>a+number(x.valorTotal),0);
   const status:Record<string,number>={};for(const v of viagens)status[v.status]=(status[v.status]||0)+1;
-  return {periodo:{from,to},financeiro:{...dre,...fluxo},operacao:{viagens:viagens.length,emAndamento:(status.EM_TRANSITO||0)+(status.CARREGANDO||0),entregues:(status.ENTREGUE||0)+(status.FINALIZADA||0),km,combustivel},frota:{veiculos:veiculos.length,osAbertas:ordens.length},alertas:alertas.slice(0,12),rankingVeiculos:analise.porVeiculo.slice(0,5),rankingClientes:analise.porCliente.slice(0,5),viagensRecentes:viagens.slice(0,6).map(v=>({id:v.id,codigo:v.codigo,status:v.status,placa:v.placa,destino:v.cidadeEntrega,data:dateOnly(v.dataManifesto),frete:number(v.valorFrete)}))};
+  return {periodo:{from,to},parcial:indisponiveis.length>0,indisponiveis,financeiro:{...dre,...fluxo},operacao:{viagens:viagens.length,emAndamento:(status.EM_TRANSITO||0)+(status.CARREGANDO||0),entregues:(status.ENTREGUE||0)+(status.FINALIZADA||0),km,combustivel},frota:{veiculos:veiculos.length,osAbertas:ordens.length},alertas:alertas.slice(0,12),rankingVeiculos:(analise.porVeiculo||[]).slice(0,5),rankingClientes:(analise.porCliente||[]).slice(0,5),viagensRecentes:viagens.slice(0,6).map(v=>({id:v.id,codigo:v.codigo,status:v.status,placa:v.placa,destino:v.cidadeEntrega,data:dateOnly(v.dataManifesto),frete:number(v.valorFrete)}))};
  }
 };

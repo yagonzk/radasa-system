@@ -15,20 +15,20 @@ import { pneusService } from "../services/pneus.service.js";
 import { mapWithConcurrency } from "../utils/concurrency.js";
 
 const loaders = {
-  motoristas: () => motoristasService.list(),
-  chapas: () => chapasService.list(),
-  clientes: () => clientesService.list(),
-  fornecedores: () => fornecedoresService.list(),
-  empresa: () => empresaService.list(),
-  produtos: () => produtosService.list(),
-  locais: () => locaisService.list(),
-  veiculos: () => veiculosService.list(),
-  viagens: () => viagensService.list(),
-  fechamentos: () => fechamentosService.list(),
-  manifestos: () => manifestosService.list(),
-  abastecimentos: () => abastecimentosService.list(),
-  pneus: () => pneusService.list(),
-} satisfies Record<string, () => Promise<unknown>>;
+  motoristas: (_query?: Record<string, unknown>) => motoristasService.list(),
+  chapas: (_query?: Record<string, unknown>) => chapasService.list(),
+  clientes: (_query?: Record<string, unknown>) => clientesService.list(),
+  fornecedores: (_query?: Record<string, unknown>) => fornecedoresService.list(),
+  empresa: (_query?: Record<string, unknown>) => empresaService.list(),
+  produtos: (_query?: Record<string, unknown>) => produtosService.list(),
+  locais: (_query?: Record<string, unknown>) => locaisService.list(),
+  veiculos: (_query?: Record<string, unknown>) => veiculosService.list(),
+  viagens: (query?: Record<string, unknown>) => viagensService.list(query),
+  fechamentos: (query?: Record<string, unknown>) => fechamentosService.list(query),
+  manifestos: (query?: Record<string, unknown>) => manifestosService.list(query),
+  abastecimentos: (query?: Record<string, unknown>) => abastecimentosService.list(query),
+  pneus: (_query?: Record<string, unknown>) => pneusService.list(),
+} satisfies Record<string, (query?: Record<string, unknown>) => Promise<unknown>>;
 
 type ResourceName = keyof typeof loaders;
 
@@ -47,10 +47,11 @@ bootstrapRoutes.get("/", async (req, res) => {
   }
 
   // Evita que uma montagem de tela dispare 10+ consultas pesadas ao mesmo
-  // tempo. O limite 3 mantém a UI rápida sem criar rajada de conexões no Neon.
-  const settled = await mapWithConcurrency(resources, 3, async (resource) => {
+  // tempo. O limite 2 acompanha o pool local do Prisma e evita fila interna no Worker.
+  const listQuery = { from: req.query.from, to: req.query.to } as Record<string, unknown>;
+  const settled = await mapWithConcurrency(resources, 2, async (resource) => {
     try {
-      return { resource, ok: true as const, value: await loaders[resource]() };
+      return { resource, ok: true as const, value: await loaders[resource](listQuery) };
     } catch (error) {
       return { resource, ok: false as const, error };
     }

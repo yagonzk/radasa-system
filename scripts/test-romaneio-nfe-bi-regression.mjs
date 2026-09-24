@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+const must=(file,text)=>{const s=fs.readFileSync(file,'utf8');if(!s.includes(text))throw new Error(`${file}: ausente ${text}`)};
+const mustNot=(file,text)=>{const s=fs.readFileSync(file,'utf8');if(s.includes(text))throw new Error(`${file}: não deveria conter ${text}`)};
+must('client/src/pages/Romaneios.tsx','notas-fiscais/importar');
+must('client/src/pages/BIGerencial.tsx','/dados/romaneio_nf_staging.xlsx');
+must('client/src/pages/BIGerencial.tsx','readStagingBiFacts(buf)');
+must('client/src/lib/bi-staging.ts','stg_romaneio_itens');
+must('client/src/lib/bi-staging.ts','stg_nf_itens');
+mustNot('client/src/pages/BIGerencial.tsx','/bi/nfes/itens');
+must('client/src/pages/BIGerencial.tsx','mergeStagingBiFacts(manualFacts,liveStagingFacts)');
+must('client/src/pages/BIGerencial.tsx','const facts=useMemo<Fact[]>(()=>stagingFacts.map');
+console.log('OK: Romaneio importa NF; Romaneios atuais alimentam staging; BI calcula pelo esqueleto consolidado.');

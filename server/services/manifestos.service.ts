@@ -5,6 +5,12 @@ import { created, dateOnly, number, tipoFromDb, tipoToDb } from "../utils/serial
 
 const include = { produtos: { orderBy: { id: "asc" as const } } } as const;
 
+function listDateRange(query?: Record<string, unknown>) {
+  const from = typeof query?.from === "string" && query.from ? parseDateOnly(query.from) : undefined;
+  const to = typeof query?.to === "string" && query.to ? parseDateOnly(query.to) : undefined;
+  return from || to ? { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } : undefined;
+}
+
 type ManifestoDedupeInput = {
   clienteId?: unknown;
   dataManifesto?: unknown;
@@ -214,6 +220,12 @@ const serialize = (item: any) => ({
   modeloVeiculo: item.modeloVeiculo ?? "",
   romaneios: item.romaneios ?? "",
   notasFiscais: item.notasFiscais ?? "",
+  preFechamentoComissao: number(item.preFechamentoComissao),
+  preFechamentoPedagio: number(item.preFechamentoPedagio),
+  preFechamentoAbastecimento: number(item.preFechamentoAbastecimento),
+  preFechamentoComissaoPaga: item.preFechamentoComissaoPaga === true,
+  preFechamentoPedagioPago: item.preFechamentoPedagioPago === true,
+  preFechamentoAbastecimentoPago: item.preFechamentoAbastecimentoPago === true,
   produtos: item.produtos.map((produto: any) => ({
     id: produto.id,
     produtoId: produto.produtoId,
@@ -255,18 +267,21 @@ const nested = (items: any[], fallbackClientId: string) => {
 };
 
 export const manifestosService = {
-  async list() {
+  async list(query?: Record<string, unknown>) {
     // Listagem principal: evita reler toda a tabela de veículos aqui. O frontend
     // já carrega Cadastros > Veículos em paralelo e faz o enriquecimento atual
     // de placa/modelo em memória. Isso elimina uma consulta redundante ao Neon.
+    const range = listDateRange(query);
+    const where = range ? { dataManifesto: range } : undefined;
     const [items, withPdf] = await Promise.all([
       prisma.manifesto.findMany({
+        where,
         include,
         omit: { pdfUrl: true },
         orderBy: [{ dataManifesto: "desc" }, { createdAt: "desc" }],
       }),
       prisma.manifesto.findMany({
-        where: { pdfUrl: { not: null } },
+        where: { ...(where ?? {}), pdfUrl: { not: null } },
         select: { id: true },
       }),
     ]);
@@ -542,6 +557,37 @@ export const manifestosService = {
 
   async remove(id: string) {
     await prisma.manifesto.delete({ where: { id } });
+  },
+
+  async updatePreFechamento(
+    manifestoId: string,
+    values: {
+      comissao: number;
+      pedagio: number;
+      abastecimento: number;
+      comissaoPaga: boolean;
+      pedagioPago: boolean;
+      abastecimentoPago: boolean;
+    },
+  ) {
+    const exists = await prisma.manifesto.findUnique({
+      where: { id: manifestoId },
+      select: { id: true },
+    });
+    if (!exists) throw new AppError(404, "Romaneio não encontrado.");
+
+    await prisma.manifesto.update({
+      where: { id: manifestoId },
+      data: {
+        preFechamentoComissao: values.comissao,
+        preFechamentoPedagio: values.pedagio,
+        preFechamentoAbastecimento: values.abastecimento,
+        preFechamentoComissaoPaga: values.comissaoPaga,
+        preFechamentoPedagioPago: values.pedagioPago,
+        preFechamentoAbastecimentoPago: values.abastecimentoPago,
+      },
+    });
+    return this.get(manifestoId);
   },
 
   async updatePagamentoCliente(manifestoId: string, produtoId: string, pago: boolean) {

@@ -1,10 +1,17 @@
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
+import { runWithConcurrency } from "../utils/concurrency.js";
 import { parseDateOnly } from "../utils/date.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
 import { resolveOrCreatePostoFromEmitente } from "./abastecimento-posto.service.js";
 
 const include = { produtos: true } as const;
+
+function listDateRange(query?: Record<string, unknown>) {
+  const from = typeof query?.from === "string" && query.from ? parseDateOnly(query.from) : undefined;
+  const to = typeof query?.to === "string" && query.to ? parseDateOnly(query.to) : undefined;
+  return from || to ? { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } : undefined;
+}
 
 const serialize = (item: any) => ({
   ...item,
@@ -52,11 +59,11 @@ const serialize = (item: any) => ({
 });
 
 async function ensureReferences(clienteId: string, veiculoId: string, produtoIds: string[]) {
-  const [cliente, veiculo, produtos] = await Promise.all([
-    prisma.cliente.findUnique({ where: { id: clienteId }, select: { id: true } }),
-    prisma.veiculo.findUnique({ where: { id: veiculoId }, select: { id: true } }),
-    prisma.produto.findMany({ where: { id: { in: produtoIds } }, select: { id: true } }),
-  ]);
+  const [cliente, veiculo, produtos] = await runWithConcurrency([
+    () => prisma.cliente.findUnique({ where: { id: clienteId }, select: { id: true } }),
+    () => prisma.veiculo.findUnique({ where: { id: veiculoId }, select: { id: true } }),
+    () => prisma.produto.findMany({ where: { id: { in: produtoIds } }, select: { id: true } }),
+  ] as const, 2);
   if (!cliente) throw new AppError(404, "Cliente não encontrado.");
   if (!veiculo) throw new AppError(404, "Veículo não encontrado.");
   if (produtos.length !== new Set(produtoIds).size) throw new AppError(404, "Um ou mais produtos não foram encontrados.");
@@ -440,7 +447,7 @@ async function importarItem(
 }
 
 export const abastecimentosService = {
-  async list() {
+  async list(query?: Record<string, unknown>) {
     // Listagem precisa ser estritamente leitura e leve. A sincronização histórica
     // de postos era executada aqui e podia varrer/atualizar todo o banco antes de
     // devolver a tela. Novos lançamentos já resolvem o posto na gravação, então a
@@ -448,8 +455,10 @@ export const abastecimentosService = {
     //
     // PDF/XML podem ter megabytes em base64. Eles ficam fora da listagem e são
     // buscados apenas quando o usuário abre/edita/baixa uma nota específica.
+    const range = listDateRange(query);
     const [items, documentState] = await Promise.all([
       prisma.abastecimento.findMany({
+        where: range ? { dataEmissao: range } : undefined,
         include,
         omit: { pdfUrl: true, xmlUrl: true },
         orderBy: [{ dataEmissao: "desc" }, { createdAt: "desc" }, { hodometro: "desc" }],

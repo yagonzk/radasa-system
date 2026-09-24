@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+const src=fs.readFileSync('server/services/abastecimento-xml.service.ts','utf8');
+const xml=fs.readFileSync('/mnt/data/xml_abastecimento_ibs/51260909602869000180550540000002511232314260-nfe.xml','utf8');
+const must=['<nNF>251</nNF>','OLEO DIESEL S-10 ADITIVADO','<qCom>120.0000</qCom>','ARLA A GRANEL','<IBSCBS>','<IBSCBSTot>','Placa: RAQ5G96','Odometro: 453078','<cStat>100</cStat>'];
+for(const x of must) if(!xml.includes(x)) throw new Error('XML regressão incompleto: '+x);
+if(!/const fiscalXml = normalized\.replace/.test(src)) throw new Error('assinatura não é removida antes do parsing');
+if(!/Signature\\b\[\\s\\S\]\*\?<\\\//.test(src)) throw new Error('regex XMLDSig ausente');
+if(!/const envelope = fiscalXml\.match/.test(src)) throw new Error('fallback do envelope fiscal ausente');
+if(!/asArray\(infNfe\.det\)\.map/.test(src)) throw new Error('múltiplos itens não suportados');
+console.log('PASS: NF-e 251 Diesel + ARLA + IBS/CBS coberta pelo importador.');

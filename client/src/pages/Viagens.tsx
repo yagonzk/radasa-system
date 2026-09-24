@@ -52,6 +52,15 @@ interface ViagemColumnFilters {
   lucroBruto: string;
 }
 
+function currentMonthViagemRange() {
+  const now = new Date();
+  const local = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return {
+    from: local(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: local(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+  };
+}
+const initialViagemMonth = currentMonthViagemRange();
 const emptyViagemColumnFilters: ViagemColumnFilters = {
   dataInicio: "",
   dataFim: "",
@@ -82,21 +91,26 @@ const viagemColumns: Array<{
   { key: "lucroBruto", label: "Lucro Bruto", align: "right" },
 ];
 
-function viagemTotalCusto(viagem: Viagem) {
-  return viagem.valorAbastecimento + viagem.valorPedagio + viagem.valorDiaria + viagem.valorChapa + Number(viagem.valorMulta || 0) + Number(viagem.valorCustoExtra || 0) + Number(viagem.valorComissao || 0);
+function viagemTotalCusto(viagem: Viagem, locais: Array<{ cidade: string; valorComissao?: number | null }> = []) {
+  const comissaoPersistida = Number(viagem.valorComissao || 0);
+  const localComissao = comissaoPersistida === 0
+    ? locais.find((local) => normalizeCidadeLookup(local.cidade) === normalizeCidadeLookup(viagem.cidadeEntrega))
+    : undefined;
+  const valorComissao = comissaoPersistida !== 0 ? comissaoPersistida : Number(localComissao?.valorComissao ?? 0);
+  return viagem.valorAbastecimento + viagem.valorPedagio + viagem.valorDiaria + viagem.valorChapa + Number(viagem.valorMulta || 0) + Number(viagem.valorCustoExtra || 0) + valorComissao;
 }
 
-function viagemCustoPorKm(viagem: Viagem) {
-  const total = viagemTotalCusto(viagem);
+function viagemCustoPorKm(viagem: Viagem, locais: Array<{ cidade: string; valorComissao?: number | null }> = []) {
+  const total = viagemTotalCusto(viagem, locais);
   return viagem.distanciaKm > 0 ? total / viagem.distanciaKm : 0;
 }
 
-function viagemLucroBruto(viagem: Viagem) {
-  return viagem.valorFrete - viagemTotalCusto(viagem);
+function viagemLucroBruto(viagem: Viagem, locais: Array<{ cidade: string; valorComissao?: number | null }> = []) {
+  return viagem.valorFrete - viagemTotalCusto(viagem, locais);
 }
 
 function normalizeCidadeLookup(value: string) {
-  return normalizeLookup(value).replace(/\s+(MT|PA)$/, "").trim();
+  return normalizeLookup(value).replace(/\s*[\/,-]?\s*(MT|PA)$/i, "").trim();
 }
 
 function formatKm(value: number) {
@@ -320,14 +334,31 @@ function previousDistanceForCity(city: string, viagens: Viagem[]) {
 }
 
 export default function Viagens() {
-  const { items: viagens, create, update, remove } = useViagens();
+  const { items: viagens, create, update, remove, loadRange } = useViagens();
   const { items: motoristas } = useMotoristas();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingViagem, setEditingViagem] = useState<Viagem | null>(null);
   const [viewingViagem, setViewingViagem] = useState<Viagem | null>(null);
   const [search, setSearch] = useState("");
-  const [columnFilters, setColumnFilters] = useState<ViagemColumnFilters>(emptyViagemColumnFilters);
+  const [columnFilters, setColumnFilters] = useState<ViagemColumnFilters>(() => ({
+    ...emptyViagemColumnFilters,
+    dataInicio: initialViagemMonth.from,
+    dataFim: initialViagemMonth.to,
+  }));
+  const periodFilterMounted = useRef(false);
+  useEffect(() => {
+    if (!periodFilterMounted.current) {
+      periodFilterMounted.current = true;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadRange(columnFilters.dataInicio, columnFilters.dataFim).catch(() => {
+        toast.error("Não foi possível carregar o período selecionado.");
+      });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [columnFilters.dataInicio, columnFilters.dataFim, loadRange]);
   const [activeColumnFilter, setActiveColumnFilter] = useState<ViagemFilterKey | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState("");
   const { items: veiculos } = useVeiculos();
@@ -469,9 +500,9 @@ export default function Viagens() {
     return [...viagens]
       .filter((v) => {
         const motoristaNome = motoristaById.get(v.motoristaId)?.nome || "Sem motorista";
-        const totalCusto = viagemTotalCusto(v);
-        const custoPorKm = viagemCustoPorKm(v);
-        const lucroBruto = viagemLucroBruto(v);
+        const totalCusto = viagemTotalCusto(v, locais);
+        const custoPorKm = viagemCustoPorKm(v, locais);
+        const lucroBruto = viagemLucroBruto(v, locais);
 
         if (query) {
           const searchable = normalizeLookup([
@@ -507,14 +538,14 @@ export default function Viagens() {
         b.dataManifesto.localeCompare(a.dataManifesto) ||
         String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")),
       );
-  }, [columnFilters, motoristaById, search, viagens]);
+  }, [columnFilters, locais, motoristaById, search, viagens]);
 
   const totalCustos = filteredViagens.reduce(
-    (sum: number, v: Viagem) => sum + viagemTotalCusto(v),
+    (sum: number, v: Viagem) => sum + viagemTotalCusto(v, locais),
     0,
   );
   const totalLucroBruto = filteredViagens.reduce(
-    (sum: number, v: Viagem) => sum + viagemLucroBruto(v),
+    (sum: number, v: Viagem) => sum + viagemLucroBruto(v, locais),
     0,
   );
 
@@ -526,9 +557,9 @@ export default function Viagens() {
     if (key === "destino") values = viagens.map((item) => item.cidadeEntrega || "Sem destino");
     if (key === "km") values = viagens.map((item) => formatKm(item.distanciaKm));
     if (key === "frete") values = viagens.map((item) => formatBRL(item.valorFrete));
-    if (key === "custos") values = viagens.map((item) => formatBRL(viagemTotalCusto(item)));
-    if (key === "custoKm") values = viagens.map((item) => formatBRL(viagemCustoPorKm(item)));
-    if (key === "lucroBruto") values = viagens.map((item) => formatBRL(viagemLucroBruto(item)));
+    if (key === "custos") values = viagens.map((item) => formatBRL(viagemTotalCusto(item, locais)));
+    if (key === "custoKm") values = viagens.map((item) => formatBRL(viagemCustoPorKm(item, locais)));
+    if (key === "lucroBruto") values = viagens.map((item) => formatBRL(viagemLucroBruto(item, locais)));
 
     return Array.from(new Set(values))
       .filter(Boolean)
@@ -1101,9 +1132,9 @@ export default function Viagens() {
                     const motorista = motoristas.find(
                       (m) => m.id === v.motoristaId
                     );
-                    const totalCusto = viagemTotalCusto(v);
-                    const custoPorKm = viagemCustoPorKm(v);
-                    const lucroBruto = viagemLucroBruto(v);
+                    const totalCusto = viagemTotalCusto(v, locais);
+                    const custoPorKm = viagemCustoPorKm(v, locais);
+                    const lucroBruto = viagemLucroBruto(v, locais);
 
                     return (
                       <tr
@@ -1583,7 +1614,17 @@ export default function Viagens() {
 
           {viewingViagem && (() => {
             const motorista = motoristas.find((m) => m.id === viewingViagem.motoristaId);
-            const totalCustoBase = viagemTotalCusto(viewingViagem);
+            // A viagem salva é a fonte principal. Em registros legados que ficaram com 0,
+            // recupera deterministicamente a comissão cadastrada para o destino.
+            const localComissaoVisualizacao = locais.find((local) =>
+              normalizeCidadeLookup(local.cidade) === normalizeCidadeLookup(viewingViagem.cidadeEntrega)
+            );
+            const comissaoPersistida = Number(viewingViagem.valorComissao ?? 0);
+            const comissaoVisualizacao = comissaoPersistida !== 0
+              ? comissaoPersistida
+              : Number(localComissaoVisualizacao?.valorComissao ?? 0);
+            const viagemVisualizacao = { ...viewingViagem, valorComissao: comissaoVisualizacao };
+            const totalCustoBase = viagemTotalCusto(viagemVisualizacao);
             const totalCusto = rentabilidade?.custoTotal ?? totalCustoBase;
             const receitaTotal = rentabilidade?.receitaTotal ?? viewingViagem.valorFrete;
             const custoPorKm = rentabilidade?.custoKm ?? (viewingViagem.distanciaKm > 0 ? totalCusto / viewingViagem.distanciaKm : 0);
@@ -1669,7 +1710,7 @@ export default function Viagens() {
                     )}
                     <div className="flex justify-between">
                       <span>Comissão</span>
-                      <span className="font-medium">{formatBRL(viewingViagem.valorComissao ?? 0)}</span>
+                      <span className="font-medium">{formatBRL(comissaoVisualizacao)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Pedágio</span>

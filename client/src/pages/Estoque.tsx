@@ -1268,7 +1268,7 @@ export default function Estoque() {
         </Dialog>
 
         <Dialog open={!!viewingProduct} onOpenChange={(value) => !value && setViewingProduct(null)}>
-          <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[900px]">
+          <DialogContent className="max-h-[94vh] w-[96vw] max-w-[1400px] overflow-x-hidden overflow-y-auto sm:max-w-[96vw] xl:max-w-[1400px]">
             <DialogHeader>
               <DialogTitle>Detalhes do produto em estoque</DialogTitle>
             </DialogHeader>
@@ -1336,22 +1336,43 @@ export default function Estoque() {
 
                 <div className="space-y-3">
                   <h3 className="font-semibold">Histórico de movimentações</h3>
-                  <div className="overflow-x-auto rounded-lg border">
-                    <table className="w-full min-w-[720px] text-sm">
-                      <thead className="bg-muted/30"><tr><th className="px-3 py-2 text-left">Data</th><th className="px-3 py-2 text-left">Tipo</th><th className="px-3 py-2 text-left">Fornecedor / NF-e</th><th className="px-3 py-2 text-right">Quantidade</th><th className="px-3 py-2 text-right">Valor unitário</th><th className="px-3 py-2 text-right">Valor total</th><th className="px-3 py-2 text-left">Observação</th></tr></thead>
+                  <div className="overflow-hidden rounded-lg border">
+                    <table className="w-full table-fixed text-xs lg:text-sm">
+                      <thead className="bg-muted/30"><tr><th className="w-[11%] px-2 py-2 text-left">Data</th><th className="w-[8%] px-2 py-2 text-left">Tipo</th><th className="w-[20%] px-2 py-2 text-left">Fornecedor / NF-e</th><th className="w-[11%] px-2 py-2 text-right">Quantidade</th><th className="w-[11%] px-2 py-2 text-right">Valor unitário</th><th className="w-[11%] px-2 py-2 text-right">Valor total</th><th className="w-[21%] px-2 py-2 text-left">Observação</th><th className="w-[7%] px-1 py-2 text-center">Ações</th></tr></thead>
                       <tbody>
                         {viewingProductMovements.map((movimento) => (
                           <tr key={movimento.id} className="border-t">
-                            <td className="px-3 py-2">{formatDate(movimento.data)}</td>
-                            <td className="px-3 py-2">{movimento.tipo === "ENTRADA" ? "Entrada" : "Saída"}</td>
-                            <td className="px-3 py-2"><div className="font-medium">{movimento.fornecedor?.nomeFantasia || movimento.fornecedor?.razaoSocial || "—"}</div><div className="text-xs text-muted-foreground">{movimento.numeroNfe ? `NF-e ${movimento.numeroNfe}` : movimento.codigoFornecedor ? `Cód. ${movimento.codigoFornecedor}` : ""}</div></td>
-                            <td className="px-3 py-2 text-right">{movimento.quantidade.toLocaleString("pt-BR")} {movimento.unidade || ""}</td>
-                            <td className="px-3 py-2 text-right">{formatBRL(movimento.valorUnitario)}</td>
-                            <td className="px-3 py-2 text-right">{formatBRL(movimento.valorTotal)}</td>
-                            <td className="max-w-[260px] truncate px-3 py-2" title={movimento.observacoes || ""}>{movimento.observacoes || "—"}</td>
+                            <td className="whitespace-nowrap px-2 py-2 align-top">{formatDate(movimento.data)}</td>
+                            <td className="whitespace-nowrap px-2 py-2 align-top">{movimento.tipo === "ENTRADA" ? "Entrada" : "Saída"}</td>
+                            <td className="min-w-0 px-2 py-2 align-top"><div className="break-words font-medium">{movimento.fornecedor?.nomeFantasia || movimento.fornecedor?.razaoSocial || "—"}</div><div className="break-words text-xs text-muted-foreground">{movimento.numeroNfe ? `NF-e ${movimento.numeroNfe}` : movimento.codigoFornecedor ? `Cód. ${movimento.codigoFornecedor}` : ""}</div></td>
+                            <td className="whitespace-nowrap px-2 py-2 text-right align-top">{movimento.quantidade.toLocaleString("pt-BR")} {movimento.unidade || ""}</td>
+                            <td className="whitespace-nowrap px-2 py-2 text-right align-top">{formatBRL(movimento.valorUnitario)}</td>
+                            <td className="whitespace-nowrap px-2 py-2 text-right align-top">{formatBRL(movimento.valorTotal)}</td>
+                            <td className="whitespace-normal break-words px-2 py-2 align-top" title={movimento.observacoes || ""}>{movimento.observacoes || "—"}</td>
+                            <td className="px-1 py-2 text-center align-top">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="text-destructive"
+                                title="Excluir e reverter movimentação"
+                                onClick={async () => {
+                                  const acao = movimento.tipo === "ENTRADA" ? "entrada" : "saída";
+                                  if (!window.confirm(`Excluir esta ${acao}? A movimentação será revertida e deixará de contar no saldo e nos totais.`)) return;
+                                  try {
+                                    await remove(movimento.id);
+                                    await refreshProdutos();
+                                    toast.success(movimento.tipo === "ENTRADA" ? "Entrada excluída e saldo revertido." : "Saída excluída e quantidade devolvida ao estoque.");
+                                  } catch (error: any) {
+                                    toast.error(error?.response?.data?.message || "Não foi possível excluir a movimentação.");
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
                           </tr>
                         ))}
-                        {!viewingProductMovements.length && <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">Nenhuma movimentação registrada.</td></tr>}
+                        {!viewingProductMovements.length && <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">Nenhuma movimentação registrada.</td></tr>}
                       </tbody>
                     </table>
                   </div>

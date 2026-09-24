@@ -34,6 +34,7 @@ interface FechamentoFormProps {
   motoristas: Motorista[];
   locais: Local[];
   viagensCadastradas: Viagem[];
+  loadViagensRange: (from: string, to: string) => Promise<Viagem[]>;
   editingFechamento: Fechamento | null;
   onCreate: (
     motoristaId: string,
@@ -85,6 +86,7 @@ export default function FechamentoForm({
   motoristas,
   locais,
   viagensCadastradas,
+  loadViagensRange,
   editingFechamento,
   onCreate,
   onUpdate,
@@ -117,7 +119,30 @@ export default function FechamentoForm({
       setAutoResumo("");
       setDestinosNaoCadastrados([]);
     }
-  }, [editingFechamento, open, viagensCadastradas, locais]);
+  }, [editingFechamento, open]);
+
+  useEffect(() => {
+    if (!open || editingFechamento || !motoristaId || !dataInicio || !dataFim || dataInicio > dataFim) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          await loadViagensRange(dataInicio, dataFim);
+        } catch (error) {
+          if (!cancelled) {
+            console.error("Falha ao carregar viagens do período do fechamento.", error);
+            toast.error("Não foi possível carregar as viagens do período selecionado.");
+          }
+        }
+      })();
+    }, 150);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [dataFim, dataInicio, editingFechamento, loadViagensRange, motoristaId, open]);
 
   const viagensDoPeriodo = useMemo(() => {
     if (editingFechamento || !motoristaId || !dataInicio || !dataFim) return [];

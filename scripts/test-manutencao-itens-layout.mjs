@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+const file = 'client/src/pages/Manutencao.tsx';
+const src = fs.readFileSync(file, 'utf8');
+if (!src.includes('Peça externa / Consumo direto')) throw new Error('Opção externa deve usar o texto Peça externa / Consumo direto');
+const marker = '{osForm.itens.length === 0';
+const start = src.indexOf(marker);
+const end = src.indexOf('</section>', start);
+const block = src.slice(start, end);
+const spans = [...block.matchAll(/sm:col-span-(\d+)/g)].map((m) => Number(m[1])).slice(0, 7);
+const total = spans.reduce((a,b) => a+b, 0);
+if (spans.length !== 7 || total !== 12) throw new Error(`Linha de item deve ocupar 12 colunas; encontrado ${spans.join('+')}=${total}`);
+console.log('OK: layout de itens da manutenção alinhado e opção externa renomeada.');

@@ -1,12 +1,50 @@
 import { XMLParser } from "fast-xml-parser";
 import { prisma } from "../lib/prisma.js";
+import { runWithConcurrency } from "../utils/concurrency.js";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
   trimValues: true,
   parseTagValue: false,
+  // NF-e pode chegar com namespace padrão ou prefixos (nfe:NFe). Para o
+  // abastecimento o namespace não altera o significado dos campos e remover
+  // o prefixo evita rejeitar XML autorizado por diferença de serialização.
+  removeNSPrefix: true,
 });
+
+function parseNfeXml(xml: string) {
+  // Alguns downloads acrescentam BOM/caracteres de controle antes da raiz.
+  // Eles não fazem parte da NF-e e podem fazer parsers mais estritos falharem.
+  const normalized = String(xml ?? "")
+    .replace(/^\uFEFF/, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .trim();
+
+  // A assinatura XMLDSig não participa de nenhum dado de abastecimento. Alguns
+  // emissores serializam SignatureValue/X509Certificate em várias linhas e
+  // combinações que variam entre bibliotecas. Removê-la antes da leitura deixa
+  // o parser focado exclusivamente no conteúdo fiscal da NF-e e também cobre
+  // documentos novos com grupos IBSCBS/IBSCBSTot sem alterar esses grupos.
+  const fiscalXml = normalized.replace(
+    /<(?:\w+:)?Signature\b[\s\S]*?<\/(?:\w+:)?Signature\s*>/gi,
+    "",
+  );
+
+  try {
+    return parser.parse(fiscalXml);
+  } catch (firstError) {
+    // Há downloads que trazem lixo depois do fechamento de nfeProc/NFe. Faz uma
+    // última tentativa somente com o envelope fiscal completo.
+    const envelope = fiscalXml.match(
+      /<(?:\w+:)?nfeProc\b[\s\S]*?<\/(?:\w+:)?nfeProc\s*>/i,
+    )?.[0] ?? fiscalXml.match(
+      /<(?:\w+:)?NFe\b[\s\S]*?<\/(?:\w+:)?NFe\s*>/i,
+    )?.[0];
+    if (!envelope || envelope === fiscalXml) throw firstError;
+    return parser.parse(envelope);
+  }
+}
 
 function asArray<T>(value: T | T[] | null | undefined): T[] {
   if (value === null || value === undefined) return [];
@@ -379,6 +417,7 @@ export interface AbastecimentoXmlProduto {
   nome: string;
   ncm: string;
   cfop: string;
+  cst: string;
   unidade: string;
   quantidade: number;
   valorUnitario: number;
@@ -465,7 +504,7 @@ function consolidarProdutosXml(produtos: AbastecimentoXmlProduto[]) {
 export function interpretarAbastecimentoXml(
   xml: string,
 ): AbastecimentoXmlInterpretado {
-  const root = parser.parse(xml);
+  const root = parseNfeXml(xml);
   const infNfe = findInfNfe(root);
 
   if (!infNfe) {
@@ -490,6 +529,7 @@ export function interpretarAbastecimentoXml(
       nome: firstText(prod.xProd),
       ncm: firstText(prod.NCM),
       cfop: firstText(prod.CFOP),
+      cst: firstText(...Object.values(imposto?.ICMS ?? {}).flatMap((icms: any) => [icms?.CST, icms?.CSOSN])),
       unidade: firstText(prod.uCom, prod.uTrib),
       quantidade: decimalValue(prod.qCom ?? prod.qTrib),
       valorUnitario: decimalValue(prod.vUnCom ?? prod.vUnTrib),
@@ -581,8 +621,8 @@ export interface AbastecimentoSuggestionContext {
 }
 
 export async function criarContextoSugestoesAbastecimento(): Promise<AbastecimentoSuggestionContext> {
-  const [clientes, veiculos, produtos] = await Promise.all([
-    prisma.cliente.findMany({
+  const [clientes, veiculos, produtos] = await runWithConcurrency([
+    () => prisma.cliente.findMany({
       select: {
         id: true,
         nomeFantasia: true,
@@ -590,14 +630,14 @@ export async function criarContextoSugestoesAbastecimento(): Promise<Abastecimen
         cnpj: true,
       },
     }),
-    prisma.veiculo.findMany({
+    () => prisma.veiculo.findMany({
       select: {
         id: true,
         placa: true,
         modelo: true,
       },
     }),
-    prisma.produto.findMany({
+    () => prisma.produto.findMany({
       where: {
         categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
       },
@@ -607,7 +647,7 @@ export async function criarContextoSugestoesAbastecimento(): Promise<Abastecimen
         codigoInterno: true,
       },
     }),
-  ]);
+  ] as const, 2);
 
   return {
     clientes,

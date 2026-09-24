@@ -1,0 +1,17 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const page = fs.readFileSync('client/src/pages/Romaneios.tsx','utf8');
+assert.match(page, /Notas fiscais/);
+assert.match(page, /inspectingNfInputRef/);
+assert.match(page, /importarNotasVinculadas\(e\.dataTransfer\.files, inspecting\)/);
+assert.match(page, /importarNotasVinculadas\(e\.target\.files, inspecting\)/);
+const migrationPath = 'prisma/migrations/20260915101500_link_nfe_manifesto_safe/migration.sql';
+assert.ok(fs.existsSync(migrationPath), 'migração aditiva segura deve existir');
+const sql = fs.readFileSync(migrationPath,'utf8');
+assert.match(sql, /ADD COLUMN IF NOT EXISTS "manifestoId"/);
+assert.match(sql, /ADD COLUMN IF NOT EXISTS "cst"/);
+assert.doesNotMatch(sql, /DROP\s+(TABLE|COLUMN)/i);
+assert.doesNotMatch(sql, /ALTER COLUMN "status"/i);
+assert.doesNotMatch(sql, /"viagens"/i);
+assert.doesNotMatch(sql, /dnit_/i);
+console.log('OK: upload NF-e na inspeção e migração aditiva segura');

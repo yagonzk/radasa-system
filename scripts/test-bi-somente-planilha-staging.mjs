@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+const src=fs.readFileSync('client/src/pages/BIGerencial.tsx','utf8');
+const staging=fs.readFileSync('client/src/lib/bi-staging.ts','utf8');
+const fail=(m)=>{console.error('FAIL:',m);process.exitCode=1};
+if(/useRomaneios|useClientes|useProdutos|useVeiculos/.test(src)) fail('BI ainda depende dos stores operacionais');
+if(/liveStagingFacts|mergeStagingBiFacts/.test(src)) fail('BI ainda mistura Romaneios atuais com a planilha');
+if(/\/bi\/nfes\/itens|\/fiscal\/precos-produtos/.test(src)) fail('BI ainda consulta fontes paralelas à planilha');
+if(!/readStagingBiFacts\(buf\)/.test(src)) fail('BI precisa ler o esqueleto XLSX');
+if(!/const stagingFacts=manualFacts/.test(src)) fail('stagingFacts deve vir exclusivamente da planilha');
+if(!/stg_romaneio_itens/.test(staging)||!/stg_nf_itens/.test(staging)) fail('leitor deve usar as duas abas do esqueleto');
+if(!process.exitCode) console.log('PASS: BI usa somente a planilha staging como fonte de fatos');

@@ -5,6 +5,12 @@ import { created, dateOnly, number } from "../utils/serialize.js";
 import { valorComissaoPorDestino } from "../utils/comissao.js";
 
 const include = { viagens: { select: { localId: true, quantidade: true, dataViagem: true } } } as const;
+
+function listDateRange(query?: Record<string, unknown>) {
+  const from = typeof query?.from === "string" && query.from ? parseDateOnly(query.from) : undefined;
+  const to = typeof query?.to === "string" && query.to ? parseDateOnly(query.to) : undefined;
+  return from || to ? { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } : undefined;
+}
 const serialize = (item: any) => ({
   id: item.id, motoristaId: item.motoristaId, dataInicio: dateOnly(item.dataInicio), dataFim: dateOnly(item.dataFim),
   viagens: item.viagens.map((v: any) => ({ localId: v.localId, quantidade: v.quantidade, dataViagem: v.dataViagem ? dateOnly(v.dataViagem) : undefined })),
@@ -65,7 +71,7 @@ async function ensureMotoristaDisponivel(motoristaId: string, fechamentoId?: str
 }
 
 export const fechamentosService = {
-  async list() { return (await prisma.fechamento.findMany({ include, orderBy: { createdAt: "desc" } })).map(serialize); },
+  async list(query?: Record<string, unknown>) { const range = listDateRange(query); return (await prisma.fechamento.findMany({ where: range ? { dataInicio: range } : undefined, include, orderBy: { createdAt: "desc" } })).map(serialize); },
   async get(id: string) { const item = await prisma.fechamento.findUnique({ where: { id }, include }); if (!item) throw new AppError(404, "Fechamento não encontrado."); return serialize(item); },
   async create(input: any) {
     await ensureMotoristaDisponivel(input.motoristaId);

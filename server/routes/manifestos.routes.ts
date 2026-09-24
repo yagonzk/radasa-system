@@ -3,6 +3,7 @@ import { crudRoutes } from "./crud.routes.js";
 import { manifestosController } from "../controllers/manifestos.controller.js";
 import { manifestosService } from "../services/manifestos.service.js";
 import { manifestoBody } from "../validators/schemas.js";
+import { biNfeService } from "../services/bi-nfe.service.js";
 import {
   interpretarTextoManifestoPdf,
   sugerirVinculosManifestoPdf,
@@ -81,6 +82,25 @@ manifestosRoutes.post(
   },
 );
 
+manifestosRoutes.post("/:id/notas-fiscais/importar", async (req, res, next) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    res.json(await biNfeService.importarVinculadas(req.params.id, items));
+  } catch (error) { next(error); }
+});
+
+manifestosRoutes.get("/:id/notas-fiscais/vinculadas", async (req, res, next) => {
+  try { res.json(await biNfeService.vinculadas(req.params.id)); } catch (error) { next(error); }
+});
+
+manifestosRoutes.get("/:id/notas-fiscais/vinculadas/:nfeId/arquivo", async (req, res, next) => {
+  try { const file=await biNfeService.arquivoVinculado(req.params.id,req.params.nfeId);res.setHeader("Content-Type","application/xml; charset=utf-8");res.setHeader("Content-Disposition",`attachment; filename="${file.nome}"`);res.send(file.conteudo); } catch (error) { next(error); }
+});
+
+manifestosRoutes.delete("/:id/notas-fiscais/vinculadas/:nfeId", async (req, res, next) => {
+  try { res.json(await biNfeService.desvincular(req.params.id, req.params.nfeId)); } catch (error) { next(error); }
+});
+
 manifestosRoutes.post(
   "/importar-planilha-item",
   async (req, res, next) => {
@@ -132,6 +152,39 @@ manifestosRoutes.post(
       }
 
       res.json({ documento, sugestoes, pendencias });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+manifestosRoutes.patch(
+  "/:id/pre-fechamento",
+  async (req, res, next) => {
+    try {
+      const comissao = Number(req.body?.comissao ?? 0);
+      const pedagio = Number(req.body?.pedagio ?? 0);
+      const abastecimento = Number(req.body?.abastecimento ?? 0);
+      const comissaoPaga = req.body?.comissaoPaga === true;
+      const pedagioPago = req.body?.pedagioPago === true;
+      const abastecimentoPago = req.body?.abastecimentoPago === true;
+      const values = [comissao, pedagio, abastecimento];
+
+      if (values.some((value) => !Number.isFinite(value) || value < 0 || value > 999_999_999.99)) {
+        res.status(400).json({ message: "Informe valores válidos para comissão, pedágio e abastecimento." });
+        return;
+      }
+
+      res.json(
+        await manifestosService.updatePreFechamento(req.params.id, {
+          comissao,
+          pedagio,
+          abastecimento,
+          comissaoPaga,
+          pedagioPago,
+          abastecimentoPago,
+        }),
+      );
     } catch (error) {
       next(error);
     }

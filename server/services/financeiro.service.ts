@@ -3,6 +3,7 @@ import { AppError } from "../utils/app-error.js";
 import { parseDateOnly } from "../utils/date.js";
 import { dateOnly, number, created } from "../utils/serialize.js";
 import { maintenanceDreValue, isGeneratedMaintenanceEntry } from "./financeiro-dre.js";
+import { runWithConcurrency } from "../utils/concurrency.js";
 const clean=(v:any)=>v?String(v):null;
 const serialize=(x:any)=>({...x,valor:number(x.valor),dataCompetencia:dateOnly(x.dataCompetencia),dataVencimento:x.dataVencimento?dateOnly(x.dataVencimento):null,dataPagamento:x.dataPagamento?dateOnly(x.dataPagamento):null,createdAt:created(x.createdAt)});
 const data=(i:any)=>{
@@ -19,8 +20,10 @@ const isManualFuelCategory=(value:any)=>{const c=normalizeCategory(value);return
 const isFreightRevenueCategory=(value:any)=>{const c=normalizeCategory(value);return c.includes("FRETE")};
 const classifyFuelProduct=(name:any)=>{const n=normalizeCategory(name);if(n.includes("ARLA"))return "ARLA";if(n.includes("DIESEL"))return "DIESEL";return null};
 export const financeiroService={
- async list(){
-  const [items,baixas]=await Promise.all([prisma.lancamentoFinanceiro.findMany({orderBy:[{dataCompetencia:"desc"},{createdAt:"desc"}]}),prisma.baixaFinanceira.groupBy({by:["lancamentoId"],_sum:{valor:true}})]);
+ async list(query?:Record<string,unknown>){
+  const from=typeof query?.from==="string"&&query.from?parseDateOnly(query.from):undefined,to=typeof query?.to==="string"&&query.to?parseDateOnly(query.to):undefined;
+  const range=(from||to)?{...(from?{gte:from}:{}),...(to?{lte:to}:{})}:undefined;
+  const [items,baixas]=await Promise.all([prisma.lancamentoFinanceiro.findMany({where:range?{dataCompetencia:range}:undefined,orderBy:[{dataCompetencia:"desc"},{createdAt:"desc"}]}),prisma.baixaFinanceira.groupBy({by:["lancamentoId"],_sum:{valor:true}})]);
   const pagos=new Map(baixas.map(x=>[x.lancamentoId,number(x._sum.valor)]));
   return items.map(x=>{const item=serialize(x),valorBaixado=pagos.get(x.id)||0;return{...item,valorBaixado,saldoRestante:Math.max(0,item.valor-valorBaixado)}})
  },
@@ -34,13 +37,18 @@ export const financeiroService={
  },
  async resumo(from?:string,to?:string){
   const range=(from||to)?{...(from?{gte:parseDateOnly(from)}:{}),...(to?{lte:parseDateOnly(to)}:{})}:undefined;
-  const [manual,viagens,romaneios,abastecimentos,estoque,pneus,recapagens,consertos,ordensManutencao,baixasResumo]=await Promise.all([
-   prisma.lancamentoFinanceiro.findMany({where:range?{dataCompetencia:range}:undefined}),
-   prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}),
-   prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{produtos:{select:{valorTotal:true}}}}),
-   prisma.abastecimento.findMany({where:range?{dataEmissao:range}:undefined,select:{produtos:{select:{valorTotal:true,produto:{select:{nome:true}}}}}}),
-   prisma.estoqueMovimentacao.findMany({where:{tipo:"ENTRADA",...(range?{data:range}:{})},include:{produto:{select:{categoria:true}}}}), prisma.pneu.findMany({where:range?{dataCompra:range}:undefined}), prisma.pneuRecapagem.findMany({where:range?{dataEnvio:range}:undefined}), prisma.pneuConserto.findMany({where:range?{data:range}:undefined}), prisma.ordemServico.findMany({where:{status:"CONCLUIDA",...(range?{dataConclusao:range}:{})},select:{numero:true,valorPecas:true,valorMaoObra:true,valorOutros:true,desconto:true}}), prisma.baixaFinanceira.findMany()
-  ]);
+  const [manual,viagens,romaneios,abastecimentos,estoque,pneus,recapagens,consertos,ordensManutencao,baixasResumo]=await runWithConcurrency([
+   () => prisma.lancamentoFinanceiro.findMany({where:range?{dataCompetencia:range}:undefined}),
+   () => prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}),
+   () => prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{produtos:{select:{valorTotal:true}}}}),
+   () => prisma.abastecimento.findMany({where:range?{dataEmissao:range}:undefined,select:{produtos:{select:{valorTotal:true,produto:{select:{nome:true}}}}}}),
+   () => prisma.estoqueMovimentacao.findMany({where:{tipo:"ENTRADA",...(range?{data:range}:{})},include:{produto:{select:{categoria:true}}}}),
+   () => prisma.pneu.findMany({where:range?{dataCompra:range}:undefined}),
+   () => prisma.pneuRecapagem.findMany({where:range?{dataEnvio:range}:undefined}),
+   () => prisma.pneuConserto.findMany({where:range?{data:range}:undefined}),
+   () => prisma.ordemServico.findMany({where:{status:"CONCLUIDA",...(range?{dataConclusao:range}:{})},select:{numero:true,valorPecas:true,valorMaoObra:true,valorOutros:true,desconto:true}}),
+   () => prisma.baixaFinanceira.findMany()
+  ] as const, 2);
   const categorias:Record<string,number>={}; const add=(k:string,v:any)=>categorias[k]=(categorias[k]||0)+number(v);
   let receitasAutomaticas=0,despesasAutomaticas=0;
   // Receita de frete da DRE vem exclusivamente dos Romaneios.
@@ -60,15 +68,15 @@ export const financeiroService={
  },
  async analise(from?:string,to?:string){
   const range=(from||to)?{...(from?{gte:parseDateOnly(from)}:{}),...(to?{lte:parseDateOnly(to)}:{})}:undefined;
-  const [viagens,manual,clientes,veiculos,manifestos,abastecimentos,pneusDetalhe]=await Promise.all([
-   prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}),
-   prisma.lancamentoFinanceiro.findMany({where:{...(range?{dataCompetencia:range}:{}),status:{not:"CANCELADO"}}}),
-   prisma.cliente.findMany({select:{id:true,nomeFantasia:true,razaoSocial:true}}),
-   prisma.veiculo.findMany({select:{id:true,placa:true,ipvaValor:true,ipvaVencimento:true,ipvaPago:true,licenciamentoValor:true,licenciamentoVencimento:true,seguroValor:true,seguroValidade:true}}),
-   prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{id:true,clienteId:true,dataManifesto:true,placaVeiculo:true}}),
-   prisma.abastecimento.findMany({where:range?{dataEmissao:range}:undefined,select:{veiculoId:true,valorTotal:true,produtos:{select:{valorTotal:true,produto:{select:{nome:true}}}}}}),
-   prisma.pneu.findMany({where:{deletedAt:null,...(range?{dataCompra:range}:{})},select:{valorCompra:true,instalacoes:{orderBy:{createdAt:"asc"},take:1,select:{veiculoId:true}}}})
-  ]);
+  const [viagens,manual,clientes,veiculos,manifestos,abastecimentos,pneusDetalhe]=await runWithConcurrency([
+   () => prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}),
+   () => prisma.lancamentoFinanceiro.findMany({where:{...(range?{dataCompetencia:range}:{}),status:{not:"CANCELADO"}}}),
+   () => prisma.cliente.findMany({select:{id:true,nomeFantasia:true,razaoSocial:true}}),
+   () => prisma.veiculo.findMany({select:{id:true,placa:true,ipvaValor:true,ipvaVencimento:true,ipvaPago:true,licenciamentoValor:true,licenciamentoVencimento:true,seguroValor:true,seguroValidade:true}}),
+   () => prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{id:true,clienteId:true,dataManifesto:true,placaVeiculo:true}}),
+   () => prisma.abastecimento.findMany({where:range?{dataEmissao:range}:undefined,select:{veiculoId:true,valorTotal:true,produtos:{select:{valorTotal:true,produto:{select:{nome:true}}}}}}),
+   () => prisma.pneu.findMany({where:{deletedAt:null,...(range?{dataCompra:range}:{})},select:{valorCompra:true,instalacoes:{orderBy:{createdAt:"asc"},take:1,select:{veiculoId:true}}}})
+  ] as const, 2);
   const clienteNome=new Map(clientes.map(x=>[x.id,x.nomeFantasia||x.razaoSocial||"Sem cliente"]));
   const veiculoPlaca=new Map(veiculos.map(x=>[x.id,x.placa]));
   const inRange=(d:Date|null)=>{if(!d)return false;const ds=dateOnly(d);return(!from||ds>=from)&&(!to||ds<=to)};

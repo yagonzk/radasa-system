@@ -30,7 +30,10 @@
     "start:sefaz-agent": "node dist-sefaz-agent/index.js",
     "dev:sefaz-agent": "tsx watch sefaz-agent/index.ts",
     "test:api-stability": "tsx scripts/test-api-stability-regression.ts",
-    "hyperdrive:configurar": "node scripts/configurar-hyperdrive.mjs"
+    "hyperdrive:configurar": "node scripts/configurar-hyperdrive.mjs",
+    "precheck": "node scripts/limpar-modulo-multas-obsoleto.mjs",
+    "prebuild:cloudflare": "node scripts/limpar-modulo-multas-obsoleto.mjs",
+    "db:nfe-romaneios": "prisma db execute --file prisma/migrations/20260915101500_link_nfe_manifesto_safe/migration.sql --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
