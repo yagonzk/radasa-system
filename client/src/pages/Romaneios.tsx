@@ -2645,8 +2645,7 @@ export default function Romaneios() {
                 const gastos = (preClosingForm.comissaoPaga ? 0 : comissao)
                   + (preClosingForm.pedagioPago ? 0 : pedagio)
                   + (preClosingForm.abastecimentoPago ? 0 : abastecimento);
-                const caixa = gastos <= 0 ? 0 : aReceber >= gastos ? gastos : aReceber - gastos;
-                const saldo = aReceber - gastos;
+                const caixa = aReceber - gastos;
 
                 return (
                   <>
@@ -3622,5 +3621,6 @@ export default function Romaneios() {
     </Layout>
   );
 }
+
 
 
