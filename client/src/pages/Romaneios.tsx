@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+﻿import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -283,8 +283,7 @@ function preFechamentoGastos(romaneio: Romaneio) {
 function preFechamentoCaixa(romaneio: Romaneio) {
   const aReceber = preFechamentoValorClientes(romaneio);
   const gastos = preFechamentoGastos(romaneio);
-  if (gastos <= 0) return 0;
-  return aReceber >= gastos ? gastos : aReceber - gastos;
+  return aReceber - gastos;
 }
 
 function romaneioClientCount(romaneio: Romaneio) {
@@ -857,11 +856,7 @@ export default function Romaneios() {
     );
   }, [filtered]);
 
-  const preClosingTotalCaixa = preClosingTotals.gastos <= 0
-    ? 0
-    : preClosingTotals.aReceber >= preClosingTotals.gastos
-      ? preClosingTotals.gastos
-      : preClosingTotals.aReceber - preClosingTotals.gastos;
+  const preClosingTotalCaixa = preClosingTotals.aReceber - preClosingTotals.gastos;
 
   const openPreClosingDetails = (romaneio: Romaneio) => {
     setPreClosingTarget(romaneio);
@@ -2615,6 +2610,11 @@ export default function Romaneios() {
       <Dialog
         open={preClosingOpen}
         onOpenChange={(open) => {
+          if (!open && preClosingTarget) {
+            setPreClosingTarget(null);
+            return;
+          }
+
           setPreClosingOpen(open);
           if (!open) setPreClosingTarget(null);
         }}
@@ -2650,7 +2650,7 @@ export default function Romaneios() {
 
                 return (
                   <>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid gap-3 sm:grid-cols-3">
                       <div className="rounded-xl border bg-card p-4">
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">A receber de clientes</p>
                         <p className="mt-1 text-xl font-bold text-blue-500">{formatBRL(aReceber)}</p>
@@ -2667,13 +2667,8 @@ export default function Romaneios() {
                           {caixa < 0 ? `-${formatBRL(Math.abs(caixa))}` : formatBRL(caixa)}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {caixa < 0 ? "Valor que falta para cobrir os gastos." : "Valor dos gastos coberto pelos recebimentos."}
+                          Valor a receber de clientes menos os gastos previstos ainda pendentes.
                         </p>
-                      </div>
-                      <div className="rounded-xl border bg-card p-4">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Saldo após previsão</p>
-                        <p className={`mt-1 text-xl font-bold ${saldo < 0 ? "text-red-500" : "text-emerald-500"}`}>{formatBRL(saldo)}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Recebimentos pendentes menos os custos que ainda precisam ser pagos.</p>
                       </div>
                     </div>
 
@@ -2840,7 +2835,7 @@ export default function Romaneios() {
                   <p className={`mt-1 text-xl font-bold ${preClosingTotalCaixa < 0 ? "text-red-500" : "text-emerald-500"}`}>
                     {preClosingTotalCaixa < 0 ? `-${formatBRL(Math.abs(preClosingTotalCaixa))}` : formatBRL(preClosingTotalCaixa)}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">Verde quando os recebimentos cobrem os gastos; vermelho mostra o valor que falta.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Valor a receber de clientes menos os gastos previstos ainda pendentes.</p>
                 </div>
               </div>
 
@@ -3627,4 +3622,5 @@ export default function Romaneios() {
     </Layout>
   );
 }
+
 
