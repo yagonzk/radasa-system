@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
 import { useViagens, useMotoristas, useVeiculos, useAbastecimentos, useLocais, type Motorista, type Veiculo, type Viagem } from "@/lib/store";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
@@ -1611,199 +1611,112 @@ export default function Viagens() {
 
       {/* View dialog */}
       <Dialog open={!!viewingViagem} onOpenChange={(open) => !open && setViewingViagem(null)}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Detalhes da Viagem</DialogTitle>
+            <DialogTitle>Visualização rápida do Acerto</DialogTitle>
           </DialogHeader>
 
           {viewingViagem && (() => {
             const motorista = motoristas.find((m) => m.id === viewingViagem.motoristaId);
-            // A viagem salva Ã© a fonte principal. Em registros legados que ficaram com 0,
-            // recupera deterministicamente a comissÃ£o cadastrada para o destino.
             const localComissaoVisualizacao = locais.find((local) =>
               normalizeCidadeLookup(local.cidade) === normalizeCidadeLookup(viewingViagem.cidadeEntrega)
             );
+
             const comissaoPersistida = Number(viewingViagem.valorComissao ?? 0);
             const comissaoVisualizacao = comissaoPersistida !== 0
               ? comissaoPersistida
               : Number(localComissaoVisualizacao?.valorComissao ?? 0);
-            const viagemVisualizacao = { ...viewingViagem, valorComissao: comissaoVisualizacao };
-            const totalCustoBase = viagemTotalCusto(viagemVisualizacao);
-            const totalCusto = rentabilidade?.custoTotal ?? totalCustoBase;
-            const receitaTotal = rentabilidade?.receitaTotal ?? viewingViagem.valorFrete;
-            const custoPorKm = rentabilidade?.custoKm ?? (viewingViagem.distanciaKm > 0 ? totalCusto / viewingViagem.distanciaKm : 0);
-            const lucroBruto = rentabilidade?.lucro ?? (receitaTotal - totalCusto);
-            const margem = rentabilidade?.margem ?? (receitaTotal > 0 ? (lucroBruto / receitaTotal) * 100 : 0);
-            const lucroKm = rentabilidade?.lucroKm ?? (viewingViagem.distanciaKm > 0 ? lucroBruto / viewingViagem.distanciaKm : 0);
+
+            const combustivel = Number(viewingViagem.valorAbastecimento ?? 0);
+            const pedagio = Number(viewingViagem.valorPedagio ?? 0);
+            const diaria = Number(viewingViagem.valorDiaria ?? 0);
+            const chapa = Number(viewingViagem.valorChapa ?? 0);
+            const multa = Number(viewingViagem.valorMulta ?? 0);
+            const custoExtra = Number(viewingViagem.valorCustoExtra ?? 0);
+            const frete = Number(viewingViagem.valorFrete ?? 0);
+            const distancia = Number(viewingViagem.distanciaKm ?? 0);
+
+            const totalCustos = combustivel + comissaoVisualizacao + pedagio + diaria + chapa + multa + custoExtra;
+            const lucroBruto = frete - totalCustos;
+            const custoKm = distancia > 0 ? totalCustos / distancia : 0;
+
+            const despesas: Array<[string, number]> = [
+              ["Combustível", combustivel],
+              ["Comissão", comissaoVisualizacao],
+              ["Pedágio", pedagio],
+              ["Diária", diaria],
+              ["Chapa", chapa],
+              ["Multas", multa],
+              ["Custo extra", custoExtra],
+            ];
 
             return (
               <div className="space-y-4">
-                <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">CÃ³digo do acerto</div><div className="font-semibold">{viewingViagem.codigo || "Sem cÃ³digo"}</div></div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Manifesto</p>
-                    <p className="mt-1 text-sm font-medium">{formatDate(viewingViagem.dataManifesto)}</p>
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <div className="text-xs text-muted-foreground">Código do acerto</div>
+                  <div className="font-semibold">{viewingViagem.codigo || "Sem código"}</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Data</div>
+                    <div className="mt-1 font-medium">{formatDate(viewingViagem.dataManifesto)}</div>
                   </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Placa</p>
-                    <p className="mt-1 text-sm font-mono font-semibold">{viewingViagem.placa}</p>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Placa</div>
+                    <div className="mt-1 font-mono font-semibold">{viewingViagem.placa}</div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Motorista</div>
+                    <div className="mt-1 font-medium">{motorista?.nome || "—"}</div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">KM</div>
+                    <div className="mt-1 font-medium">{distancia.toLocaleString("pt-BR")}</div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Motorista</p>
-                    <p className="mt-1 text-sm font-medium">{motorista?.nome || "â€”"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Destino</p>
-                    <p className="mt-1 text-sm font-medium">{viewingViagem.cidadeEntrega}</p>
-                  </div>
-                </div>
-
-                <div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Origem</p><p className="mt-1 text-sm font-medium">{viewingViagem.cidadeOrigem || "â€”"}</p></div>
-
-                {(viewingViagem.rotas ?? []).length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Rotas</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {(viewingViagem.rotas ?? []).map((cidade, index) => (
-                        <span key={`${cidade}-${index}`} className="rounded-md border border-border bg-muted/30 px-2 py-1 text-xs font-medium">
-                          {index + 1}. {cidade}
-                        </span>
-                      ))}
-                      <span className="text-xs text-muted-foreground">â†’ {viewingViagem.cidadeEntrega}</span>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Destino</div>
+                  <div className="mt-1 text-sm font-medium">{viewingViagem.cidadeEntrega || "—"}</div>
+                  {(viewingViagem.rotas ?? []).length > 0 && (
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Rotas: {(viewingViagem.rotas ?? []).join(" → ")}
                     </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">DistÃ¢ncia (KM)</p>
-                    <p className="mt-1 text-sm font-medium">{rentabilidade?.distanciaReal ? `${rentabilidade.distanciaReal.toLocaleString("pt-BR")} real / ${viewingViagem.distanciaKm.toLocaleString("pt-BR")} prevista` : viewingViagem.distanciaKm}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Frete (Receita)</p>
-                    <p className="mt-1 text-sm font-bold text-green-600 dark:text-green-400">{formatBRL(viewingViagem.valorFrete)}</p>
-                  </div>
+                  )}
                 </div>
 
-                <div className="border-t border-border pt-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Despesas</p>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>CombustÃ­vel</span>
-                      <span className="font-medium">{formatBRL(viewingViagem.valorAbastecimento)}</span>
-                    </div>
-                    {(viewingViagem.abastecimentosVinculados?.length ?? 0) > 0 && (
-                      <div className="ml-3 space-y-1.5 rounded-md border border-border bg-muted/20 p-2">
-                        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Abastecimentos vinculados</div>
-                        {(viewingViagem.abastecimentosVinculados ?? []).map((link) => {
-                          const nota = link.abastecimento;
-                          return (
-                            <div key={link.abastecimentoId} className="flex items-start justify-between gap-3 text-xs">
-                              <div className="min-w-0">
-                                <div className="truncate font-medium">NF {nota?.numeroNfe || "â€”"} Â· {nota?.emitenteNomeFantasia || nota?.emitenteRazaoSocial || "Posto nÃ£o informado"}</div>
-                                <div className="text-muted-foreground">{nota?.dataEmissao ? formatDate(nota.dataEmissao) : "Data nÃ£o informada"}</div>
-                              </div>
-                              <span className="shrink-0 font-semibold">{formatBRL(Number(nota?.valorTotal ?? link.valorVinculado ?? 0))}</span>
-                            </div>
-                          );
-                        })}
+                <div className="rounded-lg border p-3">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-muted-foreground">Frete</span>
+                    <span className="font-display text-lg font-bold text-green-600 dark:text-green-400">
+                      {formatBRL(frete)}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 border-t border-border pt-3 text-sm">
+                    {despesas.map(([label, value]) => (
+                      <div key={label} className="flex items-center justify-between">
+                        <span>{label}</span>
+                        <span className="font-medium">{formatBRL(value)}</span>
                       </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span>ComissÃ£o</span>
-                      <span className="font-medium">{formatBRL(comissaoVisualizacao)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>PedÃ¡gio</span>
-                      <span className="font-medium">{formatBRL(viewingViagem.valorPedagio)}</span>
-                    </div>
-                    {(viewingViagem.valorPedagioImportado??0)>0&&<div className="-mt-1 flex justify-end text-[11px] text-muted-foreground">TruckPag: {formatBRL(viewingViagem.valorPedagioImportado??0)}</div>}
-                    <div className="flex justify-between">
-                      <span>DiÃ¡ria</span>
-                      <span className="font-medium">{formatBRL(viewingViagem.valorDiaria)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Chapa</span>
-                      <span className="font-medium">{formatBRL(viewingViagem.valorChapa)}</span>
-                    </div>
-                    {(viewingViagem.valorChapaImportado??0)>0&&<div className="-mt-1 flex justify-end text-[11px] text-muted-foreground">TruckPag: {formatBRL(viewingViagem.valorChapaImportado??0)}</div>}
-                    <div className="flex justify-between">
-                      <span>Multas</span>
-                      <span className="font-medium">{formatBRL(viewingViagem.valorMulta ?? 0)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Custo Extra</span>
-                      <span className="font-medium">{formatBRL(viewingViagem.valorCustoExtra ?? 0)}</span>
-                    </div>
+                    ))}
                   </div>
-                </div>
 
-                {(viewingViagem.despesasExtrato?.length??0)>0&&<div className="border-t border-border pt-4"><div className="mb-3 flex items-center gap-2"><ReceiptText className="h-4 w-4 text-primary"/><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">LanÃ§amentos TruckPag</p></div><div className="max-h-44 space-y-2 overflow-y-auto">{(viewingViagem.despesasExtrato??[]).map(item=><div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border p-2 text-xs"><div className="min-w-0"><div className="font-medium">{item.tipo==="CHAPA"?"Chapa":"PedÃ¡gio"} Â· {formatDate(item.data)} {item.hora}</div><div className="truncate text-muted-foreground" title={item.descricao}>{item.descricao}</div></div><div className="shrink-0 font-semibold">{formatBRL(item.valor)}</div></div>)}</div></div>}
+                  <div className="mt-3 space-y-2 border-t border-border pt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-muted-foreground">Total de custos</span>
+                      <span className="font-display text-lg font-bold text-primary">{formatBRL(totalCustos)}</span>
+                    </div>
 
-                <div className="flex justify-end border-t border-border pt-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={loadingRentabilidade}
-                    onClick={() => viewingViagem && void carregarRentabilidadeViagem(viewingViagem.id)}
-                  >
-                    {loadingRentabilidade && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
-                    {rentabilidade ? "Atualizar rentabilidade" : "Carregar rentabilidade detalhada"}
-                  </Button>
-                </div>
-                {(loadingRentabilidade || (rentabilidade?.lancamentos.length ?? 0) > 0) && (
-                  <div className="border-t border-border pt-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">LanÃ§amentos financeiros vinculados</p>
-                      {loadingRentabilidade && <span className="text-xs text-muted-foreground">Carregando...</span>}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-muted-foreground">Custo/KM</span>
+                      <span className="font-display text-lg font-bold text-foreground">{formatBRL(custoKm)}</span>
                     </div>
-                    <div className="space-y-2 text-sm">
-                      {rentabilidade?.lancamentos.map((item) => (
-                        <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-                          <div className="min-w-0">
-                            <div className="truncate font-medium">{item.descricao}</div>
-                            <div className="text-xs text-muted-foreground">{item.categoria}</div>
-                          </div>
-                          <span className={`shrink-0 font-semibold ${item.tipo === "RECEITA" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                            {item.tipo === "RECEITA" ? "+" : "-"}{formatBRL(item.valor)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
-                <div className="space-y-2 rounded-lg border border-border bg-card p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-muted-foreground">Receita total</span>
-                    <span className="font-display text-lg font-bold text-green-600 dark:text-green-400">{formatBRL(receitaTotal)}</span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-border pt-2">
-                    <span className="text-sm font-semibold text-muted-foreground">Custo Total</span>
-                    <span className="font-display text-lg font-bold text-primary">{formatBRL(totalCusto)}</span>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-border pt-2">
-                    <span className="text-sm font-semibold text-muted-foreground">Custo/KM</span>
-                    <span className="font-display text-lg font-bold text-foreground">{formatBRL(custoPorKm)}</span>
-                  </div>
-                  <div className={`flex items-center justify-between border-t border-border pt-2 ${
-                    lucroBruto >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                  }`}>
-                    <span className="text-sm font-semibold">Lucro Bruto</span>
-                    <span className="font-display text-lg font-bold">{formatBRL(lucroBruto)}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
-                    <div>
-                      <span className="text-xs text-muted-foreground">Margem</span>
-                      <div className="font-semibold">{margem.toFixed(1)}%</div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs text-muted-foreground">Lucro/KM</span>
-                      <div className="font-semibold">{formatBRL(lucroKm)}</div>
+                    <div className={`flex items-center justify-between ${lucroBruto >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                      <span className="text-sm font-semibold">Lucro bruto</span>
+                      <span className="font-display text-lg font-bold">{formatBRL(lucroBruto)}</span>
                     </div>
                   </div>
                 </div>
