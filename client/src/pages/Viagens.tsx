@@ -224,7 +224,7 @@ function CidadeAutocomplete({ value, onChange, placeholder }: { value: string; o
     setLoading(true);
     carregarCidadesIbge()
       .then((items) => { if (active) setCidades(items); })
-      .catch(() => { if (active) toast.error("NÃ£o foi possÃ­vel carregar a lista de cidades."); })
+      .catch(() => { if (active) toast.error("Não foi possível carregar a lista de cidades."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [open, cidades.length]);
@@ -289,7 +289,7 @@ async function geocodeCidade(label: string) {
   const query = encodeURIComponent(`${label}, Brasil`);
   const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${query}`, { headers: { "Accept-Language": "pt-BR" } });
   const rows = await response.json();
-  if (!response.ok || !rows?.[0]) throw new Error(`NÃ£o foi possÃ­vel localizar ${label}.`);
+  if (!response.ok || !rows?.[0]) throw new Error(`Não foi possível localizar ${label}.`);
   const point = { lat: Number(rows[0].lat), lon: Number(rows[0].lon) };
   geocodeCidadeCache.set(key, point);
   return point;
@@ -300,7 +300,7 @@ function normalizePlate(value: string) {
 }
 function progressLabel(progress: PdfTextProgress) {
   const page = progress.totalPages > 1 ? ` ${progress.page}/${progress.totalPages}` : "";
-  if (progress.stage === "ocr") return `Lendo manifesto${page} Â· ${Math.round(progress.progress * 100)}%`;
+  if (progress.stage === "ocr") return `Lendo manifesto${page} · ${Math.round(progress.progress * 100)}%`;
   if (progress.stage === "ocr-loading") return `Preparando OCR${page}...`;
   return `Preparando PDF${page}...`;
 }
@@ -354,7 +354,7 @@ export default function Viagens() {
     }
     const timer = window.setTimeout(() => {
       void loadRange(columnFilters.dataInicio, columnFilters.dataFim).catch(() => {
-        toast.error("NÃ£o foi possÃ­vel carregar o perÃ­odo selecionado.");
+        toast.error("Não foi possível carregar o período selecionado.");
       });
     }, 200);
     return () => window.clearTimeout(timer);
@@ -590,8 +590,8 @@ export default function Viagens() {
   };
 
   const handlePlacaChange = (novaPlaca: string) => {
-    // A placa e o motorista da viagem sÃ£o independentes.
-    // Alterar a placa nÃ£o deve sobrescrever o motorista escolhido manualmente.
+    // A placa e o motorista da viagem são independentes.
+    // Alterar a placa não deve sobrescrever o motorista escolhido manualmente.
     setPlaca(novaPlaca);
     const veiculo = veiculos.find((item) => normalizeLookup(item.placa) === normalizeLookup(novaPlaca));
     setAbastecimentoIds((atuais) => atuais.filter((id) => {
@@ -601,9 +601,9 @@ export default function Viagens() {
   };
 
   const handleOpenCreate = () => {
-    // O botÃ£o de registrar acerto deve sempre abrir a ficha.
-    // ValidaÃ§Ãµes de placa/motorista acontecem no salvamento, evitando o clique
-    // parecer "sem funcionar" enquanto os cadastros ainda estÃ£o carregando.
+    // O botão de registrar acerto deve sempre abrir a ficha.
+    // Validações de placa/motorista acontecem no salvamento, evitando o clique
+    // parecer "sem funcionar" enquanto os cadastros ainda estão carregando.
     resetForm();
     setManifestoVinculado(null);
     setEditingViagem(null);
@@ -645,8 +645,8 @@ export default function Viagens() {
       const { data: atualizada } = await api.get<Viagem>(`/viagens/${v.id}`);
       preencherEdicao(atualizada);
     } catch (error: any) {
-      console.error("Falha ao carregar viagem para ediÃ§Ã£o.", error);
-      toast.error(error?.response?.data?.message ?? "NÃ£o foi possÃ­vel carregar os dados atualizados da viagem.");
+      console.error("Falha ao carregar viagem para edição.", error);
+      toast.error(error?.response?.data?.message ?? "Não foi possível carregar os dados atualizados da viagem.");
     }
   };
 
@@ -656,7 +656,7 @@ export default function Viagens() {
       setViewingViagem(atualizada);
     } catch (error: any) {
       console.error("Falha ao carregar detalhes da viagem.", error);
-      toast.error(error?.response?.data?.message ?? "NÃ£o foi possÃ­vel carregar os detalhes atualizados da viagem.");
+      toast.error(error?.response?.data?.message ?? "Não foi possível carregar os detalhes atualizados da viagem.");
     }
   };
 
@@ -697,7 +697,7 @@ export default function Viagens() {
       setEditingViagem(null);
       const registeredVehicle = findRegisteredVehicle(parsed.placa, veiculos);
       const registeredPlate = registeredVehicle?.placa ?? "";
-      // Na viagem, o motorista nÃ£o fica preso ao motorista cadastrado no veÃ­culo.
+      // Na viagem, o motorista não fica preso ao motorista cadastrado no veículo.
       // Ao ler manifesto, prioriza o motorista efetivamente identificado no documento.
       const linkedMotoristaId = linkedMotoristaForVehicle(registeredVehicle);
       const matchedMotoristaId = findMotoristaId(text, parsed.motoristaNome, motoristas) || linkedMotoristaId;
@@ -722,16 +722,16 @@ export default function Viagens() {
         parsed.valorFrete > 0 && "valor do frete",
         parsed.dataManifesto && "data do manifesto",
         destination && "cidade de destino",
-        distance > 0 && "distÃ¢ncia em KM",
+        distance > 0 && "distância em KM",
       ].filter((value): value is string => Boolean(value));
       const observacoes: string[] = [];
-      if (parsed.placa && !registeredPlate) observacoes.push(`Placa ${parsed.placa} nÃ£o estÃ¡ cadastrada.`);
-      if (registeredVehicle?.motoristaId && !linkedMotoristaId) observacoes.push("O motorista cadastrado no veÃ­culo nÃ£o estÃ¡ ativo; foi tentada a identificaÃ§Ã£o pelo manifesto.");
-      if (!matchedMotoristaId) observacoes.push("Motorista nÃ£o identificado. Selecione qualquer motorista ativo para esta viagem.");
-      if (!destination) observacoes.push("MunicÃ­pio Destino nÃ£o identificado no bloco Origem/Destino do manifesto.");
-      if (!distance) observacoes.push("O DAMDFE nÃ£o informa KM e nÃ£o foi possÃ­vel calcular a rota nem recuperar uma distÃ¢ncia do histÃ³rico.");
-      if (parsed.distanciaFonte === "rota" && parsed.distanciaKm > 0) observacoes.push("A distÃ¢ncia foi calculada automaticamente entre a origem e o destino do manifesto.");
-      if (historicalDistance > 0) observacoes.push("A distÃ¢ncia foi recuperada da viagem mais recente para a mesma cidade.");
+      if (parsed.placa && !registeredPlate) observacoes.push(`Placa ${parsed.placa} não está cadastrada.`);
+      if (registeredVehicle?.motoristaId && !linkedMotoristaId) observacoes.push("O motorista cadastrado no veículo não está ativo; foi tentada a identificação pelo manifesto.");
+      if (!matchedMotoristaId) observacoes.push("Motorista não identificado. Selecione qualquer motorista ativo para esta viagem.");
+      if (!destination) observacoes.push("Município Destino não identificado no bloco Origem/Destino do manifesto.");
+      if (!distance) observacoes.push("O DAMDFE não informa KM e não foi possível calcular a rota nem recuperar uma distância do histórico.");
+      if (parsed.distanciaFonte === "rota" && parsed.distanciaKm > 0) observacoes.push("A distância foi calculada automaticamente entre a origem e o destino do manifesto.");
+      if (historicalDistance > 0) observacoes.push("A distância foi recuperada da viagem mais recente para a mesma cidade.");
       observacoes.push(...(parsed.avisos ?? []));
       setManifestoVinculado({
         arquivo: file.name,
@@ -745,7 +745,7 @@ export default function Viagens() {
       else toast.warning(`Manifesto lido com ${preenchidos.length} campos preenchidos. Revise os campos pendentes.`);
     } catch (error: any) {
       console.error("Falha ao ler manifesto para Viagens.", error);
-      toast.error(error?.response?.data?.message ?? error?.message ?? "NÃ£o foi possÃ­vel ler o manifesto.");
+      toast.error(error?.response?.data?.message ?? error?.message ?? "Não foi possível ler o manifesto.");
     } finally {
       setReadingManifesto(false);
       setReadingManifestoLabel("");
@@ -773,7 +773,7 @@ export default function Viagens() {
         const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=false&steps=false`);
         const data = await response.json();
         const route = data?.routes?.[0];
-        if (!response.ok || !route) throw new Error("NÃ£o foi possÃ­vel calcular a distÃ¢ncia rodoviÃ¡ria da rota.");
+        if (!response.ok || !route) throw new Error("Não foi possível calcular a distância rodoviária da rota.");
         const legs = Array.isArray(route.legs) ? route.legs : [];
         const segments: TrechoRota[] = orderedStops.slice(1).map((to, index) => ({
           de: orderedStops[index],
@@ -787,7 +787,7 @@ export default function Viagens() {
       } catch (error: any) {
         if (runId !== rotaCalculationRun.current) return;
         setTrechosRota([]);
-        toast.error(error?.message || "NÃ£o foi possÃ­vel calcular a distÃ¢ncia da rota.");
+        toast.error(error?.message || "Não foi possível calcular a distância da rota.");
       } finally {
         if (runId === rotaCalculationRun.current) setCalculandoDistancia(false);
       }
@@ -853,8 +853,8 @@ export default function Viagens() {
       toast.error(
         error?.response?.data?.message ??
           (editingViagem
-            ? "NÃ£o foi possÃ­vel atualizar a viagem."
-            : "NÃ£o foi possÃ­vel registrar a viagem."),
+            ? "Não foi possível atualizar a viagem."
+            : "Não foi possível registrar a viagem."),
       );
     } finally {
       setSaving(false);
@@ -873,7 +873,7 @@ export default function Viagens() {
       const arquivos=await Promise.all(Array.from(files).map(async(file)=>({nome:file.name,texto:await decodeExtratoFile(file)})));
       const response=await api.post<ExtratoPreview>("/viagens/extrato/preview",{arquivos});
       setExtratoPreview(response.data); setExtratoOpen(true);
-    } catch(error:any){ toast.error(error?.response?.data?.message??"NÃ£o foi possÃ­vel ler o extrato TruckPag."); }
+    } catch(error:any){ toast.error(error?.response?.data?.message??"Não foi possível ler o extrato TruckPag."); }
     finally { setExtratoLoading(false); if(extratoInputRef.current)extratoInputRef.current.value=""; }
   };
 
@@ -883,20 +883,20 @@ export default function Viagens() {
 
   const importarExtrato = async () => {
     if(!extratoPreview)return; const items=extratoPreview.items.filter(x=>x.viagemId&&!x.duplicado);
-    if(!items.length){toast.error("Nenhum lanÃ§amento estÃ¡ vinculado a uma viagem.");return}
+    if(!items.length){toast.error("Nenhum lançamento está vinculado a uma viagem.");return}
     setExtratoSaving(true);
-    try { const response=await api.post("/viagens/extrato/importar",{items}); toast.success(`${response.data.importados||0} lanÃ§amento(s) importado(s) para as viagens.`); setExtratoOpen(false); setExtratoPreview(null); window.dispatchEvent(new CustomEvent("radasa-api-change:viagens")); }
-    catch(error:any){toast.error(error?.response?.data?.message??"NÃ£o foi possÃ­vel importar os lanÃ§amentos.")} finally {setExtratoSaving(false)}
+    try { const response=await api.post("/viagens/extrato/importar",{items}); toast.success(`${response.data.importados||0} lançamento(s) importado(s) para as viagens.`); setExtratoOpen(false); setExtratoPreview(null); window.dispatchEvent(new CustomEvent("radasa-api-change:viagens")); }
+    catch(error:any){toast.error(error?.response?.data?.message??"Não foi possível importar os lançamentos.")} finally {setExtratoSaving(false)}
   };
 
   const handleDelete = async (v: Viagem) => {
     if (confirm("Deseja realmente excluir esta viagem?")) {
       try {
         await remove(v.id);
-      toast.success("Viagem excluÃ­da com sucesso!");
+      toast.success("Viagem excluída com sucesso!");
       } catch (error: any) {
         console.error("Falha ao excluir viagem.", error);
-        toast.error(error?.response?.data?.message ?? "NÃ£o foi possÃ­vel excluir a viagem.");
+        toast.error(error?.response?.data?.message ?? "Não foi possível excluir a viagem.");
       }
     }
   };
@@ -911,7 +911,7 @@ export default function Viagens() {
               Acerto de Viagem
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Registre frete, rota e custos em uma Ãºnica ficha. Use Ler manifesto para preencher automaticamente os dados do DAMDFE/MDF-e.
+              Registre frete, rota e custos em uma única ficha. Use Ler manifesto para preencher automaticamente os dados do DAMDFE/MDF-e.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -924,7 +924,7 @@ export default function Viagens() {
           </div>
         </div>
 
-        {/* Pesquisa + filtros por coluna, no mesmo padrÃ£o da aba Romaneios */}
+        {/* Pesquisa + filtros por coluna, no mesmo padrão da aba Romaneios */}
         <div className="mb-6 flex flex-wrap items-center gap-2">
           <div className="relative w-full max-w-xl">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -959,7 +959,7 @@ export default function Viagens() {
           </div>
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Custo MÃ©dio por KM
+              Custo Médio por KM
             </p>
             <p className="mt-2 text-2xl font-bold text-foreground">
               {filteredViagens.length > 0
@@ -967,7 +967,7 @@ export default function Viagens() {
                     totalCustos /
                       filteredViagens.reduce((sum: number, v: Viagem) => sum + v.distanciaKm, 0)
                   )
-                : "â€”"}
+                : "—"}
             </p>
           </div>
           <div className="rounded-xl border border-border bg-card p-4">
@@ -1036,7 +1036,7 @@ export default function Viagens() {
                                   />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs">AtÃ©</Label>
+                                  <Label className="text-xs">Até</Label>
                                   <DatePicker
                                     value={columnFilters.dataFim}
                                     defaultMonth={columnFilters.dataInicio}
@@ -1060,7 +1060,7 @@ export default function Viagens() {
                                 <div className="max-h-60 overflow-y-auto p-2">
                                   {options.length === 0 ? (
                                     <p className="py-4 text-center text-xs text-muted-foreground">
-                                      Nenhuma opÃ§Ã£o encontrada.
+                                      Nenhuma opção encontrada.
                                     </p>
                                   ) : (
                                     options.map((option) => (
@@ -1115,7 +1115,7 @@ export default function Viagens() {
                     );
                   })}
                   <th className="px-4 py-3 text-center font-semibold text-muted-foreground">
-                    AÃ§Ãµes
+                    Ações
                   </th>
                 </tr>
               </thead>
@@ -1128,7 +1128,7 @@ export default function Viagens() {
                     >
                       {search || hasColumnFilters
                         ? "Nenhuma viagem encontrada com os filtros atuais."
-                        : 'Nenhuma viagem encontrada. Clique em "Registrar acerto" para comeÃ§ar.'}
+                        : 'Nenhuma viagem encontrada. Clique em "Registrar acerto" para começar.'}
                     </td>
                   </tr>
                 ) : (
@@ -1152,7 +1152,7 @@ export default function Viagens() {
                           {v.placa}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
-                          {motorista?.nome || "â€”"}
+                          {motorista?.nome || "—"}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
                           {v.cidadeEntrega}
@@ -1212,19 +1212,19 @@ export default function Viagens() {
       {/* Form dialog */}
       <Dialog open={extratoOpen} onOpenChange={setExtratoOpen}>
         <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden">
-          <DialogHeader><DialogTitle>Importar pedÃ¡gios e chapas do TruckPag</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Importar pedágios e chapas do TruckPag</DialogTitle></DialogHeader>
           {extratoPreview&&<div className="space-y-4 overflow-hidden">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">PedÃ¡gios</div><div className="text-lg font-bold">{extratoPreview.resumo.pedagios}</div><div className="text-xs">{formatBRL(extratoPreview.resumo.valorPedagios)}</div></div>
+              <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Pedágios</div><div className="text-lg font-bold">{extratoPreview.resumo.pedagios}</div><div className="text-xs">{formatBRL(extratoPreview.resumo.valorPedagios)}</div></div>
               <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Chapas</div><div className="text-lg font-bold">{extratoPreview.resumo.chapas}</div><div className="text-xs">{formatBRL(extratoPreview.resumo.valorChapas)}</div></div>
               <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Vinculados</div><div className="text-lg font-bold">{extratoPreview.items.filter(x=>x.viagemId&&!x.duplicado).length}</div></div>
               <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Revisar</div><div className="text-lg font-bold text-amber-600">{extratoPreview.items.filter(x=>!x.viagemId&&!x.duplicado).length}</div></div>
               <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Ignorados</div><div className="text-lg font-bold">{extratoPreview.resumo.ignorados}</div><div className="text-[11px] text-muted-foreground">Inclui o PIX de R$ 248,00</div></div>
             </div>
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0"/><span>O sistema vincula pela data do lanÃ§amento e pelo motorista, usando a viagem mais recente iniciada atÃ© 10 dias antes. Linhas sem vÃ­nculo podem ser associadas manualmente abaixo.</span></div>
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0"/><span>O sistema vincula pela data do lançamento e pelo motorista, usando a viagem mais recente iniciada até 10 dias antes. Linhas sem vínculo podem ser associadas manualmente abaixo.</span></div>
             <div className="max-h-[52vh] overflow-auto rounded-lg border">
-              <table className="w-full min-w-[980px] text-xs"><thead className="sticky top-0 bg-muted"><tr><th className="p-2 text-left">Data</th><th className="p-2 text-left">Tipo</th><th className="p-2 text-right">Valor</th><th className="p-2 text-left">DescriÃ§Ã£o</th><th className="p-2 text-left">Viagem vinculada</th><th className="p-2 text-left">Status</th></tr></thead><tbody>
-                {extratoPreview.items.map(item=><tr key={item.fingerprint} className="border-t"><td className="p-2 whitespace-nowrap">{formatDate(item.data)} {item.hora}</td><td className="p-2"><span className={item.tipo==="CHAPA"?"rounded bg-purple-100 px-2 py-1 font-semibold text-purple-700":"rounded bg-blue-100 px-2 py-1 font-semibold text-blue-700"}>{item.tipo==="CHAPA"?"Chapa":"PedÃ¡gio"}</span></td><td className="p-2 text-right font-semibold">{formatBRL(item.valor)}</td><td className="max-w-[340px] truncate p-2" title={item.descricao}>{item.descricao}</td><td className="p-2"><Select value={item.viagemId||""} onValueChange={(value)=>setExtratoViagem(item.fingerprint,value)} disabled={item.duplicado}><SelectTrigger className="h-8 min-w-[210px]"><SelectValue placeholder="Selecionar viagem"/></SelectTrigger><SelectContent>{viagens.filter(v=>Math.abs((new Date(v.dataManifesto+'T00:00:00').getTime()-new Date(item.data+'T00:00:00').getTime())/86400000)<=14).map(v=><SelectItem key={v.id} value={v.id}>{v.codigo||'Viagem'} Â· {formatDate(v.dataManifesto)} Â· {v.placa}</SelectItem>)}</SelectContent></Select></td><td className="p-2">{item.duplicado?<span className="text-muted-foreground">JÃ¡ importado</span>:item.viagemId?<span className="text-green-600">Vinculado</span>:<span className="text-amber-600">Revisar</span>}</td></tr>)}
+              <table className="w-full min-w-[980px] text-xs"><thead className="sticky top-0 bg-muted"><tr><th className="p-2 text-left">Data</th><th className="p-2 text-left">Tipo</th><th className="p-2 text-right">Valor</th><th className="p-2 text-left">Descrição</th><th className="p-2 text-left">Viagem vinculada</th><th className="p-2 text-left">Status</th></tr></thead><tbody>
+                {extratoPreview.items.map(item=><tr key={item.fingerprint} className="border-t"><td className="p-2 whitespace-nowrap">{formatDate(item.data)} {item.hora}</td><td className="p-2"><span className={item.tipo==="CHAPA"?"rounded bg-purple-100 px-2 py-1 font-semibold text-purple-700":"rounded bg-blue-100 px-2 py-1 font-semibold text-blue-700"}>{item.tipo==="CHAPA"?"Chapa":"Pedágio"}</span></td><td className="p-2 text-right font-semibold">{formatBRL(item.valor)}</td><td className="max-w-[340px] truncate p-2" title={item.descricao}>{item.descricao}</td><td className="p-2"><Select value={item.viagemId||""} onValueChange={(value)=>setExtratoViagem(item.fingerprint,value)} disabled={item.duplicado}><SelectTrigger className="h-8 min-w-[210px]"><SelectValue placeholder="Selecionar viagem"/></SelectTrigger><SelectContent>{viagens.filter(v=>Math.abs((new Date(v.dataManifesto+'T00:00:00').getTime()-new Date(item.data+'T00:00:00').getTime())/86400000)<=14).map(v=><SelectItem key={v.id} value={v.id}>{v.codigo||'Viagem'} · {formatDate(v.dataManifesto)} · {v.placa}</SelectItem>)}</SelectContent></Select></td><td className="p-2">{item.duplicado?<span className="text-muted-foreground">Já importado</span>:item.viagemId?<span className="text-green-600">Vinculado</span>:<span className="text-amber-600">Revisar</span>}</td></tr>)}
               </tbody></table>
             </div>
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={()=>setExtratoOpen(false)}>Cancelar</Button><Button disabled={extratoSaving} onClick={()=>void importarExtrato()}>{extratoSaving?<LoaderCircle className="mr-2 h-4 w-4 animate-spin"/>:<ReceiptText className="mr-2 h-4 w-4"/>}Importar vinculados</Button></div>
@@ -1247,9 +1247,9 @@ export default function Viagens() {
                   <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">Manifesto vinculado</p>
-                    <p className="truncate text-xs text-muted-foreground" title={manifestoVinculado.arquivo}>{manifestoVinculado.arquivo}{manifestoVinculado.numero ? ` Â· MDF-e NÂº ${manifestoVinculado.numero}` : ""}</p>
+                    <p className="truncate text-xs text-muted-foreground" title={manifestoVinculado.arquivo}>{manifestoVinculado.arquivo}{manifestoVinculado.numero ? ` · MDF-e Nº ${manifestoVinculado.numero}` : ""}</p>
                     <p className="mt-1 text-xs text-muted-foreground">Preenchido automaticamente: {manifestoVinculado.camposPreenchidos.length ? manifestoVinculado.camposPreenchidos.join(", ") : "nenhum campo"}.</p>
-                    {manifestoVinculado.observacoes.length > 0 && <div className="mt-2 space-y-0.5 text-xs text-amber-700 dark:text-amber-400">{manifestoVinculado.observacoes.slice(0, 4).map((observacao) => <p key={observacao}>â€¢ {observacao}</p>)}</div>}
+                    {manifestoVinculado.observacoes.length > 0 && <div className="mt-2 space-y-0.5 text-xs text-amber-700 dark:text-amber-400">{manifestoVinculado.observacoes.slice(0, 4).map((observacao) => <p key={observacao}>• {observacao}</p>)}</div>}
                   </div>
                 </div>
               </div>
@@ -1312,7 +1312,7 @@ export default function Viagens() {
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Cidade de Origem</Label>
               <Input value={cidadeOrigem} readOnly className="bg-muted/40" />
-              <p className="text-xs text-muted-foreground">Origem padrÃ£o de todos os acertos: Ipiranga do Norte, MT.</p>
+              <p className="text-xs text-muted-foreground">Origem padrão de todos os acertos: Ipiranga do Norte, MT.</p>
             </div>
 
             <div className="space-y-1.5">
@@ -1334,7 +1334,7 @@ export default function Viagens() {
                   <CidadeAutocomplete
                     value={novaRota}
                     onChange={setNovaRota}
-                    placeholder="Digite para pesquisar a prÃ³xima cidade"
+                    placeholder="Digite para pesquisar a próxima cidade"
                   />
                 </div>
                 <Button
@@ -1373,17 +1373,17 @@ export default function Viagens() {
                     ))}
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    SequÃªncia: {rotas.join(" â†’ ")} â†’ {cidadeEntrega || "Destino"}
+                    Sequência: {rotas.join(" → ")} → {cidadeEntrega || "Destino"}
                   </p>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">Nenhuma cidade intermediÃ¡ria adicionada.</p>
+                <p className="text-xs text-muted-foreground">Nenhuma cidade intermediária adicionada.</p>
               )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">DistÃ¢ncia (KM)</Label>
+                <Label className="text-sm font-medium">Distância (KM)</Label>
                 <div className="relative">
                   <Input
                     type="number"
@@ -1398,7 +1398,7 @@ export default function Viagens() {
                 <p className="text-xs text-muted-foreground">Calculado automaticamente seguindo a ordem das cidades.</p>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">PedÃ¡gio (R$)</Label>
+                <Label className="text-sm font-medium">Pedágio (R$)</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -1411,12 +1411,12 @@ export default function Viagens() {
 
             {trechosRota.length > 0 && (
               <div className="rounded-lg border border-border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
-                <div className="font-medium text-foreground">DistÃ¢ncia por ordem do trajeto</div>
+                <div className="font-medium text-foreground">Distância por ordem do trajeto</div>
                 <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1">
                   {trechosRota.map((trecho, index) => (
                     <span key={`${trecho.de}-${trecho.para}-${index}`}>
                       {index > 0 && <span className="mr-2">+</span>}
-                      {trecho.de} â†’ {trecho.para}: <strong className="text-foreground">{formatKm(trecho.km)} km</strong>
+                      {trecho.de} → {trecho.para}: <strong className="text-foreground">{formatKm(trecho.km)} km</strong>
                     </span>
                   ))}
                 </div>
@@ -1458,8 +1458,8 @@ export default function Viagens() {
                           className="flex w-full items-start justify-between gap-3 rounded-md px-3 py-2.5 text-left hover:bg-accent"
                         >
                           <div className="min-w-0">
-                            <div className="font-medium">NF {item.numeroNfe || "â€”"} Â· {item.emitenteNomeFantasia || item.emitenteRazaoSocial || "Posto nÃ£o informado"}</div>
-                            <div className="mt-0.5 text-xs text-muted-foreground">{formatDate(item.dataEmissao)}{item.emitenteCnpj ? ` Â· ${item.emitenteCnpj}` : ""}</div>
+                            <div className="font-medium">NF {item.numeroNfe || "—"} · {item.emitenteNomeFantasia || item.emitenteRazaoSocial || "Posto não informado"}</div>
+                            <div className="mt-0.5 text-xs text-muted-foreground">{formatDate(item.dataEmissao)}{item.emitenteCnpj ? ` · ${item.emitenteCnpj}` : ""}</div>
                           </div>
                           <span className="shrink-0 font-semibold">{formatBRL(item.valorTotal)}</span>
                         </button>
@@ -1475,8 +1475,8 @@ export default function Viagens() {
                     {abastecimentosSelecionados.map((item) => item && (
                       <div key={item.id} className="flex items-center justify-between gap-3 rounded-md bg-background px-3 py-2 text-sm">
                         <div className="min-w-0">
-                          <div className="truncate font-medium">NF {item.numeroNfe || "â€”"} Â· {item.emitenteNomeFantasia || item.emitenteRazaoSocial || "Posto nÃ£o informado"}</div>
-                          <div className="text-xs text-muted-foreground">{formatDate(item.dataEmissao)} Â· {formatBRL(item.valorTotal)}</div>
+                          <div className="truncate font-medium">NF {item.numeroNfe || "—"} · {item.emitenteNomeFantasia || item.emitenteRazaoSocial || "Posto não informado"}</div>
+                          <div className="text-xs text-muted-foreground">{formatDate(item.dataEmissao)} · {formatBRL(item.valorTotal)}</div>
                         </div>
                         <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removerAbastecimento(item.id)} title="Remover abastecimento">
                           <X className="h-4 w-4" />
@@ -1489,18 +1489,18 @@ export default function Viagens() {
                     </div>
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground">VocÃª pode vincular vÃ¡rias notas da mesma placa. Elas entram no custo da viagem, mas nÃ£o sÃ£o somadas novamente no DRE Operacional.</p>
+                <p className="text-xs text-muted-foreground">Você pode vincular várias notas da mesma placa. Elas entram no custo da viagem, mas não são somadas novamente no DRE Operacional.</p>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">ComissÃ£o automÃ¡tica (R$)</Label>
+                <Label className="text-sm font-medium">Comissão automática (R$)</Label>
                 <Input value={valorComissaoAutomatica ? valorComissaoAutomatica.toFixed(2) : "0.00"} readOnly className="bg-muted/40" />
-                <p className="text-xs text-muted-foreground">{localComissao ? `Calculada pela Ãºltima cidade: ${cidadeEntrega}. NÃ£o entra no DRE Operacional.` : cidadeEntrega ? "ComissÃ£o nÃ£o cadastrada para este destino." : "Informe a cidade de entrega para calcular a comissÃ£o."}</p>
+                <p className="text-xs text-muted-foreground">{localComissao ? `Calculada pela última cidade: ${cidadeEntrega}. Não entra no DRE Operacional.` : cidadeEntrega ? "Comissão não cadastrada para este destino." : "Informe a cidade de entrega para calcular a comissão."}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">DiÃ¡ria (R$)</Label>
+                <Label className="text-sm font-medium">Diária (R$)</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -1529,7 +1529,7 @@ export default function Viagens() {
               </div>
             </div>
 
-            <div className="space-y-1.5"><Label>ObservaÃ§Ãµes da viagem</Label><Input value={observacoes} onChange={e=>setObservacoes(e.target.value)} placeholder="OcorrÃªncias, instruÃ§Ãµes, observaÃ§Ãµes..."/></div>
+            <div className="space-y-1.5"><Label>Observações da viagem</Label><Input value={observacoes} onChange={e=>setObservacoes(e.target.value)} placeholder="Ocorrências, instruções, observações..."/></div>
 
             {/* Total calculation */}
             <div className="space-y-2 rounded-lg border border-border bg-card p-4">
@@ -1602,7 +1602,7 @@ export default function Viagens() {
               {saving
                 ? "Salvando..."
                 : editingViagem
-                  ? "Salvar alteraÃ§Ãµes"
+                  ? "Salvar alterações"
                   : "Registrar acerto"}
             </Button>
           </DialogFooter>
