@@ -640,26 +640,15 @@ export default function Viagens() {
     setFormOpen(true);
   };
 
-  const handleOpenEdit = async (v: Viagem) => {
-    try {
-      const { data: atualizada } = await api.get<Viagem>(`/viagens/${v.id}`);
-      preencherEdicao(atualizada);
-    } catch (error: any) {
-      console.error("Falha ao carregar viagem para edição.", error);
-      toast.error(error?.response?.data?.message ?? "Não foi possível carregar os dados atualizados da viagem.");
-    }
+  const handleOpenEdit = (v: Viagem) => {
+    preencherEdicao(v);
   };
 
-  const handleOpenView = async (v: Viagem) => {
-    try {
-      const { data: atualizada } = await api.get<Viagem>(`/viagens/${v.id}`);
-      setViewingViagem(atualizada);
-    } catch (error: any) {
-      console.error("Falha ao carregar detalhes da viagem.", error);
-      toast.error(error?.response?.data?.message ?? "Não foi possível carregar os detalhes atualizados da viagem.");
-    }
+  const handleOpenView = (v: Viagem) => {
+    setRentabilidade(null);
+    setLoadingRentabilidade(false);
+    setViewingViagem(v);
   };
-
   const resetForm = () => {
     setPlaca("");
     setMotoristaId("");
