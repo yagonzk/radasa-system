@@ -1,4 +1,4 @@
-import { prisma } from "../lib/prisma.js";
+﻿import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { runWithConcurrency } from "../utils/concurrency.js";
 import { parseDateOnly } from "../utils/date.js";
@@ -45,7 +45,7 @@ const serialize = (item: any) => ({
   valorCofins: number(item.valorCofins),
   informacoesComplementares: item.informacoesComplementares ?? "",
   dataEmissao: dateOnly(item.dataEmissao),
-  // Nas listagens os documentos pesados não são enviados. Apenas estes flags
+  // Nas listagens os documentos pesados nÃ£o sÃ£o enviados. Apenas estes flags
   // informam ao frontend que PDF/XML existem e podem ser carregados sob demanda.
   pdfStored: item.pdfStored ?? Boolean(item.pdfUrl),
   xmlStored: item.xmlStored ?? Boolean(item.xmlUrl),
@@ -64,9 +64,9 @@ async function ensureReferences(clienteId: string, veiculoId: string, produtoIds
     () => prisma.veiculo.findUnique({ where: { id: veiculoId }, select: { id: true } }),
     () => prisma.produto.findMany({ where: { id: { in: produtoIds } }, select: { id: true } }),
   ] as const, 2);
-  if (!cliente) throw new AppError(404, "Cliente não encontrado.");
-  if (!veiculo) throw new AppError(404, "Veículo não encontrado.");
-  if (produtos.length !== new Set(produtoIds).size) throw new AppError(404, "Um ou mais produtos não foram encontrados.");
+  if (!cliente) throw new AppError(404, "Cliente nÃ£o encontrado.");
+  if (!veiculo) throw new AppError(404, "VeÃ­culo nÃ£o encontrado.");
+  if (produtos.length !== new Set(produtoIds).size) throw new AppError(404, "Um ou mais produtos nÃ£o foram encontrados.");
 }
 
 function buildProducts(produtos: any[]) {
@@ -135,8 +135,8 @@ async function ensureClienteVeiculo(tx: any, clienteId: string, veiculoId: strin
     tx.veiculo.findUnique({ where: { id: veiculoId }, select: { id: true } }),
   ]);
 
-  if (!cliente) throw new AppError(404, "Cliente não encontrado.");
-  if (!veiculo) throw new AppError(404, "Veículo não encontrado.");
+  if (!cliente) throw new AppError(404, "Cliente nÃ£o encontrado.");
+  if (!veiculo) throw new AppError(404, "VeÃ­culo nÃ£o encontrado.");
 }
 
 async function resolveProdutoImportacao(
@@ -159,21 +159,21 @@ async function resolveProdutoImportacao(
   if (!nome) {
     throw new AppError(
       400,
-      "Produto não cadastrado e o XML não possui nome suficiente para criá-lo automaticamente.",
+      "Produto nÃ£o cadastrado e o XML nÃ£o possui nome suficiente para criÃ¡-lo automaticamente.",
     );
   }
 
   const codigoBase = xmlProductCode(produto.produtoXml);
 
-  // Evita advisory locks na confirmação da NF-e. Em ambientes Neon com pool
-  // serverless eles podem interromper a gravação mesmo depois de o XML ter sido
-  // validado como COMPLETO. A busca por código/nome continua evitando cadastros
-  // repetidos na operação normal.
+  // Evita advisory locks na confirmaÃ§Ã£o da NF-e. Em ambientes Neon com pool
+  // serverless eles podem interromper a gravaÃ§Ã£o mesmo depois de o XML ter sido
+  // validado como COMPLETO. A busca por cÃ³digo/nome continua evitando cadastros
+  // repetidos na operaÃ§Ã£o normal.
   if (codigoBase) {
     const existingByCode = await tx.produto.findFirst({
       where: {
         codigoInterno: { equals: codigoBase, mode: "insensitive" },
-        categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
+        categoriaEstoque: { equals: "CombustÃ­vel", mode: "insensitive" },
       },
       select: { id: true },
     });
@@ -185,7 +185,7 @@ async function resolveProdutoImportacao(
   const existingByName = await tx.produto.findFirst({
     where: {
       nome: { equals: nome, mode: "insensitive" },
-      categoriaEstoque: { equals: "Combustível", mode: "insensitive" },
+      categoriaEstoque: { equals: "CombustÃ­vel", mode: "insensitive" },
     },
     select: { id: true },
   });
@@ -210,7 +210,7 @@ async function resolveProdutoImportacao(
     data: {
       nome,
       codigoInterno,
-      categoriaEstoque: "Combustível",
+      categoriaEstoque: "CombustÃ­vel",
     },
     select: { id: true },
   });
@@ -251,7 +251,7 @@ function buildHeader(input: any, produtos: ReturnType<typeof buildProducts>) {
   const valorDesconto = Number(input.valorDesconto ?? 0);
   const valorBruto = produtos.reduce((sum, produto) => sum + produto.valorTotal, 0);
   if (valorDesconto > valorBruto) {
-    throw new AppError(400, "O valor do desconto não pode ser maior que o valor bruto.");
+    throw new AppError(400, "O valor do desconto nÃ£o pode ser maior que o valor bruto.");
   }
   return {
     clienteId: input.clienteId,
@@ -345,7 +345,7 @@ async function importarItem(
   const chaveNfe = String(input.chaveNfe ?? "").replace(/\D/g, "");
 
   if (chaveNfe.length !== 44) {
-    throw new AppError(400, "A chave da NF-e deve possuir 44 dígitos.");
+    throw new AppError(400, "A chave da NF-e deve possuir 44 dÃ­gitos.");
   }
 
   const existing = await tx.abastecimento.findUnique({
@@ -361,10 +361,10 @@ async function importarItem(
     };
   }
 
-  // A conferência do XML já devolve o cliente/posto exato. Reaproveita esse
-  // vínculo diretamente quando o CNPJ confere, evitando uma segunda resolução
-  // desnecessária na confirmação do lançamento. Isso também evita que uma
-  // etapa de manutenção do posto impeça o abastecimento de ser gravado.
+  // A conferÃªncia do XML jÃ¡ devolve o cliente/posto exato. Reaproveita esse
+  // vÃ­nculo diretamente quando o CNPJ confere, evitando uma segunda resoluÃ§Ã£o
+  // desnecessÃ¡ria na confirmaÃ§Ã£o do lanÃ§amento. Isso tambÃ©m evita que uma
+  // etapa de manutenÃ§Ã£o do posto impeÃ§a o abastecimento de ser gravado.
   const requestedClienteId = String(input.clienteId ?? "").trim();
   const emitenteCnpj = String(input.emitenteCnpj ?? "").replace(/\D/g, "");
   let resolvedClienteId = "";
@@ -387,7 +387,7 @@ async function importarItem(
   }
 
   if (!resolvedClienteId) {
-    throw new AppError(400, "Não foi possível identificar o posto emitente da NF-e.");
+    throw new AppError(400, "NÃ£o foi possÃ­vel identificar o posto emitente da NF-e.");
   }
 
   await ensureClienteVeiculo(tx, resolvedClienteId, input.veiculoId);
@@ -448,32 +448,45 @@ async function importarItem(
 
 export const abastecimentosService = {
   async list(query?: Record<string, unknown>) {
-    // Listagem precisa ser estritamente leitura e leve. A sincronização histórica
+    // Listagem precisa ser estritamente leitura e leve. A sincronizaÃ§Ã£o histÃ³rica
     // de postos era executada aqui e podia varrer/atualizar todo o banco antes de
-    // devolver a tela. Novos lançamentos já resolvem o posto na gravação, então a
-    // manutenção histórica não deve bloquear cada abertura de Abastecimentos.
+    // devolver a tela. Novos lanÃ§amentos jÃ¡ resolvem o posto na gravaÃ§Ã£o, entÃ£o a
+    // manutenÃ§Ã£o histÃ³rica nÃ£o deve bloquear cada abertura de Abastecimentos.
     //
-    // PDF/XML podem ter megabytes em base64. Eles ficam fora da listagem e são
-    // buscados apenas quando o usuário abre/edita/baixa uma nota específica.
+    // PDF/XML podem ter megabytes em base64. Eles ficam fora da listagem e sÃ£o
+    // buscados apenas quando o usuÃ¡rio abre/edita/baixa uma nota especÃ­fica.
     const range = listDateRange(query);
-    const [items, documentState] = await Promise.all([
-      prisma.abastecimento.findMany({
-        where: range ? { dataEmissao: range } : undefined,
-        include,
-        omit: { pdfUrl: true, xmlUrl: true },
-        orderBy: [{ dataEmissao: "desc" }, { createdAt: "desc" }, { hodometro: "desc" }],
-      }),
-      prisma.$queryRaw<Array<{ id: string; pdfStored: boolean; xmlStored: boolean }>>`
-        SELECT
-          "id",
-          ("pdfUrl" IS NOT NULL) AS "pdfStored",
-          ("xmlUrl" IS NOT NULL) AS "xmlStored"
-        FROM "abastecimentos"
-        WHERE "pdfUrl" IS NOT NULL OR "xmlUrl" IS NOT NULL
-      `,
-    ]);
+    const rawLimit = Number(query?.limit ?? query?.take ?? 300);
+    const take = Math.min(Math.max(Number.isFinite(rawLimit) ? Math.trunc(rawLimit) : 300, 1), 500);
+    const rawSkip = Number(query?.skip ?? 0);
+    const skip = Math.max(Number.isFinite(rawSkip) ? Math.trunc(rawSkip) : 0, 0);
 
-    const documentsById = new Map(documentState.map((item) => [item.id, item]));
+    const items = await prisma.abastecimento.findMany({
+      where: range ? { dataEmissao: range } : undefined,
+      include,
+      omit: { pdfUrl: true, xmlUrl: true },
+      orderBy: [{ dataEmissao: "desc" }, { createdAt: "desc" }, { hodometro: "desc" }],
+      take,
+      skip,
+    });
+
+    const itemIds = items.map((item) => item.id);
+    const documentState = itemIds.length
+      ? await prisma.abastecimento.findMany({
+          where: { id: { in: itemIds } },
+          select: { id: true, pdfUrl: true, xmlUrl: true },
+        })
+      : [];
+
+    const documentsById = new Map(
+      documentState.map((item) => [
+        item.id,
+        {
+          pdfStored: Boolean(item.pdfUrl),
+          xmlStored: Boolean(item.xmlUrl),
+        },
+      ]),
+    );
     return items.map((item) =>
       serialize({
         ...item,
@@ -485,7 +498,7 @@ export const abastecimentosService = {
 
   async get(id: string) {
     const item = await prisma.abastecimento.findUnique({ where: { id }, include });
-    if (!item) throw new AppError(404, "Abastecimento não encontrado.");
+    if (!item) throw new AppError(404, "Abastecimento nÃ£o encontrado.");
     return serialize(item);
   },
 
@@ -495,8 +508,8 @@ export const abastecimentosService = {
         where: { id },
         select: { pdfUrl: true },
       });
-      if (!item) throw new AppError(404, "Abastecimento não encontrado.");
-      if (!item.pdfUrl) throw new AppError(404, "PDF não armazenado para este abastecimento.");
+      if (!item) throw new AppError(404, "Abastecimento nÃ£o encontrado.");
+      if (!item.pdfUrl) throw new AppError(404, "PDF nÃ£o armazenado para este abastecimento.");
       return { url: item.pdfUrl };
     }
 
@@ -504,8 +517,8 @@ export const abastecimentosService = {
       where: { id },
       select: { xmlUrl: true },
     });
-    if (!item) throw new AppError(404, "Abastecimento não encontrado.");
-    if (!item.xmlUrl) throw new AppError(404, "XML não armazenado para este abastecimento.");
+    if (!item) throw new AppError(404, "Abastecimento nÃ£o encontrado.");
+    if (!item.xmlUrl) throw new AppError(404, "XML nÃ£o armazenado para este abastecimento.");
     return { url: item.xmlUrl };
   },
 
@@ -535,7 +548,7 @@ export const abastecimentosService = {
 
   async update(id: string, input: any) {
     const current = await prisma.abastecimento.findUnique({ where: { id }, include });
-    if (!current) throw new AppError(404, "Abastecimento não encontrado.");
+    if (!current) throw new AppError(404, "Abastecimento nÃ£o encontrado.");
     const merged = {
       clienteId: input.clienteId ?? current.clienteId,
       veiculoId: input.veiculoId ?? current.veiculoId,
@@ -612,11 +625,11 @@ export const abastecimentosService = {
     politica: PoliticaDuplicidadeAbastecimento,
   ) {
     if (!inputs.length) {
-      throw new AppError(400, "Nenhum abastecimento foi enviado para importação.");
+      throw new AppError(400, "Nenhum abastecimento foi enviado para importaÃ§Ã£o.");
     }
 
     if (inputs.length > 1000) {
-      throw new AppError(400, "Importe no máximo 1000 abastecimentos por lote.");
+      throw new AppError(400, "Importe no mÃ¡ximo 1000 abastecimentos por lote.");
     }
 
     const repeatedInBatch = new Set<string>();
@@ -646,8 +659,8 @@ export const abastecimentosService = {
       produtosCriados?: number;
     }> = [];
 
-    // Uma única consulta identifica NF-es já gravadas antes de abrir transações.
-    // Em reimportações, isso evita várias transações e dezenas de queries inúteis.
+    // Uma Ãºnica consulta identifica NF-es jÃ¡ gravadas antes de abrir transaÃ§Ãµes.
+    // Em reimportaÃ§Ãµes, isso evita vÃ¡rias transaÃ§Ãµes e dezenas de queries inÃºteis.
     const normalizedKeys = inputs.map((input) =>
       String(input.chaveNfe ?? "").replace(/\D/g, ""),
     );
@@ -699,7 +712,7 @@ export const abastecimentosService = {
           erro:
             error instanceof Error
               ? error.message
-              : "Não foi possível importar o abastecimento.",
+              : "NÃ£o foi possÃ­vel importar o abastecimento.",
         });
       }
     }
@@ -734,3 +747,4 @@ export const abastecimentosService = {
     await prisma.abastecimento.delete({ where: { id } });
   },
 };
+

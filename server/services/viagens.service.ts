@@ -1,4 +1,4 @@
-import { prisma } from "../lib/prisma.js";
+﻿import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { parseDateOnly } from "../utils/date.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
@@ -32,7 +32,7 @@ const serialize = (item: any) => {
   const abastecimentoIds = abastecimentosVinculados.length
     ? abastecimentosVinculados.map((link: any) => link.abastecimentoId)
     : (item.abastecimentoId ? [item.abastecimentoId] : []);
-  // Os vínculos são a fonte de verdade do combustível da viagem. Isso evita
+  // Os vÃ­nculos sÃ£o a fonte de verdade do combustÃ­vel da viagem. Isso evita
   // exibir R$ 0,00 quando o campo legado valorAbastecimento ficou desatualizado.
   const valorAbastecimentoVinculado = abastecimentosVinculados.reduce(
     (total: number, link: any) => total + number(link.abastecimento?.valorTotal ?? link.valorVinculado),
@@ -66,18 +66,18 @@ const data = (input: any) => {
     createdAt: input.createdAt ? new Date(input.createdAt) : undefined,
   };
 
-  // Acerto de Viagem: origem operacional padronizada e status removido do formulário.
+  // Acerto de Viagem: origem operacional padronizada e status removido do formulÃ¡rio.
   result.cidadeOrigem = "Ipiranga do Norte, MT";
   delete result.status;
-  // Controle de concorrência é gerenciado exclusivamente pelo servidor.
+  // Controle de concorrÃªncia Ã© gerenciado exclusivamente pelo servidor.
   delete result.editVersion;
 
-  // Cliente foi removido do formulário de Viagens. Não force clienteId=null em edições:
-  // bases antigas podem conservar um vínculo legado e o UPDATE deve preservar esse valor.
+  // Cliente foi removido do formulÃ¡rio de Viagens. NÃ£o force clienteId=null em ediÃ§Ãµes:
+  // bases antigas podem conservar um vÃ­nculo legado e o UPDATE deve preservar esse valor.
   if (!Object.prototype.hasOwnProperty.call(input, "clienteId")) delete result.clienteId;
 
   // A timeline operacional foi removida do cadastro de viagens.
-  // Só altera estes campos em chamadas legadas que os enviarem explicitamente.
+  // SÃ³ altera estes campos em chamadas legadas que os enviarem explicitamente.
   if (Object.prototype.hasOwnProperty.call(input, "dataSaida")) result.dataSaida = input.dataSaida ? new Date(input.dataSaida) : null;
   if (Object.prototype.hasOwnProperty.call(input, "previsaoChegada")) result.previsaoChegada = input.previsaoChegada ? new Date(input.previsaoChegada) : null;
   if (Object.prototype.hasOwnProperty.call(input, "dataChegada")) result.dataChegada = input.dataChegada ? new Date(input.dataChegada) : null;
@@ -97,12 +97,12 @@ async function ensureMotoristaDisponivel(
     where: { id: motoristaId },
     select: { status: true },
   });
-  if (!motorista) throw new AppError(404, "Motorista não encontrado.");
+  if (!motorista) throw new AppError(404, "Motorista nÃ£o encontrado.");
   if (motorista.status === "ATIVO") return;
 
   if (viagemId && motoristaAtualId === motoristaId) return;
 
-  throw new AppError(409, "Motorista demitido não pode ser selecionado em uma nova viagem.");
+  throw new AppError(409, "Motorista demitido nÃ£o pode ser selecionado em uma nova viagem.");
 }
 
 
@@ -126,7 +126,7 @@ const parseMoneyBR = (value: unknown) => {
   let normalized = raw;
 
   if (lastComma >= 0 && lastDot >= 0) {
-    // O último separador é o decimal; o outro é separador de milhar.
+    // O Ãºltimo separador Ã© o decimal; o outro Ã© separador de milhar.
     if (lastComma > lastDot) normalized = raw.replace(/\./g, "").replace(",", ".");
     else normalized = raw.replace(/,/g, "");
   } else if (lastComma >= 0) {
@@ -139,7 +139,7 @@ const parseMoneyBR = (value: unknown) => {
       // Planilhas XLSX podem chegar como 385.6 ou 385.60 mesmo no locale pt-BR.
       normalized = raw;
     } else {
-      // 3.856 ou 1.234.567 sem vírgula: tratar como separador de milhar.
+      // 3.856 ou 1.234.567 sem vÃ­rgula: tratar como separador de milhar.
       normalized = raw.replace(/\./g, "");
     }
   }
@@ -151,8 +151,8 @@ const parseMoneyBR = (value: unknown) => {
 
 const parseTruckPagCsv = (text: string) => {
   const lines = String(text ?? "").replace(/^\uFEFF/, "").split(/\r?\n/);
-  const header = lines.findIndex((line) => line.startsWith("Data;Hora;Lançamento;Colaborador;Descrição;Valor;"));
-  if (header < 0) throw new AppError(400, "Arquivo TruckPag inválido: cabeçalho não encontrado.");
+  const header = lines.findIndex((line) => line.startsWith("Data;Hora;LanÃ§amento;Colaborador;DescriÃ§Ã£o;Valor;"));
+  if (header < 0) throw new AppError(400, "Arquivo TruckPag invÃ¡lido: cabeÃ§alho nÃ£o encontrado.");
   const rows: any[] = [];
   for (const line of lines.slice(header + 1)) {
     if (!line.trim()) continue;
@@ -169,10 +169,10 @@ const classifyTruckPag = (row: any) => {
   const desc = normalizeText(row.descricao);
   if (Math.abs(valor - 248) < 0.001) return "IGNORAR";
   if (desc.includes("PIX ENVIADO") && [150, 300, 600].some((v) => Math.abs(valor - v) < 0.001)) return "CHAPA";
-  // Pedágio só pode ser classificado quando o estabelecimento/descrição identifica
-  // explicitamente uma concessionária ou praça conhecida. Valor baixo, sozinho, NÃO
-  // é evidência de pedágio (PIX, restaurante e outras compras pequenas causavam
-  // somas indevidas de R$ 1.000+ em uma única viagem).
+  // PedÃ¡gio sÃ³ pode ser classificado quando o estabelecimento/descriÃ§Ã£o identifica
+  // explicitamente uma concessionÃ¡ria ou praÃ§a conhecida. Valor baixo, sozinho, NÃƒO
+  // Ã© evidÃªncia de pedÃ¡gio (PIX, restaurante e outras compras pequenas causavam
+  // somas indevidas de R$ 1.000+ em uma Ãºnica viagem).
   const tollTerms = [
     "VIA BRASIL", "VIANORTESUL", "APASI CONCESSIONARIA", "CONCESSIONARIA ROTA",
     "ROTA DO OESTE", "ADMINISTRADORA DE PEDA", "ASSOCIACAO WAYMAR", "WAY 306",
@@ -242,13 +242,13 @@ async function resolverCustosAutomaticosViagem(input: any, atual?: any, db: any 
     : [];
 
   if (abastecimentosSelecionados.length !== abastecimentoIds.length) {
-    throw new AppError(404, "Um ou mais abastecimentos selecionados não foram encontrados.");
+    throw new AppError(404, "Um ou mais abastecimentos selecionados nÃ£o foram encontrados.");
   }
   const abastecimentoOutraPlaca = abastecimentosSelecionados.find(
     (abastecimento: any) => normalizePlate(abastecimento.veiculo.placa) !== normalizePlate(placa),
   );
   if (abastecimentoOutraPlaca) {
-    throw new AppError(409, "Todos os abastecimentos selecionados devem pertencer à mesma placa da viagem.");
+    throw new AppError(409, "Todos os abastecimentos selecionados devem pertencer Ã  mesma placa da viagem.");
   }
 
   const valorAbastecimento = abastecimentosSelecionados.reduce((total: number, abastecimento: any) => total + number(abastecimento.valorTotal), 0);
@@ -288,9 +288,47 @@ const viagemInclude = {
   },
 } as const;
 
+
+const viagemListInclude = {
+  despesasExtrato: {
+    select: {
+      id: true,
+      viagemId: true,
+      tipo: true,
+      data: true,
+      hora: true,
+      valor: true,
+      descricao: true,
+      colaborador: true,
+      origem: true,
+      fingerprint: true,
+      createdAt: true,
+    },
+  },
+  abastecimentosVinculados: {
+    select: {
+      abastecimentoId: true,
+      valorVinculado: true,
+    },
+  },
+} as const;
 export const viagensService = {
-  async list(query?: Record<string, unknown>) { const range = listDateRange(query); return (await prisma.viagem.findMany({ where: range ? { dataManifesto: range } : undefined, include: viagemInclude, orderBy: { createdAt: "desc" } })).map(serialize); },
-  async get(id: string) { const item = await prisma.viagem.findUnique({ where: { id }, include: viagemInclude }); if (!item) throw new AppError(404, "Viagem não encontrada."); return serialize(item); },
+  async list(query?: Record<string, unknown>) {
+    const range = listDateRange(query);
+    const rawLimit = Number(query?.limit ?? query?.take ?? 200);
+    const take = Math.min(Math.max(Number.isFinite(rawLimit) ? Math.trunc(rawLimit) : 200, 1), 300);
+    const rawSkip = Number(query?.skip ?? 0);
+    const skip = Math.max(Number.isFinite(rawSkip) ? Math.trunc(rawSkip) : 0, 0);
+
+    return (await prisma.viagem.findMany({
+      where: range ? { dataManifesto: range } : undefined,
+      include: viagemListInclude,
+      orderBy: [{ dataManifesto: "desc" }, { createdAt: "desc" }],
+      take,
+      skip,
+    })).map(serialize);
+  },
+  async get(id: string) { const item = await prisma.viagem.findUnique({ where: { id }, include: viagemInclude }); if (!item) throw new AppError(404, "Viagem nÃ£o encontrada."); return serialize(item); },
   async create(input: any) {
     await ensureMotoristaDisponivel(input.motoristaId);
     const count = await prisma.viagem.count();
@@ -330,18 +368,18 @@ export const viagensService = {
   async update(id: string, input: any) {
     const result = await prisma.$transaction(async (tx) => {
       // Lock no PostgreSQL: protege a mesma viagem mesmo entre isolates diferentes
-      // do Cloudflare Worker. Requisições concorrentes ficam serializadas.
+      // do Cloudflare Worker. RequisiÃ§Ãµes concorrentes ficam serializadas.
       const locked = await tx.$queryRawUnsafe<Array<{ id: string }>>(
         'SELECT "id" FROM "viagens" WHERE "id" = $1 FOR UPDATE',
         id,
       );
-      if (!locked.length) throw new AppError(404, "Viagem não encontrada.");
+      if (!locked.length) throw new AppError(404, "Viagem nÃ£o encontrada.");
 
       const atual = await tx.viagem.findUnique({
         where: { id },
         include: { abastecimentosVinculados: { select: { abastecimentoId: true } } },
       });
-      if (!atual) throw new AppError(404, "Viagem não encontrada.");
+      if (!atual) throw new AppError(404, "Viagem nÃ£o encontrada.");
 
       assertEditVersion(Number((atual as any).editVersion ?? 1), input?.editVersion);
 
@@ -402,7 +440,7 @@ export const viagensService = {
       }
 
       const completo = await tx.viagem.findUnique({ where: { id }, include: viagemInclude });
-      if (!completo) throw new AppError(404, "Viagem não encontrada após atualização.");
+      if (!completo) throw new AppError(404, "Viagem nÃ£o encontrada apÃ³s atualizaÃ§Ã£o.");
       return completo;
     }, {
       maxWait: 5_000,
@@ -414,7 +452,7 @@ export const viagensService = {
   async remove(id: string) { await prisma.viagem.delete({ where: { id } }); },
 
   async importarCustosPorData(rows: any[]) {
-    if (!Array.isArray(rows) || !rows.length) throw new AppError(400, "A planilha não possui linhas para importar.");
+    if (!Array.isArray(rows) || !rows.length) throw new AppError(400, "A planilha nÃ£o possui linhas para importar.");
 
     const [viagens, motoristas] = await Promise.all([
       prisma.viagem.findMany({
@@ -442,7 +480,7 @@ export const viagensService = {
       const placaKey = normalizePlate(placaValue);
       const motoristaKey = normalizeText(motoristaValue);
       if (!dataViagem || !placaKey) {
-        erros.push({ linha: index + 2, motivo: "Data da viagem ou placa inválida.", data: String(dataValue ?? ""), placa: String(placaValue ?? "") });
+        erros.push({ linha: index + 2, motivo: "Data da viagem ou placa invÃ¡lida.", data: String(dataValue ?? ""), placa: String(placaValue ?? "") });
         continue;
       }
 
@@ -464,11 +502,11 @@ export const viagensService = {
       }
 
       const viagem = candidatos[0];
-      const diaria = optionalMoney(row, ["DIARIA", "diaria", "Diária", "DIÁRIA", "valorDiaria", "VALOR_DIARIA"]);
+      const diaria = optionalMoney(row, ["DIARIA", "diaria", "DiÃ¡ria", "DIÃRIA", "valorDiaria", "VALOR_DIARIA"]);
       const chapa = optionalMoney(row, ["CHAPA", "chapa", "Chapa", "valorChapa", "VALOR_CHAPA"]);
-      const pedagio = optionalMoney(row, ["PEDAGIO", "pedagio", "Pedágio", "PEDÁGIO", "valorPedagio", "VALOR_PEDAGIO"]);
+      const pedagio = optionalMoney(row, ["PEDAGIO", "pedagio", "PedÃ¡gio", "PEDÃGIO", "valorPedagio", "VALOR_PEDAGIO"]);
       if (diaria == null && chapa == null && pedagio == null) {
-        erros.push({ linha: index + 2, motivo: "Nenhum valor de diária, chapa ou pedágio encontrado." });
+        erros.push({ linha: index + 2, motivo: "Nenhum valor de diÃ¡ria, chapa ou pedÃ¡gio encontrado." });
         continue;
       }
 
@@ -477,11 +515,11 @@ export const viagensService = {
       if (pedagio != null) updateData.valorPedagio = pedagio;
       if (chapa != null) updateData.valorChapa = chapa;
 
-      // A planilha de Acerto de Viagens é a fonte de verdade para estes três campos.
-      // Se a viagem já possuir lançamentos TruckPag classificados anteriormente,
-      // removemos apenas o tipo que está sendo sobrescrito para impedir soma dupla.
+      // A planilha de Acerto de Viagens Ã© a fonte de verdade para estes trÃªs campos.
+      // Se a viagem jÃ¡ possuir lanÃ§amentos TruckPag classificados anteriormente,
+      // removemos apenas o tipo que estÃ¡ sendo sobrescrito para impedir soma dupla.
       // Assim, PEDAGIO=345,00 na planilha sempre termina em R$ 345,00 na viagem,
-      // mesmo que uma importação antiga tenha associado lançamentos incorretos.
+      // mesmo que uma importaÃ§Ã£o antiga tenha associado lanÃ§amentos incorretos.
       await prisma.$transaction(async (tx) => {
         await tx.$queryRawUnsafe(
           'SELECT "id" FROM "viagens" WHERE "id" = $1 FOR UPDATE',
@@ -559,9 +597,9 @@ export const viagensService = {
     };
   },
   async importarExtratoTruckPag(items: any[]) {
-    if (!Array.isArray(items) || !items.length) throw new AppError(400, "Nenhum lançamento selecionado.");
+    if (!Array.isArray(items) || !items.length) throw new AppError(400, "Nenhum lanÃ§amento selecionado.");
     const valid = items.filter((x) => x?.viagemId && ["PEDAGIO", "CHAPA"].includes(String(x?.tipo)));
-    if (!valid.length) throw new AppError(400, "Nenhum lançamento está vinculado a uma viagem.");
+    if (!valid.length) throw new AppError(400, "Nenhum lanÃ§amento estÃ¡ vinculado a uma viagem.");
     const viagemIds = Array.from(new Set(valid.map((x) => String(x.viagemId))));
     const viagens = await prisma.viagem.findMany({ where: { id: { in: viagemIds } }, select: { id: true } });
     const allowed = new Set(viagens.map((v) => v.id));
@@ -590,7 +628,7 @@ export const viagensService = {
         },
       },
     });
-    if (!viagem) throw new AppError(404, "Viagem não encontrada.");
+    if (!viagem) throw new AppError(404, "Viagem nÃ£o encontrada.");
 
     const lancamentos = await prisma.lancamentoFinanceiro.findMany({
       where: { viagemId: id, status: { not: "CANCELADO" } },
@@ -604,9 +642,9 @@ export const viagensService = {
           0,
         )
       : number(viagem.valorAbastecimento);
-    // Registros legados podem ter valorComissao=0 mesmo quando a comissão do
-    // destino aparece corretamente na visualização. A rentabilidade precisa usar
-    // a mesma regra de resolução para que Custo Total/Custo por KM não fiquem zerados.
+    // Registros legados podem ter valorComissao=0 mesmo quando a comissÃ£o do
+    // destino aparece corretamente na visualizaÃ§Ã£o. A rentabilidade precisa usar
+    // a mesma regra de resoluÃ§Ã£o para que Custo Total/Custo por KM nÃ£o fiquem zerados.
     const comissaoPersistida = number(viagem.valorComissao);
     let valorComissaoRentabilidade = comissaoPersistida;
     if (valorComissaoRentabilidade === 0) {
@@ -625,13 +663,13 @@ export const viagensService = {
     const pedagioImportado = extrato.filter((x) => x.tipo === "PEDAGIO").reduce((s, x) => s + number(x.valor), 0);
     const chapaImportada = extrato.filter((x) => x.tipo === "CHAPA").reduce((s, x) => s + number(x.valor), 0);
     const custosBase = [
-      { categoria: "Combustível", valor: combustivelReal },
-      { categoria: "Pedágio", valor: number(viagem.valorPedagio) + pedagioImportado },
-      { categoria: "Diária", valor: number(viagem.valorDiaria) },
+      { categoria: "CombustÃ­vel", valor: combustivelReal },
+      { categoria: "PedÃ¡gio", valor: number(viagem.valorPedagio) + pedagioImportado },
+      { categoria: "DiÃ¡ria", valor: number(viagem.valorDiaria) },
       { categoria: "Chapa", valor: number(viagem.valorChapa) + chapaImportada },
       { categoria: "Multas", valor: number(viagem.valorMulta) },
       { categoria: "Custo Extra", valor: number(viagem.valorCustoExtra) },
-      { categoria: "Comissão", valor: valorComissaoRentabilidade },
+      { categoria: "ComissÃ£o", valor: valorComissaoRentabilidade },
     ];
     const despesasBase = custosBase.reduce((total, item) => total + item.valor, 0);
     const receitasAdicionais = lancamentos
@@ -672,3 +710,4 @@ export const viagensService = {
     };
   },
 };
+
