@@ -580,9 +580,14 @@ export default function Financeiro() {
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <CardTitle className="text-base">DRE por placa em formato planilha</CardTitle>
+        
+        <Card className={activeTab === "GERAL" ? "" : "hidden"}>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">DRE Operacional - custos por categoria x placa</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Comparativo lado a lado entre as placas no período selecionado.
+                  Matriz comparativa: custos na esquerda e placas no cabeçalho para comparar Diesel, Diárias, Manutenção e demais despesas.
                 </p>
               </div>
               <div className="rounded-md border px-3 py-1.5 text-xs text-muted-foreground">
@@ -592,89 +597,66 @@ export default function Financeiro() {
           </CardHeader>
 
           <CardContent>
-            {drePlanilha.linhas.length === 0 ? (
+            {drePlanilha.linhas.length === 0 || drePlanilha.categorias.length === 0 ? (
               <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                Sem dados por placa para o período selecionado.
+                Sem dados de custos por placa para o período selecionado.
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full min-w-[1200px] text-xs">
+                <table className="w-full min-w-[1100px] border-collapse text-xs">
                   <thead className="bg-muted/70">
                     <tr className="border-b text-left text-muted-foreground">
-                      <th className="sticky left-0 z-20 bg-muted/90 px-3 py-2 font-semibold">Placa</th>
-                      <th className="px-3 py-2 text-right font-semibold">Viagens</th>
-                      <th className="px-3 py-2 text-right font-semibold">KM</th>
-                      <th className="px-3 py-2 text-right font-semibold">Receita/Frete</th>
-                      {drePlanilha.categorias.map((categoria) => (
-                        <th key={categoria} className="px-3 py-2 text-right font-semibold">
-                          {categoria}
+                      <th className="sticky left-0 z-20 bg-muted px-3 py-2 font-semibold">
+                        Categoria
+                      </th>
+
+                      {drePlanilha.linhas.map((placa) => (
+                        <th key={placa.id} className="px-3 py-2 text-right font-semibold">
+                          {placa.nome}
                         </th>
                       ))}
-                      <th className="px-3 py-2 text-right font-semibold">Custos totais</th>
-                      <th className="px-3 py-2 text-right font-semibold">Resultado</th>
-                      <th className="px-3 py-2 text-right font-semibold">Margem</th>
-                      <th className="px-3 py-2 text-right font-semibold">Custo/km</th>
-                      <th className="px-3 py-2 text-right font-semibold">Lucro/km</th>
+
+                      <th className="px-3 py-2 text-right font-semibold">
+                        Total
+                      </th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {drePlanilha.linhas.map((row) => {
-                      const resultadoPositivo = Number(row.resultado || 0) >= 0;
+                    {drePlanilha.categorias.map((categoria) => (
+                      <tr key={categoria} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="sticky left-0 z-10 bg-card px-3 py-2 font-semibold">
+                          {categoria}
+                        </td>
 
-                      return (
-                        <tr key={row.id} className="border-b last:border-0 hover:bg-muted/30">
-                          <td className="sticky left-0 z-10 bg-card px-3 py-2 font-semibold">
-                            {row.nome}
+                        {drePlanilha.linhas.map((placa) => (
+                          <td key={placa.id + "-" + categoria} className="px-3 py-2 text-right">
+                            {money(Number(placa.categoriasValores.get(categoria) || 0))}
                           </td>
-                          <td className="px-3 py-2 text-right">{Number(row.viagens || 0)}</td>
-                          <td className="px-3 py-2 text-right">
-                            {Number(row.distanciaKm || 0).toLocaleString("pt-BR")}
-                          </td>
-                          <td className="px-3 py-2 text-right font-medium text-green-600 dark:text-green-400">
-                            {money(Number(row.receita || 0))}
-                          </td>
-                          {drePlanilha.categorias.map((categoria) => (
-                            <td key={categoria} className="px-3 py-2 text-right">
-                              {money(Number(row.categoriasValores.get(categoria) || 0))}
-                            </td>
-                          ))}
-                          <td className="px-3 py-2 text-right font-medium">
-                            {money(Number(row.despesa || 0))}
-                          </td>
-                          <td className={`px-3 py-2 text-right font-semibold ${resultadoPositivo ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                            {money(Number(row.resultado || 0))}
-                          </td>
-                          <td className="px-3 py-2 text-right">{Number(row.margem || 0).toFixed(1)}%</td>
-                          <td className="px-3 py-2 text-right">{money(Number(row.custoKm || 0))}</td>
-                          <td className="px-3 py-2 text-right">{money(Number(row.lucroKm || 0))}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
+                        ))}
 
-                  <tfoot className="bg-muted/50 font-semibold">
-                    <tr>
-                      <td className="sticky left-0 z-20 bg-muted px-3 py-2">TOTAL</td>
-                      <td className="px-3 py-2 text-right">{drePlanilha.totais.viagens}</td>
-                      <td className="px-3 py-2 text-right">
-                        {drePlanilha.totais.distanciaKm.toLocaleString("pt-BR")}
-                      </td>
-                      <td className="px-3 py-2 text-right text-green-600 dark:text-green-400">
-                        {money(drePlanilha.totais.receita)}
-                      </td>
-                      {drePlanilha.categorias.map((categoria) => (
-                        <td key={categoria} className="px-3 py-2 text-right">
+                        <td className="px-3 py-2 text-right font-bold">
                           {money(Number(drePlanilha.totais.categorias.get(categoria) || 0))}
                         </td>
-                      ))}
-                      <td className="px-3 py-2 text-right">{money(drePlanilha.totais.despesa)}</td>
-                      <td className={`px-3 py-2 text-right ${drePlanilha.totais.resultado >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                        {money(drePlanilha.totais.resultado)}
+                      </tr>
+                    ))}
+                  </tbody>
+
+                  <tfoot className="bg-muted/50 font-bold">
+                    <tr>
+                      <td className="sticky left-0 z-20 bg-muted px-3 py-2">
+                        TOTAL
                       </td>
-                      <td className="px-3 py-2 text-right">{drePlanilha.totais.margem.toFixed(1)}%</td>
-                      <td className="px-3 py-2 text-right">{money(drePlanilha.totais.custoKm)}</td>
-                      <td className="px-3 py-2 text-right">{money(drePlanilha.totais.lucroKm)}</td>
+
+                      {drePlanilha.linhas.map((placa) => (
+                        <td key={"total-" + placa.id} className="px-3 py-2 text-right">
+                          {money(Number(placa.despesa || 0))}
+                        </td>
+                      ))}
+
+                      <td className="px-3 py-2 text-right">
+                        {money(drePlanilha.totais.despesa)}
+                      </td>
                     </tr>
                   </tfoot>
                 </table>
@@ -683,11 +665,7 @@ export default function Financeiro() {
           </CardContent>
         </Card>
 
-        <Card className={activeTab === "GERAL" ? "" : "hidden"}>
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">Análise Gerencial de Rentabilidade</CardTitle>
+        <CardTitle className="text-base">Análise Gerencial de Rentabilidade</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">Compare o resultado da operação por caminhão, cliente ou viagem.</p>
               </div>
               <div className="flex rounded-lg border p-1">
@@ -759,8 +737,6 @@ export default function Financeiro() {
             </div>
           </CardContent>
         </Card>
-
-        {activeTab === "GERAL" && ranking === "VEICULO" && (analise?.custosPorVeiculo?.length ?? 0) > 0 && <Card><CardHeader><CardTitle className="text-base">Composição de custos por caminhão</CardTitle></CardHeader><CardContent className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Placa</th><th>Principais custos</th><th className="text-right">Total</th></tr></thead><tbody>{analise?.custosPorVeiculo?.map(row=><tr key={row.id} className="border-b"><td className="py-3 font-semibold">{row.placa}</td><td className="py-3"><div className="flex flex-wrap gap-1.5">{row.categorias.slice(0,8).map(c=><span key={c.categoria} className="rounded-md border bg-muted/20 px-2 py-1 text-xs">{c.categoria}: {money(c.valor)}</span>)}</div></td><td className="py-3 text-right font-bold">{money(row.total)}</td></tr>)}</tbody></table></CardContent></Card>}
 
         <div className="grid min-w-0 gap-4 xl:grid-cols-2">
           <div className={activeTab === "GERAL" || activeTab === "RECEBER" ? "min-w-0" : "hidden"}>
