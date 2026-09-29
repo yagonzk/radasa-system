@@ -447,6 +447,95 @@ export default function Financeiro() {
     { title: "Contas a receber", value: resumo?.aReceber || 0, icon: ArrowDownToLine },
     { title: "Contas a pagar", value: resumo?.aPagar || 0, icon: ArrowUpFromLine },
   ];
+  const dreMatrizPlacas = useMemo(() => {
+    const placas = [...(analise?.porVeiculo ?? [])].sort((a, b) =>
+      String(a.nome).localeCompare(String(b.nome), "pt-BR", { numeric: true }),
+    );
+
+    const custosPorPlaca = new Map(
+      (analise?.custosPorVeiculo ?? []).map((item) => [String(item.placa), item]),
+    );
+
+    const categorias = Array.from(
+      new Set(
+        (analise?.custosPorVeiculo ?? [])
+          .flatMap((item) => item.categorias ?? [])
+          .map((item) => item.categoria)
+          .filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
+
+    const linhas = [
+      {
+        id: "receita",
+        nome: "Receita / Frete",
+        tipo: "receita",
+        valores: new Map(placas.map((placa) => [placa.id, Number(placa.receita || 0)])),
+        total: placas.reduce((sum, placa) => sum + Number(placa.receita || 0), 0),
+      },
+      ...categorias.map((categoria) => {
+        const valores = new Map(
+          placas.map((placa) => {
+            const custo = custosPorPlaca.get(String(placa.nome));
+            const encontrado = (custo?.categorias ?? []).find((item) => item.categoria === categoria);
+            return [placa.id, Number(encontrado?.valor ?? 0)];
+          }),
+        );
+
+        return {
+          id: `categoria-${categoria}`,
+          nome: categoria,
+          tipo: "custo",
+          valores,
+          total: Array.from(valores.values()).reduce((sum, valor) => sum + Number(valor || 0), 0),
+        };
+      }),
+      {
+        id: "total-custos",
+        nome: "Total de custos",
+        tipo: "total",
+        valores: new Map(placas.map((placa) => [placa.id, Number(placa.despesa || 0)])),
+        total: placas.reduce((sum, placa) => sum + Number(placa.despesa || 0), 0),
+      },
+      {
+        id: "resultado",
+        nome: "Resultado",
+        tipo: "resultado",
+        valores: new Map(placas.map((placa) => [placa.id, Number(placa.resultado || 0)])),
+        total: placas.reduce((sum, placa) => sum + Number(placa.resultado || 0), 0),
+      },
+      {
+        id: "margem",
+        nome: "Margem",
+        tipo: "percentual",
+        valores: new Map(placas.map((placa) => [placa.id, Number(placa.margem || 0)])),
+        total: placas.reduce((receitaTotal, placa) => receitaTotal + Number(placa.receita || 0), 0) > 0
+          ? (placas.reduce((resultadoTotal, placa) => resultadoTotal + Number(placa.resultado || 0), 0) / placas.reduce((receitaTotal, placa) => receitaTotal + Number(placa.receita || 0), 0)) * 100
+          : 0,
+      },
+      {
+        id: "custo-km",
+        nome: "Custo/km",
+        tipo: "moeda",
+        valores: new Map(placas.map((placa) => [placa.id, Number(placa.custoKm || 0)])),
+        total: placas.reduce((kmTotal, placa) => kmTotal + Number(placa.distanciaKm || 0), 0) > 0
+          ? placas.reduce((despesaTotal, placa) => despesaTotal + Number(placa.despesa || 0), 0) / placas.reduce((kmTotal, placa) => kmTotal + Number(placa.distanciaKm || 0), 0)
+          : 0,
+      },
+      {
+        id: "lucro-km",
+        nome: "Lucro/km",
+        tipo: "moeda",
+        valores: new Map(placas.map((placa) => [placa.id, Number(placa.lucroKm || 0)])),
+        total: placas.reduce((kmTotal, placa) => kmTotal + Number(placa.distanciaKm || 0), 0) > 0
+          ? placas.reduce((resultadoTotal, placa) => resultadoTotal + Number(placa.resultado || 0), 0) / placas.reduce((kmTotal, placa) => kmTotal + Number(placa.distanciaKm || 0), 0)
+          : 0,
+      },
+    ];
+
+    return { placas, linhas };
+  }, [analise]);
+
 
   const drePlanilha = useMemo(() => {
     const baseRows = [...(analise?.porVeiculo ?? [])].sort((a, b) =>
@@ -580,14 +669,9 @@ export default function Financeiro() {
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-        
-        <Card className={activeTab === "GERAL" ? "" : "hidden"}>
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">DRE Operacional - custos por categoria x placa</CardTitle>
+                <CardTitle className="text-base">DRE por placa em formato planilha</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Matriz comparativa: custos na esquerda e placas no cabeçalho para comparar Diesel, Diárias, Manutenção e demais despesas.
+                  Comparativo lado a lado entre as placas no período selecionado.
                 </p>
               </div>
               <div className="rounded-md border px-3 py-1.5 text-xs text-muted-foreground">
@@ -597,66 +681,89 @@ export default function Financeiro() {
           </CardHeader>
 
           <CardContent>
-            {drePlanilha.linhas.length === 0 || drePlanilha.categorias.length === 0 ? (
+            {drePlanilha.linhas.length === 0 ? (
               <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                Sem dados de custos por placa para o período selecionado.
+                Sem dados por placa para o período selecionado.
               </div>
             ) : (
               <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full min-w-[1100px] border-collapse text-xs">
+                <table className="w-full min-w-[1200px] text-xs">
                   <thead className="bg-muted/70">
                     <tr className="border-b text-left text-muted-foreground">
-                      <th className="sticky left-0 z-20 bg-muted px-3 py-2 font-semibold">
-                        Categoria
-                      </th>
-
-                      {drePlanilha.linhas.map((placa) => (
-                        <th key={placa.id} className="px-3 py-2 text-right font-semibold">
-                          {placa.nome}
+                      <th className="sticky left-0 z-20 bg-muted/90 px-3 py-2 font-semibold">Placa</th>
+                      <th className="px-3 py-2 text-right font-semibold">Viagens</th>
+                      <th className="px-3 py-2 text-right font-semibold">KM</th>
+                      <th className="px-3 py-2 text-right font-semibold">Receita/Frete</th>
+                      {drePlanilha.categorias.map((categoria) => (
+                        <th key={categoria} className="px-3 py-2 text-right font-semibold">
+                          {categoria}
                         </th>
                       ))}
-
-                      <th className="px-3 py-2 text-right font-semibold">
-                        Total
-                      </th>
+                      <th className="px-3 py-2 text-right font-semibold">Custos totais</th>
+                      <th className="px-3 py-2 text-right font-semibold">Resultado</th>
+                      <th className="px-3 py-2 text-right font-semibold">Margem</th>
+                      <th className="px-3 py-2 text-right font-semibold">Custo/km</th>
+                      <th className="px-3 py-2 text-right font-semibold">Lucro/km</th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {drePlanilha.categorias.map((categoria) => (
-                      <tr key={categoria} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="sticky left-0 z-10 bg-card px-3 py-2 font-semibold">
-                          {categoria}
-                        </td>
+                    {drePlanilha.linhas.map((row) => {
+                      const resultadoPositivo = Number(row.resultado || 0) >= 0;
 
-                        {drePlanilha.linhas.map((placa) => (
-                          <td key={placa.id + "-" + categoria} className="px-3 py-2 text-right">
-                            {money(Number(placa.categoriasValores.get(categoria) || 0))}
+                      return (
+                        <tr key={row.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="sticky left-0 z-10 bg-card px-3 py-2 font-semibold">
+                            {row.nome}
                           </td>
-                        ))}
-
-                        <td className="px-3 py-2 text-right font-bold">
-                          {money(Number(drePlanilha.totais.categorias.get(categoria) || 0))}
-                        </td>
-                      </tr>
-                    ))}
+                          <td className="px-3 py-2 text-right">{Number(row.viagens || 0)}</td>
+                          <td className="px-3 py-2 text-right">
+                            {Number(row.distanciaKm || 0).toLocaleString("pt-BR")}
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-green-600 dark:text-green-400">
+                            {money(Number(row.receita || 0))}
+                          </td>
+                          {drePlanilha.categorias.map((categoria) => (
+                            <td key={categoria} className="px-3 py-2 text-right">
+                              {money(Number(row.categoriasValores.get(categoria) || 0))}
+                            </td>
+                          ))}
+                          <td className="px-3 py-2 text-right font-medium">
+                            {money(Number(row.despesa || 0))}
+                          </td>
+                          <td className={`px-3 py-2 text-right font-semibold ${resultadoPositivo ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                            {money(Number(row.resultado || 0))}
+                          </td>
+                          <td className="px-3 py-2 text-right">{Number(row.margem || 0).toFixed(1)}%</td>
+                          <td className="px-3 py-2 text-right">{money(Number(row.custoKm || 0))}</td>
+                          <td className="px-3 py-2 text-right">{money(Number(row.lucroKm || 0))}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
 
-                  <tfoot className="bg-muted/50 font-bold">
+                  <tfoot className="bg-muted/50 font-semibold">
                     <tr>
-                      <td className="sticky left-0 z-20 bg-muted px-3 py-2">
-                        TOTAL
+                      <td className="sticky left-0 z-20 bg-muted px-3 py-2">TOTAL</td>
+                      <td className="px-3 py-2 text-right">{drePlanilha.totais.viagens}</td>
+                      <td className="px-3 py-2 text-right">
+                        {drePlanilha.totais.distanciaKm.toLocaleString("pt-BR")}
                       </td>
-
-                      {drePlanilha.linhas.map((placa) => (
-                        <td key={"total-" + placa.id} className="px-3 py-2 text-right">
-                          {money(Number(placa.despesa || 0))}
+                      <td className="px-3 py-2 text-right text-green-600 dark:text-green-400">
+                        {money(drePlanilha.totais.receita)}
+                      </td>
+                      {drePlanilha.categorias.map((categoria) => (
+                        <td key={categoria} className="px-3 py-2 text-right">
+                          {money(Number(drePlanilha.totais.categorias.get(categoria) || 0))}
                         </td>
                       ))}
-
-                      <td className="px-3 py-2 text-right">
-                        {money(drePlanilha.totais.despesa)}
+                      <td className="px-3 py-2 text-right">{money(drePlanilha.totais.despesa)}</td>
+                      <td className={`px-3 py-2 text-right ${drePlanilha.totais.resultado >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                        {money(drePlanilha.totais.resultado)}
                       </td>
+                      <td className="px-3 py-2 text-right">{drePlanilha.totais.margem.toFixed(1)}%</td>
+                      <td className="px-3 py-2 text-right">{money(drePlanilha.totais.custoKm)}</td>
+                      <td className="px-3 py-2 text-right">{money(drePlanilha.totais.lucroKm)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -665,6 +772,75 @@ export default function Financeiro() {
           </CardContent>
         </Card>
 
+        <Card className={activeTab === "GERAL" ? "" : "hidden"}>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <Card className={activeTab === "GERAL" ? "" : "hidden"}>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">DRE Operacional por placa</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Planilha comparativa: indicadores na esquerda e placas no cabecalho.
+                </p>
+              </div>
+              <div className="rounded-md border px-3 py-1.5 text-xs text-muted-foreground">
+                {dreMatrizPlacas.placas.length} placa(s)
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent>
+            {dreMatrizPlacas.placas.length === 0 ? (
+              <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                Sem dados para o periodo selecionado.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full min-w-[1200px] border-collapse text-xs">
+                  <thead className="bg-muted/70">
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="sticky left-0 z-20 bg-muted px-3 py-2 font-semibold">Descricao</th>
+                      {dreMatrizPlacas.placas.map((placa) => (
+                        <th key={placa.id} className="px-3 py-2 text-right font-semibold">{placa.nome}</th>
+                      ))}
+                      <th className="px-3 py-2 text-right font-semibold">Total</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {dreMatrizPlacas.linhas.map((linha) => (
+                      <tr key={linha.id} className={`border-b last:border-0 hover:bg-muted/30 ${linha.tipo === "total" || linha.tipo === "resultado" ? "bg-muted/30 font-bold" : ""}`}>
+                        <td className="sticky left-0 z-10 bg-card px-3 py-2 font-semibold">
+                          {linha.nome}
+                        </td>
+
+                        {dreMatrizPlacas.placas.map((placa) => {
+                          const valor = Number(linha.valores.get(placa.id) || 0);
+                          return (
+                            <td
+                              key={`${linha.id}-${placa.id}`}
+                              className={`px-3 py-2 text-right ${linha.tipo === "receita" ? "text-green-600 dark:text-green-400" : ""} ${linha.tipo === "resultado" && valor < 0 ? "text-red-600 dark:text-red-400" : ""} ${linha.tipo === "resultado" && valor >= 0 ? "text-green-600 dark:text-green-400" : ""}`}
+                            >
+                              {linha.tipo === "percentual" ? `${valor.toFixed(1)}%` : money(valor)}
+                            </td>
+                          );
+                        })}
+
+                        <td
+                          className={`px-3 py-2 text-right font-bold ${linha.tipo === "receita" ? "text-green-600 dark:text-green-400" : ""} ${linha.tipo === "resultado" && linha.total < 0 ? "text-red-600 dark:text-red-400" : ""} ${linha.tipo === "resultado" && linha.total >= 0 ? "text-green-600 dark:text-green-400" : ""}`}
+                        >
+                          {linha.tipo === "percentual" ? `${Number(linha.total || 0).toFixed(1)}%` : money(Number(linha.total || 0))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
         <CardTitle className="text-base">Análise Gerencial de Rentabilidade</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">Compare o resultado da operação por caminhão, cliente ou viagem.</p>
               </div>
@@ -737,6 +913,8 @@ export default function Financeiro() {
             </div>
           </CardContent>
         </Card>
+
+
 
         <div className="grid min-w-0 gap-4 xl:grid-cols-2">
           <div className={activeTab === "GERAL" || activeTab === "RECEBER" ? "min-w-0" : "hidden"}>
