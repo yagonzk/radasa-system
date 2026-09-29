@@ -17,15 +17,11 @@ import {
   Trash2,
   CheckCircle2,
   Landmark,
-  ArrowDownToLine,
-  ArrowUpFromLine,
   ListChecks,
   History,
   Truck,
   Users,
   Route,
-  Trophy,
-  AlertTriangle,
   Check,
   ChevronDown,
 } from "lucide-react";
@@ -236,47 +232,46 @@ function FinancialTable({
           <span className="text-xs text-muted-foreground">{items.length} lançamento(s)</span>
         </div>
       </CardHeader>
-      <CardContent className="min-w-0 overflow-x-auto">
+      <CardContent>
         {items.length === 0 ? (
           <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
             {emptyText}
           </div>
         ) : (
-          <table className="w-full min-w-[640px] text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="pb-2 font-medium">Vencimento</th>
-                <th className="pb-2 font-medium">Descrição</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 text-right font-medium">Valor</th>
-                <th className="w-20 pb-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {items.slice(0, 8).map((item) => (
-                <tr key={item.id} className="border-b last:border-0">
-                  <td className="py-3">{formatDate(item.dataVencimento || item.dataCompetencia)}</td>
-                  <td className="py-3">
-                    <div className="font-medium">{item.descricao}</div>
-                    <div className="text-xs text-muted-foreground">{item.categoria}</div>
-                  </td>
-                  <td className="py-3">{statusLabel(item.status)}</td>
-                  <td className="py-3 text-right"><div className="font-semibold">{money(item.valor)}</div>{Number(item.saldoRestante ?? item.valor) < item.valor && <div className="text-xs text-muted-foreground">Saldo {money(item.saldoRestante ?? 0)}</div>}</td>
-                  <td className="py-3 text-right whitespace-nowrap">
-                    {!['PAGO', 'RECEBIDO', 'CANCELADO'].includes(item.status) && (
+          <div className="space-y-2">
+            {items.slice(0, 12).map((item) => (
+              <div key={item.id} className="rounded-lg border p-3">
+                <div className="grid gap-3 md:grid-cols-[110px_minmax(0,1fr)_110px_150px_auto] md:items-center">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Vencimento</div>
+                    <div className="mt-0.5 text-sm font-medium">{formatDate(item.dataVencimento || item.dataCompetencia)}</div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">{item.descricao}</div>
+                    <div className="truncate text-xs text-muted-foreground">{item.categoria}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Status</div>
+                    <div className="mt-0.5 text-sm font-medium">{statusLabel(item.status)}</div>
+                  </div>
+                  <div className="md:text-right">
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Valor</div>
+                    <div className="mt-0.5 text-sm font-semibold">{money(item.valor)}</div>
+                    {Number(item.saldoRestante ?? item.valor) < item.valor ? <div className="text-xs text-muted-foreground">Saldo {money(item.saldoRestante ?? 0)}</div> : null}
+                  </div>
+                  <div className="flex justify-end gap-1">
+                    {!['PAGO', 'RECEBIDO', 'CANCELADO'].includes(item.status) ? (
                       <Button size="icon" variant="ghost" onClick={() => onQuit(item)} title="Dar baixa">
                         <CheckCircle2 className="h-4 w-4" />
                       </Button>
-                    )}
+                    ) : null}
                     <Button size="icon" variant="ghost" onClick={() => onHistory(item)} title="Histórico"><History className="h-4 w-4" /></Button>
-                    <Button size="icon" variant="ghost" onClick={() => onRemove(item.id)} title="Excluir">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <Button size="icon" variant="ghost" onClick={() => onRemove(item.id)} title="Excluir"><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -296,49 +291,32 @@ function MiniDashboardCard({
   icon: typeof TrendingUp;
   accent?: "positive" | "negative" | "neutral";
 }) {
-  const palette = {
-    positive: "border-emerald-200 bg-emerald-50/80 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100",
-    negative: "border-red-200 bg-red-50/80 text-red-950 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-100",
-    neutral: "border-border bg-card text-card-foreground",
-  } as const;
-  const muted = {
-    positive: "text-emerald-700/80 dark:text-emerald-200/80",
-    negative: "text-red-700/80 dark:text-red-200/80",
-    neutral: "text-muted-foreground",
-  } as const;
+  const valueTone = accent === "positive"
+    ? "text-emerald-700 dark:text-emerald-300"
+    : accent === "negative"
+      ? "text-red-700 dark:text-red-300"
+      : "text-foreground";
+  const iconTone = accent === "positive"
+    ? "text-emerald-600 dark:text-emerald-300"
+    : accent === "negative"
+      ? "text-red-600 dark:text-red-300"
+      : "text-muted-foreground";
 
   return (
-    <Card className={palette[accent]}>
+    <Card>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className={`text-[11px] font-semibold uppercase tracking-wide ${muted[accent]}`}>{title}</div>
-            <div className="mt-2 text-xl font-bold leading-none">{value}</div>
-            {helper ? <div className={`mt-2 text-xs ${muted[accent]}`}>{helper}</div> : null}
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
+            <div className={`mt-2 truncate text-xl font-bold leading-none ${valueTone}`}>{value}</div>
+            {helper ? <div className="mt-2 truncate text-xs text-muted-foreground">{helper}</div> : null}
           </div>
-          <div className="rounded-full border border-current/10 p-2">
+          <div className={`rounded-full border p-2 ${iconTone}`}>
             <Icon className="h-4 w-4" />
           </div>
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function InsightMiniCard({ title, primary, secondary, accent = "neutral" }: { title: string; primary: string; secondary?: string; accent?: "positive" | "negative" | "neutral" }) {
-  const tone = {
-    positive: "border-emerald-200 bg-emerald-50/70 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-100",
-    negative: "border-red-200 bg-red-50/70 text-red-900 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-100",
-    neutral: "border-border bg-muted/30 text-foreground",
-  } as const;
-  const muted = accent === "neutral" ? "text-muted-foreground" : accent === "positive" ? "text-emerald-700/80 dark:text-emerald-200/80" : "text-red-700/80 dark:text-red-200/80";
-
-  return (
-    <div className={`rounded-lg border p-3 ${tone[accent]}`}>
-      <div className={`text-[11px] font-semibold uppercase tracking-wide ${muted}`}>{title}</div>
-      <div className="mt-1 text-sm font-semibold">{primary}</div>
-      {secondary ? <div className={`mt-1 text-xs ${muted}`}>{secondary}</div> : null}
-    </div>
   );
 }
 
@@ -360,6 +338,7 @@ export default function Financeiro() {
   const [baixaComprovanteUrl, setBaixaComprovanteUrl] = useState("");
   const [historico, setHistorico] = useState<{item:Lancamento;baixas:Baixa[]}|null>(null);
   const [ranking, setRanking] = useState<"VEICULO" | "CLIENTE" | "VIAGEM">("VEICULO");
+  const [placaSelecionadaId, setPlacaSelecionadaId] = useState<string>("TODAS");
   const [novoCentro, setNovoCentro] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<LancamentoForm>({ ...empty, centroCustoId: "" });
@@ -501,90 +480,40 @@ export default function Financeiro() {
   };
 
   const dreOperacional = useMemo(() => buildDreOperacional(analise), [analise]);
-  const cards = [
-    {
-      title: "Receitas",
-      value: money(resumo?.receitas || 0),
-      helper: `${analise?.resumo?.viagens || 0} viagem(ns) no período`,
-      icon: TrendingUp,
-      accent: "positive" as const,
-    },
-    {
-      title: "Despesas",
-      value: money(resumo?.despesas || 0),
-      helper: `${(resumo?.categorias || []).length} categoria(s) com movimento`,
-      icon: TrendingDown,
-      accent: "negative" as const,
-    },
-    {
-      title: "Resultado",
-      value: money(resumo?.resultado || 0),
-      helper: `Margem ${(resumo?.margem || 0).toFixed(1)}%`,
-      icon: WalletCards,
-      accent: (resumo?.resultado || 0) >= 0 ? ("positive" as const) : ("negative" as const),
-    },
-    {
-      title: "Contas a receber",
-      value: money(resumo?.aReceber || 0),
-      helper: `Vencido ${money(fluxo?.vencidoReceber || 0)}`,
-      icon: ArrowDownToLine,
-      accent: "positive" as const,
-    },
-    {
-      title: "Contas a pagar",
-      value: money(resumo?.aPagar || 0),
-      helper: `Vencido ${money(fluxo?.vencidoPagar || 0)}`,
-      icon: ArrowUpFromLine,
-      accent: "negative" as const,
-    },
-    {
-      title: "Custo por km",
-      value: money(dreOperacional.totais.custoKm || 0),
-      helper: `${Math.round(dreOperacional.totais.distanciaKm || 0).toLocaleString("pt-BR")} km rodados`,
-      icon: Truck,
-      accent: "negative" as const,
-    },
-    {
-      title: "Lucro por km",
-      value: money(dreOperacional.totais.lucroKm || 0),
-      helper: `${money(dreOperacional.totais.resultado || 0)} de resultado`,
-      icon: Route,
-      accent: (dreOperacional.totais.lucroKm || 0) >= 0 ? ("positive" as const) : ("negative" as const),
-    },
-    {
-      title: "Projeção 30 dias",
-      value: money(fluxo?.projecao30 || 0),
-      helper: `7 dias: ${money(fluxo?.projecao7 || 0)}`,
-      icon: Landmark,
-      accent: (fluxo?.projecao30 || 0) >= 0 ? ("positive" as const) : ("negative" as const),
-    },
-  ];
-  const custoAnalitico = useMemo(() => {
+  const placaSelecionada = useMemo(
+    () => dreOperacional.placas.find((placa) => placa.id === placaSelecionadaId) ?? null,
+    [dreOperacional.placas, placaSelecionadaId],
+  );
+  const dreSelecionada = useMemo(() => {
+    const receita = placaSelecionada?.receita ?? dreOperacional.totais.receita;
+    const despesa = placaSelecionada?.despesa ?? dreOperacional.totais.despesa;
+    const resultado = placaSelecionada?.resultado ?? dreOperacional.totais.resultado;
+    const margem = placaSelecionada?.margem ?? dreOperacional.totais.margem;
+    const viagens = placaSelecionada?.viagens ?? dreOperacional.totais.viagens;
+    const distanciaKm = placaSelecionada?.distanciaKm ?? dreOperacional.totais.distanciaKm;
+    const custoKm = placaSelecionada?.custoKm ?? dreOperacional.totais.custoKm;
+    const lucroKm = placaSelecionada?.lucroKm ?? dreOperacional.totais.lucroKm;
     const categorias = dreOperacional.linhas
       .filter((linha) => ["diaria", "chapa", "pedagio", "diesel", "manutencao", "comissao"].includes(linha.id))
       .map((linha) => ({
         id: linha.id,
         label: linha.label,
-        valor: linha.total,
-        percentual: dreOperacional.totais.despesa > 0 ? (linha.total / dreOperacional.totais.despesa) * 100 : 0,
+        valor: placaSelecionada ? Number(linha.valores.get(placaSelecionada.id) || 0) : linha.total,
       }))
       .filter((item) => item.valor > 0)
+      .map((item) => ({ ...item, percentual: despesa > 0 ? (item.valor / despesa) * 100 : 0 }))
       .sort((a, b) => b.valor - a.valor);
 
-    const principaisPorPlaca = new Map(
-      dreOperacional.placas.map((placa) => {
-        const categoriasPlaca = dreOperacional.linhas
-          .filter((linha) => ["diaria", "chapa", "pedagio", "diesel", "manutencao", "comissao"].includes(linha.id))
-          .map((linha) => ({ label: linha.label, valor: Number(linha.valores.get(placa.id) || 0) }))
-          .filter((item) => item.valor > 0)
-          .sort((a, b) => b.valor - a.valor)
-          .slice(0, 2);
-        return [placa.id, categoriasPlaca] as const;
-      }),
-    );
-
-    return { categorias, principaisPorPlaca };
-  }, [dreOperacional]);
+    return { receita, despesa, resultado, margem, viagens, distanciaKm, custoKm, lucroKm, categorias };
+  }, [dreOperacional, placaSelecionada]);
+  const cards = [
+    { title: "Receita", value: money(dreSelecionada.receita), helper: `${dreSelecionada.viagens} viagem(ns)`, icon: TrendingUp, accent: "neutral" as const },
+    { title: "Despesa", value: money(dreSelecionada.despesa), helper: `${dreSelecionada.categorias.length} grupo(s) de custo`, icon: TrendingDown, accent: "neutral" as const },
+    { title: "Resultado", value: money(dreSelecionada.resultado), helper: `Margem ${dreSelecionada.margem.toFixed(1)}%`, icon: WalletCards, accent: dreSelecionada.resultado >= 0 ? ("positive" as const) : ("negative" as const) },
+    { title: "Margem", value: `${dreSelecionada.margem.toFixed(1)}%`, helper: placaSelecionada ? placaSelecionada.nome : "Operação consolidada", icon: ReceiptText, accent: "neutral" as const },
+    { title: "Custo por km", value: money(dreSelecionada.custoKm), helper: `${Math.round(dreSelecionada.distanciaKm).toLocaleString("pt-BR")} km`, icon: Truck, accent: "neutral" as const },
+    { title: "Lucro por km", value: money(dreSelecionada.lucroKm), helper: "Resultado por km rodado", icon: Route, accent: dreSelecionada.lucroKm >= 0 ? ("positive" as const) : ("negative" as const) },
+  ];
 
 
   return (
@@ -603,8 +532,8 @@ export default function Financeiro() {
           </Button>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border bg-card p-1">
-          <div className="flex min-w-max gap-1">
+        <div className="rounded-xl border bg-card p-1">
+          <div className="flex flex-wrap gap-1">
             {([
               ["GERAL", "Geral"],
               ["RECEBER", "Contas a Receber"],
@@ -637,198 +566,183 @@ export default function Financeiro() {
           </CardContent>
         </Card>
 
-        <div className={activeTab === "GERAL" ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-4" : "hidden"}>
-          {cards.map((card) => (
-            <MiniDashboardCard
-              key={card.title}
-              title={card.title}
-              value={card.value}
-              helper={card.helper}
-              icon={card.icon}
-              accent={card.accent}
-            />
-          ))}
+        <div className={activeTab === "GERAL" ? "space-y-3" : "hidden"}>
+          <div className="rounded-xl border bg-card p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold">Placas</div>
+                <div className="text-xs text-muted-foreground">Selecione uma placa para detalhar ou mantenha a visão consolidada.</div>
+              </div>
+              <span className="text-xs text-muted-foreground">{dreOperacional.placas.length} placa(s)</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={placaSelecionadaId === "TODAS" || !placaSelecionada ? "default" : "outline"}
+                onClick={() => setPlacaSelecionadaId("TODAS")}
+              >
+                Todas as placas
+              </Button>
+              {dreOperacional.placas.map((placa) => (
+                <Button
+                  key={placa.id}
+                  size="sm"
+                  variant={placaSelecionada?.id === placa.id ? "default" : "outline"}
+                  onClick={() => setPlacaSelecionadaId(placa.id)}
+                >
+                  {placa.nome}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+            {cards.map((card) => (
+              <MiniDashboardCard
+                key={card.title}
+                title={card.title}
+                value={card.value}
+                helper={card.helper}
+                icon={card.icon}
+                accent={card.accent}
+              />
+            ))}
+          </div>
         </div>
 
 
 
         <Card className={activeTab === "GERAL" ? "" : "hidden"}>
-          <CardHeader className="pb-4">
+          <CardHeader className="pb-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle className="text-base">DRE compacta e analítica</CardTitle>
+                <CardTitle className="text-base">Análise operacional</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Visão resumida por placa, com resultado, margem e custos predominantes.
+                  {placaSelecionada ? `Leitura detalhada da placa ${placaSelecionada.nome}.` : "Leitura consolidada da frota no período selecionado."}
                 </p>
               </div>
-              <div className="rounded-md border px-3 py-1.5 text-xs text-muted-foreground">
-                {dreOperacional.placas.length} placa(s) analisada(s)
+              <div className="text-right text-xs text-muted-foreground">
+                <div>{dreSelecionada.viagens} viagem(ns)</div>
+                <div>{Math.round(dreSelecionada.distanciaKm).toLocaleString("pt-BR")} km</div>
               </div>
             </div>
           </CardHeader>
-
           <CardContent className="space-y-5">
-            {dreOperacional.placas.length === 0 ? (
-              <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                Sem dados por placa para o período selecionado.
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="rounded-lg border p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">Composição dos custos</div>
+                    <div className="text-xs text-muted-foreground">Principais gastos em ordem de impacto.</div>
+                  </div>
+                  <div className="text-sm font-semibold">{money(dreSelecionada.despesa)}</div>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {dreSelecionada.categorias.length === 0 ? (
+                    <div className="rounded-lg border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+                      Sem custos detalhados para esta seleção.
+                    </div>
+                  ) : (
+                    dreSelecionada.categorias.map((item) => (
+                      <div key={item.id} className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <span className="font-medium">{item.label}</span>
+                          <span className="font-semibold">{money(item.valor)}</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full bg-foreground/35" style={{ width: `${Math.min(item.percentual, 100)}%` }} />
+                        </div>
+                        <div className="text-right text-[11px] text-muted-foreground">{item.percentual.toFixed(1)}% da despesa</div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-            ) : (
-              <>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <InsightMiniCard
-                    title="Melhor resultado"
-                    primary={dreOperacional.insights.melhorResultado ? `${dreOperacional.insights.melhorResultado.nome} · ${money(dreOperacional.insights.melhorResultado.resultado)}` : "Sem dados"}
-                    secondary={dreOperacional.insights.melhorResultado ? `Margem ${dreOperacional.insights.melhorResultado.margem.toFixed(1)}%` : undefined}
-                    accent="positive"
-                  />
-                  <InsightMiniCard
-                    title="Menor resultado"
-                    primary={dreOperacional.insights.piorResultado ? `${dreOperacional.insights.piorResultado.nome} · ${money(dreOperacional.insights.piorResultado.resultado)}` : "Sem dados"}
-                    secondary={dreOperacional.insights.piorResultado ? `Margem ${dreOperacional.insights.piorResultado.margem.toFixed(1)}%` : undefined}
-                    accent={dreOperacional.insights.piorResultado && dreOperacional.insights.piorResultado.resultado < 0 ? "negative" : "neutral"}
-                  />
-                  <InsightMiniCard
-                    title="Maior margem"
-                    primary={dreOperacional.insights.maiorMargem ? `${dreOperacional.insights.maiorMargem.nome} · ${dreOperacional.insights.maiorMargem.margem.toFixed(1)}%` : "Sem dados"}
-                    secondary={dreOperacional.insights.maiorMargem ? `Resultado ${money(dreOperacional.insights.maiorMargem.resultado)}` : undefined}
-                    accent="positive"
-                  />
-                  <InsightMiniCard
-                    title="Maior custo/km"
-                    primary={dreOperacional.insights.maiorCustoKm ? `${dreOperacional.insights.maiorCustoKm.nome} · ${money(dreOperacional.insights.maiorCustoKm.custoKm)}` : "Sem dados"}
-                    secondary={dreOperacional.insights.maiorCustoKm ? `${Math.round(dreOperacional.insights.maiorCustoKm.distanciaKm).toLocaleString("pt-BR")} km` : undefined}
-                    accent="negative"
-                  />
+
+              <div className="rounded-lg border p-4">
+                <div>
+                  <div className="text-sm font-semibold">Indicadores da operação</div>
+                  <div className="text-xs text-muted-foreground">Resumo para decisão sem abrir tabelas extensas.</div>
                 </div>
-
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_360px]">
-                  <div className="overflow-x-auto rounded-lg border">
-                    <table aria-label="Resumo analítico por placa" className="w-full min-w-[980px] text-sm">
-                      <thead className="bg-muted/70">
-                        <tr className="border-b text-left text-muted-foreground">
-                          <th className="px-3 py-2 font-medium">Placa</th>
-                          <th className="px-3 py-2 text-right font-medium">Viagens</th>
-                          <th className="px-3 py-2 text-right font-medium">Receita</th>
-                          <th className="px-3 py-2 text-right font-medium">Despesa</th>
-                          <th className="px-3 py-2 text-right font-medium">Resultado</th>
-                          <th className="px-3 py-2 text-right font-medium">Margem</th>
-                          <th className="px-3 py-2 text-right font-medium">Km</th>
-                          <th className="px-3 py-2 text-right font-medium">Custo/km</th>
-                          <th className="px-3 py-2 text-right font-medium">Lucro/km</th>
-                          <th className="px-3 py-2 font-medium">Custos predominantes</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {dreOperacional.placas.map((placa) => {
-                          const principais = custoAnalitico.principaisPorPlaca.get(placa.id) || [];
-                          return (
-                            <tr key={placa.id} className="border-b align-top last:border-0 hover:bg-muted/20">
-                              <td className="px-3 py-3 font-semibold">{placa.nome}</td>
-                              <td className="px-3 py-3 text-right">{placa.viagens}</td>
-                              <td className="px-3 py-3 text-right">{money(placa.receita)}</td>
-                              <td className="px-3 py-3 text-right text-red-700 dark:text-red-300">{money(placa.despesa)}</td>
-                              <td className={`px-3 py-3 text-right font-semibold ${placa.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
-                                {money(placa.resultado)}
-                              </td>
-                              <td className={`px-3 py-3 text-right font-semibold ${placa.margem >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
-                                {placa.margem.toFixed(1)}%
-                              </td>
-                              <td className="px-3 py-3 text-right">{Math.round(placa.distanciaKm).toLocaleString("pt-BR")}</td>
-                              <td className="px-3 py-3 text-right text-red-700 dark:text-red-300">{money(placa.custoKm)}</td>
-                              <td className={`px-3 py-3 text-right ${placa.lucroKm >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
-                                {money(placa.lucroKm)}
-                              </td>
-                              <td className="px-3 py-3">
-                                {principais.length === 0 ? (
-                                  <span className="text-xs text-muted-foreground">Sem custos detalhados</span>
-                                ) : (
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {principais.map((item) => (
-                                      <span key={`${placa.id}-${item.label}`} className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
-                                        {item.label}: {money(item.valor)}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot className="bg-muted/40">
-                        <tr className="font-semibold">
-                          <td className="px-3 py-3">Total</td>
-                          <td className="px-3 py-3 text-right">{dreOperacional.totais.viagens}</td>
-                          <td className="px-3 py-3 text-right">{money(dreOperacional.totais.receita)}</td>
-                          <td className="px-3 py-3 text-right text-red-700 dark:text-red-300">{money(dreOperacional.totais.despesa)}</td>
-                          <td className={`px-3 py-3 text-right ${dreOperacional.totais.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{money(dreOperacional.totais.resultado)}</td>
-                          <td className={`px-3 py-3 text-right ${dreOperacional.totais.margem >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{dreOperacional.totais.margem.toFixed(1)}%</td>
-                          <td className="px-3 py-3 text-right">{Math.round(dreOperacional.totais.distanciaKm).toLocaleString("pt-BR")}</td>
-                          <td className="px-3 py-3 text-right text-red-700 dark:text-red-300">{money(dreOperacional.totais.custoKm)}</td>
-                          <td className={`px-3 py-3 text-right ${dreOperacional.totais.lucroKm >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{money(dreOperacional.totais.lucroKm)}</td>
-                          <td className="px-3 py-3 text-xs text-muted-foreground">Leitura consolidada do período</td>
-                        </tr>
-                      </tfoot>
-                    </table>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {[
+                    ["Receita por viagem", money(dreSelecionada.viagens > 0 ? dreSelecionada.receita / dreSelecionada.viagens : 0)],
+                    ["Custo por viagem", money(dreSelecionada.viagens > 0 ? dreSelecionada.despesa / dreSelecionada.viagens : 0)],
+                    ["Resultado por viagem", money(dreSelecionada.viagens > 0 ? dreSelecionada.resultado / dreSelecionada.viagens : 0)],
+                    ["Receita por km", money(dreSelecionada.distanciaKm > 0 ? dreSelecionada.receita / dreSelecionada.distanciaKm : 0)],
+                    ["Custo por km", money(dreSelecionada.custoKm)],
+                    ["Lucro por km", money(dreSelecionada.lucroKm)],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg bg-muted/40 p-3">
+                      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+                      <div className="mt-1 text-base font-semibold">{value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">Resultado operacional</div>
+                    <div className={`mt-1 text-lg font-bold ${dreSelecionada.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
+                      {money(dreSelecionada.resultado)}
+                    </div>
                   </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">Margem operacional</div>
+                    <div className={`mt-1 text-lg font-bold ${dreSelecionada.margem >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
+                      {dreSelecionada.margem.toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                  <div className="space-y-4">
-                    <div className="rounded-lg border p-4">
-                      <div className="flex items-center justify-between gap-3">
+            {!placaSelecionada && dreOperacional.placas.length > 0 ? (
+              <div>
+                <div className="mb-3 flex items-end justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">Comparativo entre placas</div>
+                    <div className="text-xs text-muted-foreground">Ordenado pelo resultado operacional, sem rolagem horizontal.</div>
+                  </div>
+                  <span className="text-xs text-muted-foreground">Clique em uma placa acima para aprofundar.</span>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {dreOperacional.placas.map((placa) => (
+                    <button
+                      type="button"
+                      key={placa.id}
+                      onClick={() => setPlacaSelecionadaId(placa.id)}
+                      className="rounded-lg border p-4 text-left transition-colors hover:bg-muted/30"
+                    >
+                      <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-sm font-semibold">Composição de custos</div>
-                          <div className="text-xs text-muted-foreground">Distribuição analítica das despesas da DRE.</div>
+                          <div className="font-semibold">{placa.nome}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">{placa.viagens} viagem(ns) · {Math.round(placa.distanciaKm).toLocaleString("pt-BR")} km</div>
                         </div>
-                        <div className="text-sm font-semibold text-red-700 dark:text-red-300">{money(dreOperacional.totais.despesa)}</div>
+                        <div className={`text-sm font-bold ${placa.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
+                          {placa.margem.toFixed(1)}%
+                        </div>
                       </div>
-
-                      <div className="mt-4 space-y-3">
-                        {custoAnalitico.categorias.length === 0 ? (
-                          <div className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                            Sem custos detalhados para o período.
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <div className="text-muted-foreground">Receita</div>
+                          <div className="mt-0.5 font-semibold">{money(placa.receita)}</div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground">Custo</div>
+                          <div className="mt-0.5 font-semibold">{money(placa.despesa)}</div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground">Resultado</div>
+                          <div className={`mt-0.5 font-semibold ${placa.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
+                            {money(placa.resultado)}
                           </div>
-                        ) : (
-                          custoAnalitico.categorias.map((item) => (
-                            <div key={item.id} className="space-y-1.5">
-                              <div className="flex items-center justify-between gap-3 text-sm">
-                                <span className="font-medium">{item.label}</span>
-                                <span className="font-semibold">{money(item.valor)}</span>
-                              </div>
-                              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                                <div className="h-full rounded-full bg-red-500/80" style={{ width: `${Math.min(item.percentual, 100)}%` }} />
-                              </div>
-                              <div className="text-right text-[11px] text-muted-foreground">{item.percentual.toFixed(1)}% da despesa</div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border bg-muted/20 p-4">
-                      <div className="text-sm font-semibold">Leitura rápida</div>
-                      <div className="mt-3 space-y-2 text-sm">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">Receita líquida da operação</span>
-                          <span className="font-semibold text-emerald-700 dark:text-emerald-300">{money(dreOperacional.totais.receita)}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">Despesa consolidada</span>
-                          <span className="font-semibold text-red-700 dark:text-red-300">{money(dreOperacional.totais.despesa)}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">Resultado operacional</span>
-                          <span className={`font-semibold ${dreOperacional.totais.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{money(dreOperacional.totais.resultado)}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">Margem operacional</span>
-                          <span className={`font-semibold ${dreOperacional.totais.margem >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{dreOperacional.totais.margem.toFixed(1)}%</span>
                         </div>
                       </div>
-                    </div>
-                  </div>
+                    </button>
+                  ))}
                 </div>
-              </>
-            )}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -836,14 +750,14 @@ export default function Financeiro() {
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <CardTitle className="text-base">Análise Gerencial de Rentabilidade</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">Compare o resultado da operação por caminhão, cliente ou viagem.</p>
+                <CardTitle className="text-base">Rentabilidade comparativa</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">Compare desempenho sem tabelas largas.</p>
               </div>
-              <div className="flex rounded-lg border p-1">
+              <div className="flex flex-wrap rounded-lg border p-1">
                 {([
                   ["VEICULO", "Caminhões", Truck],
                   ["CLIENTE", "Clientes", Users],
-                  ["VIAGEM", "Acerto de Viagem", Route],
+                  ["VIAGEM", "Viagens", Route],
                 ] as const).map(([key, label, Icon]) => (
                   <Button key={key} size="sm" variant={ranking === key ? "default" : "ghost"} onClick={() => setRanking(key)}>
                     <Icon className="mr-1.5 h-4 w-4" />{label}
@@ -854,43 +768,36 @@ export default function Financeiro() {
           </CardHeader>
           <CardContent>
             {(() => {
-              const rows = ranking === "VEICULO" ? (analise?.porVeiculo || []) : ranking === "CLIENTE" ? (analise?.porCliente || []) : (analise?.porViagem || []).map(v => ({...v, nome: `${v.placa} · ${v.destino}` , viagens: 1}));
-              if (!rows.length) return <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Sem dados de rentabilidade para o período selecionado.</div>;
-              const melhor = rows[0];
-              const pior = [...rows].sort((a,b) => a.resultado-b.resultado)[0];
+              const rows = ranking === "VEICULO"
+                ? (analise?.porVeiculo || [])
+                : ranking === "CLIENTE"
+                  ? (analise?.porCliente || [])
+                  : (analise?.porViagem || []).map((v) => ({ ...v, nome: `${v.placa} · ${v.destino}`, viagens: 1 }));
+              const ordenados = [...rows].sort((a, b) => b.resultado - a.resultado);
+              if (!ordenados.length) return <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Sem dados de rentabilidade para o período selecionado.</div>;
               return (
-                <>
-                  <div className="mb-4 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-lg border p-3">
-                      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><Trophy className="h-4 w-4" /> Melhor resultado</div>
-                      <div className="mt-1 truncate font-semibold">{melhor.nome}</div>
-                      <div className="text-lg font-bold">{money(melhor.resultado)}</div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {ordenados.slice(0, 12).map((row: any, index) => (
+                    <div key={row.id} className="rounded-lg border p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold">{row.nome}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">{row.viagens} viagem(ns){row.distanciaKm ? ` · ${Math.round(row.distanciaKm).toLocaleString("pt-BR")} km` : ""}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[11px] text-muted-foreground">#{index + 1}</div>
+                          <div className={`text-sm font-bold ${row.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{row.margem.toFixed(1)}%</div>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                        <div><div className="text-xs text-muted-foreground">Receita</div><div className="font-semibold">{money(row.receita)}</div></div>
+                        <div><div className="text-xs text-muted-foreground">Custos</div><div className="font-semibold">{money(row.despesa)}</div></div>
+                        <div><div className="text-xs text-muted-foreground">Resultado</div><div className={`font-semibold ${row.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{money(row.resultado)}</div></div>
+                        <div><div className="text-xs text-muted-foreground">Lucro/km</div><div className="font-semibold">{money(row.lucroKm)}</div></div>
+                      </div>
                     </div>
-                    <div className="rounded-lg border p-3">
-                      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><AlertTriangle className="h-4 w-4" /> Menor resultado</div>
-                      <div className="mt-1 truncate font-semibold">{pior.nome}</div>
-                      <div className="text-lg font-bold">{money(pior.resultado)}</div>
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[900px] text-sm">
-                      <thead><tr className="border-b text-left text-muted-foreground">
-                        <th className="pb-2 font-medium">{ranking === "VEICULO" ? "Caminhão" : ranking === "CLIENTE" ? "Cliente" : "Viagem / destino"}</th>
-                        <th className="pb-2 text-right font-medium">Receita</th><th className="pb-2 text-right font-medium">Custos</th>
-                        <th className="pb-2 text-right font-medium">Resultado</th><th className="pb-2 text-right font-medium">Margem</th>
-                        <th className="pb-2 text-right font-medium">Custo/km</th><th className="pb-2 text-right font-medium">Lucro/km</th>
-                      </tr></thead>
-                      <tbody>{rows.slice(0, 12).map((row:any) => (
-                        <tr key={row.id} className="border-b last:border-0">
-                          <td className="py-3"><div className="font-medium">{row.nome}</div><div className="text-xs text-muted-foreground">{row.viagens} viagem(ns)</div></td>
-                          <td className="py-3 text-right">{money(row.receita)}</td><td className="py-3 text-right">{money(row.despesa)}</td>
-                          <td className="py-3 text-right font-semibold">{money(row.resultado)}</td><td className="py-3 text-right">{row.margem.toFixed(1)}%</td>
-                          <td className="py-3 text-right">{money(row.custoKm)}</td><td className="py-3 text-right">{money(row.lucroKm)}</td>
-                        </tr>
-                      ))}</tbody>
-                    </table>
-                  </div>
-                </>
+                  ))}
+                </div>
               );
             })()}
           </CardContent>
@@ -911,166 +818,112 @@ export default function Financeiro() {
 
 
 
-        <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-          <div className={activeTab === "GERAL" || activeTab === "RECEBER" ? "min-w-0" : "hidden"}>
-          <FinancialTable
-            title="Contas a Receber"
-            items={contasReceber}
-            emptyText="Nenhuma conta a receber neste período."
-            onQuit={quitar}
-            onRemove={remove}
-            onHistory={abrirHistorico}
-          />
+        <div className="min-w-0">
+          <div className={activeTab === "RECEBER" ? "min-w-0" : "hidden"}>
+            <FinancialTable
+              title="Contas a Receber"
+              items={contasReceber}
+              emptyText="Nenhuma conta a receber neste período."
+              onQuit={quitar}
+              onRemove={remove}
+              onHistory={abrirHistorico}
+            />
           </div>
-          <div className={activeTab === "GERAL" || activeTab === "PAGAR" ? "min-w-0" : "hidden"}>
-          <FinancialTable
-            title="Contas a Pagar"
-            items={contasPagar}
-            emptyText="Nenhuma conta a pagar neste período."
-            onQuit={quitar}
-            onRemove={remove}
-            onHistory={abrirHistorico}
-          />
+          <div className={activeTab === "PAGAR" ? "min-w-0" : "hidden"}>
+            <FinancialTable
+              title="Contas a Pagar"
+              items={contasPagar}
+              emptyText="Nenhuma conta a pagar neste período."
+              onQuit={quitar}
+              onRemove={remove}
+              onHistory={abrirHistorico}
+            />
           </div>
         </div>
 
-        <Card className={activeTab === "GERAL" || activeTab === "MOVIMENTACOES" ? "" : "hidden"}>
+        <Card className={activeTab === "MOVIMENTACOES" ? "" : "hidden"}>
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <ListChecks className="h-4 w-4 text-muted-foreground" />
                 <CardTitle className="text-base">Movimentações</CardTitle>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <span className="text-xs text-muted-foreground">Últimos {movimentacoes.length} lançamento(s)</span>
-                {items.length > 0 && (
+                {items.length > 0 ? (
                   <Button size="sm" variant="destructive" onClick={() => void removeAll()} disabled={deletingAll}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     {deletingAll ? "Excluindo..." : "Excluir tudo"}
                   </Button>
-                )}
+                ) : null}
               </div>
             </div>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent>
             {movimentacoes.length === 0 ? (
               <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
                 Nenhuma movimentação no período selecionado.
               </div>
             ) : (
-              <table className="w-full min-w-[850px] text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 font-medium">Data</th>
-                    <th className="pb-2 font-medium">Descrição</th>
-                    <th className="pb-2 font-medium">Categoria</th>
-                    <th className="pb-2 font-medium">Tipo</th>
-                    <th className="pb-2 font-medium">Status</th>
-                    <th className="pb-2 text-right font-medium">Valor</th>
-                    <th className="w-20 pb-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {movimentacoes.map((item) => (
-                    <tr key={item.id} className="border-b last:border-0">
-                      <td className="py-3">{formatDate(item.dataCompetencia)}</td>
-                      <td className="py-3 font-medium">{item.descricao}</td>
-                      <td className="py-3">{item.categoria}</td>
-                      <td className="py-3">{item.tipo === "RECEITA" ? "Receita" : "Despesa"}</td>
-                      <td className="py-3">{statusLabel(item.status)}</td>
-                      <td className="py-3 text-right"><div className="font-semibold">{money(item.valor)}</div>{Number(item.saldoRestante ?? item.valor) < item.valor && <div className="text-xs text-muted-foreground">Saldo {money(item.saldoRestante ?? 0)}</div>}</td>
-                      <td className="py-3 text-right whitespace-nowrap">
-                        {!['PAGO', 'RECEBIDO', 'CANCELADO'].includes(item.status) && (
-                          <Button size="icon" variant="ghost" onClick={() => quitar(item)} title="Dar baixa">
-                            <CheckCircle2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button size="icon" variant="ghost" onClick={() => remove(item.id)} title="Excluir">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="space-y-2">
+                {movimentacoes.map((item) => (
+                  <div key={item.id} className="rounded-lg border p-3">
+                    <div className="grid gap-3 md:grid-cols-[100px_minmax(0,1fr)_120px_110px_140px_auto] md:items-center">
+                      <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">Data</div><div className="mt-0.5 text-sm font-medium">{formatDate(item.dataCompetencia)}</div></div>
+                      <div className="min-w-0"><div className="truncate text-sm font-semibold">{item.descricao}</div><div className="truncate text-xs text-muted-foreground">{item.categoria}</div></div>
+                      <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">Tipo</div><div className="mt-0.5 text-sm">{item.tipo === "RECEITA" ? "Receita" : "Despesa"}</div></div>
+                      <div><div className="text-[11px] uppercase tracking-wide text-muted-foreground">Status</div><div className="mt-0.5 text-sm">{statusLabel(item.status)}</div></div>
+                      <div className="md:text-right"><div className="text-[11px] uppercase tracking-wide text-muted-foreground">Valor</div><div className="mt-0.5 text-sm font-semibold">{money(item.valor)}</div>{Number(item.saldoRestante ?? item.valor) < item.valor ? <div className="text-xs text-muted-foreground">Saldo {money(item.saldoRestante ?? 0)}</div> : null}</div>
+                      <div className="flex justify-end gap-1">
+                        {!['PAGO', 'RECEBIDO', 'CANCELADO'].includes(item.status) ? <Button size="icon" variant="ghost" onClick={() => quitar(item)} title="Dar baixa"><CheckCircle2 className="h-4 w-4" /></Button> : null}
+                        <Button size="icon" variant="ghost" onClick={() => remove(item.id)} title="Excluir"><Trash2 className="h-4 w-4" /></Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
 
-        <div className={activeTab === "GERAL" || activeTab === "CENTROS" ? "grid min-w-0 gap-4 xl:grid-cols-2" : "hidden"}>
-          <Card className={activeTab === "CENTROS" ? "xl:col-span-2" : ""}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <Landmark className="h-4 w-4 text-muted-foreground" />
-                <CardTitle className="text-base">Centro de Custos</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4 flex gap-2">
-                <Input
-                  placeholder="Ex.: Administrativo, Frota RAX-6E36..."
-                  value={novoCentro}
-                  onChange={(e) => setNovoCentro(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") void addCentro(); }}
-                />
-                <Button onClick={addCentro}>Adicionar</Button>
-              </div>
-              <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
-                {centros.length === 0 ? (
-                  <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                    Nenhum centro de custo cadastrado.
-                  </div>
-                ) : (
-                  centros.map((centro) => (
-                    <div key={centro.id} className="flex items-center justify-between rounded-lg border p-3">
-                      <div>
-                        <strong className="text-sm">{centro.nome}</strong>
-                        <div className="text-xs text-muted-foreground">{centro.tipo}</div>
-                      </div>
-                      <Button size="icon" variant="ghost" onClick={() => delCentro(centro.id)} title="Excluir centro">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className={activeTab === "GERAL" ? "" : "hidden"}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <ReceiptText className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-base">Categorias financeiras</CardTitle>
+        <Card className={activeTab === "CENTROS" ? "" : "hidden"}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Landmark className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base">Centro de Custos</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+              <Input
+                placeholder="Ex.: Administrativo, Frota RAX-6E36..."
+                value={novoCentro}
+                onChange={(e) => setNovoCentro(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void addCentro(); }}
+              />
+              <Button onClick={addCentro}>Adicionar</Button>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {centros.length === 0 ? (
+                <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground md:col-span-2 xl:col-span-3">
+                  Nenhum centro de custo cadastrado.
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  Margem {(resumo?.margem || 0).toFixed(1)}%
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="max-h-[320px] space-y-1 overflow-y-auto pr-1">
-                {(resumo?.categorias || []).length === 0 ? (
-                  <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                    Sem dados financeiros para compor a DRE neste período.
-                  </div>
-                ) : (
-                  resumo?.categorias.map((row) => (
-                    <div key={row.categoria} className="flex items-center justify-between gap-4 border-b py-2 text-sm last:border-0">
-                      <span className="truncate">{row.categoria}</span>
-                      <strong className="whitespace-nowrap">{money(row.valor)}</strong>
+              ) : (
+                centros.map((centro) => (
+                  <div key={centro.id} className="flex items-center justify-between rounded-lg border p-3">
+                    <div>
+                      <strong className="text-sm">{centro.nome}</strong>
+                      <div className="text-xs text-muted-foreground">{centro.tipo}</div>
                     </div>
-                  ))
-                )}
-              </div>
-              <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border bg-muted/30 p-3">
-                <strong>Resultado financeiro</strong>
-                <strong>{money(resumo?.resultado || 0)}</strong>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                    <Button size="icon" variant="ghost" onClick={() => delCentro(centro.id)} title="Excluir centro">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <Dialog open={!!historico} onOpenChange={(o)=>!o&&setHistorico(null)}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Histórico de baixas</DialogTitle></DialogHeader><div className="space-y-2"><div className="rounded-lg border p-3 text-sm"><strong>{historico?.item.descricao}</strong><div className="text-muted-foreground">Total {money(historico?.item.valor||0)} · Saldo {money(historico?.item.saldoRestante??historico?.item.valor??0)}</div></div>{historico?.baixas.length===0?<p className="text-sm text-muted-foreground">Nenhuma baixa registrada.</p>:historico?.baixas.map(b=><div key={b.id} className="flex justify-between rounded-lg border p-3 text-sm"><div>{formatDate(b.data)}<div className="text-xs text-muted-foreground">{b.formaPagamento||"Forma não informada"}</div></div><strong>{money(b.valor)}</strong></div>)}</div></DialogContent></Dialog>
 
