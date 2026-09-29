@@ -283,6 +283,65 @@ function FinancialTable({
   );
 }
 
+function MiniDashboardCard({
+  title,
+  value,
+  helper,
+  icon: Icon,
+  accent = "neutral",
+}: {
+  title: string;
+  value: string;
+  helper?: string;
+  icon: typeof TrendingUp;
+  accent?: "positive" | "negative" | "neutral";
+}) {
+  const palette = {
+    positive: "border-emerald-200 bg-emerald-50/80 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100",
+    negative: "border-red-200 bg-red-50/80 text-red-950 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-100",
+    neutral: "border-border bg-card text-card-foreground",
+  } as const;
+  const muted = {
+    positive: "text-emerald-700/80 dark:text-emerald-200/80",
+    negative: "text-red-700/80 dark:text-red-200/80",
+    neutral: "text-muted-foreground",
+  } as const;
+
+  return (
+    <Card className={palette[accent]}>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className={`text-[11px] font-semibold uppercase tracking-wide ${muted[accent]}`}>{title}</div>
+            <div className="mt-2 text-xl font-bold leading-none">{value}</div>
+            {helper ? <div className={`mt-2 text-xs ${muted[accent]}`}>{helper}</div> : null}
+          </div>
+          <div className="rounded-full border border-current/10 p-2">
+            <Icon className="h-4 w-4" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function InsightMiniCard({ title, primary, secondary, accent = "neutral" }: { title: string; primary: string; secondary?: string; accent?: "positive" | "negative" | "neutral" }) {
+  const tone = {
+    positive: "border-emerald-200 bg-emerald-50/70 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-100",
+    negative: "border-red-200 bg-red-50/70 text-red-900 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-100",
+    neutral: "border-border bg-muted/30 text-foreground",
+  } as const;
+  const muted = accent === "neutral" ? "text-muted-foreground" : accent === "positive" ? "text-emerald-700/80 dark:text-emerald-200/80" : "text-red-700/80 dark:text-red-200/80";
+
+  return (
+    <div className={`rounded-lg border p-3 ${tone[accent]}`}>
+      <div className={`text-[11px] font-semibold uppercase tracking-wide ${muted}`}>{title}</div>
+      <div className="mt-1 text-sm font-semibold">{primary}</div>
+      {secondary ? <div className={`mt-1 text-xs ${muted}`}>{secondary}</div> : null}
+    </div>
+  );
+}
+
 export default function Financeiro() {
   const { items: clientes } = useClientes();
   const { items: veiculos } = useVeiculos();
@@ -441,14 +500,91 @@ export default function Financeiro() {
     } catch(e:any){ toast.error(e.response?.data?.message || "Não foi possível registrar a baixa."); }
   };
 
-  const cards = [
-    { title: "Receitas", value: resumo?.receitas || 0, icon: TrendingUp },
-    { title: "Despesas", value: resumo?.despesas || 0, icon: TrendingDown },
-    { title: "Resultado", value: resumo?.resultado || 0, icon: WalletCards },
-    { title: "Contas a receber", value: resumo?.aReceber || 0, icon: ArrowDownToLine },
-    { title: "Contas a pagar", value: resumo?.aPagar || 0, icon: ArrowUpFromLine },
-  ];
   const dreOperacional = useMemo(() => buildDreOperacional(analise), [analise]);
+  const cards = [
+    {
+      title: "Receitas",
+      value: money(resumo?.receitas || 0),
+      helper: `${analise?.resumo?.viagens || 0} viagem(ns) no período`,
+      icon: TrendingUp,
+      accent: "positive" as const,
+    },
+    {
+      title: "Despesas",
+      value: money(resumo?.despesas || 0),
+      helper: `${(resumo?.categorias || []).length} categoria(s) com movimento`,
+      icon: TrendingDown,
+      accent: "negative" as const,
+    },
+    {
+      title: "Resultado",
+      value: money(resumo?.resultado || 0),
+      helper: `Margem ${(resumo?.margem || 0).toFixed(1)}%`,
+      icon: WalletCards,
+      accent: (resumo?.resultado || 0) >= 0 ? ("positive" as const) : ("negative" as const),
+    },
+    {
+      title: "Contas a receber",
+      value: money(resumo?.aReceber || 0),
+      helper: `Vencido ${money(fluxo?.vencidoReceber || 0)}`,
+      icon: ArrowDownToLine,
+      accent: "positive" as const,
+    },
+    {
+      title: "Contas a pagar",
+      value: money(resumo?.aPagar || 0),
+      helper: `Vencido ${money(fluxo?.vencidoPagar || 0)}`,
+      icon: ArrowUpFromLine,
+      accent: "negative" as const,
+    },
+    {
+      title: "Custo por km",
+      value: money(dreOperacional.totais.custoKm || 0),
+      helper: `${Math.round(dreOperacional.totais.distanciaKm || 0).toLocaleString("pt-BR")} km rodados`,
+      icon: Truck,
+      accent: "negative" as const,
+    },
+    {
+      title: "Lucro por km",
+      value: money(dreOperacional.totais.lucroKm || 0),
+      helper: `${money(dreOperacional.totais.resultado || 0)} de resultado`,
+      icon: Route,
+      accent: (dreOperacional.totais.lucroKm || 0) >= 0 ? ("positive" as const) : ("negative" as const),
+    },
+    {
+      title: "Projeção 30 dias",
+      value: money(fluxo?.projecao30 || 0),
+      helper: `7 dias: ${money(fluxo?.projecao7 || 0)}`,
+      icon: Landmark,
+      accent: (fluxo?.projecao30 || 0) >= 0 ? ("positive" as const) : ("negative" as const),
+    },
+  ];
+  const custoAnalitico = useMemo(() => {
+    const categorias = dreOperacional.linhas
+      .filter((linha) => ["diaria", "chapa", "pedagio", "diesel", "manutencao", "comissao"].includes(linha.id))
+      .map((linha) => ({
+        id: linha.id,
+        label: linha.label,
+        valor: linha.total,
+        percentual: dreOperacional.totais.despesa > 0 ? (linha.total / dreOperacional.totais.despesa) * 100 : 0,
+      }))
+      .filter((item) => item.valor > 0)
+      .sort((a, b) => b.valor - a.valor);
+
+    const principaisPorPlaca = new Map(
+      dreOperacional.placas.map((placa) => {
+        const categoriasPlaca = dreOperacional.linhas
+          .filter((linha) => ["diaria", "chapa", "pedagio", "diesel", "manutencao", "comissao"].includes(linha.id))
+          .map((linha) => ({ label: linha.label, valor: Number(linha.valores.get(placa.id) || 0) }))
+          .filter((item) => item.valor > 0)
+          .sort((a, b) => b.valor - a.valor)
+          .slice(0, 2);
+        return [placa.id, categoriasPlaca] as const;
+      }),
+    );
+
+    return { categorias, principaisPorPlaca };
+  }, [dreOperacional]);
 
 
   return (
@@ -501,17 +637,16 @@ export default function Financeiro() {
           </CardContent>
         </Card>
 
-        <div className={activeTab === "GERAL" ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-5" : "hidden"}>
+        <div className={activeTab === "GERAL" ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-4" : "hidden"}>
           {cards.map((card) => (
-            <Card key={card.title}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-medium text-muted-foreground">{card.title}</span>
-                  <card.icon className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="mt-2 text-xl font-bold">{money(card.value)}</div>
-              </CardContent>
-            </Card>
+            <MiniDashboardCard
+              key={card.title}
+              title={card.title}
+              value={card.value}
+              helper={card.helper}
+              icon={card.icon}
+              accent={card.accent}
+            />
           ))}
         </div>
 
@@ -521,9 +656,9 @@ export default function Financeiro() {
           <CardHeader className="pb-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle className="text-base">DRE Operacional por placa</CardTitle>
+                <CardTitle className="text-base">DRE compacta e analítica</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Placas no cabeçalho, custos e indicadores na lateral para leitura operacional.
+                  Visão resumida por placa, com resultado, margem e custos predominantes.
                 </p>
               </div>
               <div className="rounded-md border px-3 py-1.5 text-xs text-muted-foreground">
@@ -539,40 +674,158 @@ export default function Financeiro() {
               </div>
             ) : (
               <>
-                <div className="overflow-x-auto rounded-lg border">
-                  <table aria-label="Matriz DRE operacional por placa" className="w-full min-w-[760px] border-collapse text-xs">
-                    <thead className="bg-muted/70">
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className="sticky left-0 z-20 w-48 bg-muted px-3 py-2 font-semibold">Indicador / custo</th>
-                        {dreOperacional.placas.map((placa) => (
-                          <th key={placa.id} className="min-w-36 px-3 py-2 text-right align-top font-semibold">
-                            <span className="block text-foreground">{placa.nome}</span>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dreOperacional.linhas.map((linha) => (
-                        <tr
-                          key={linha.id}
-                          className={`border-b last:border-0 hover:bg-muted/30 ${
-                            linha.id === "receita" || linha.id === "custo-total" ? "bg-muted/20 font-semibold" : ""
-                          }`}
-                        >
-                          <td className="sticky left-0 z-10 bg-card px-3 py-2 font-medium">{linha.label}</td>
-                          {dreOperacional.placas.map((placa) => {
-                            const valor = Number(linha.valores.get(placa.id) || 0);
-                            const resultColor = linha.destaque === "positivo" ? "text-green-600 dark:text-green-400" : "";
-                            return (
-                              <td key={`${linha.id}-${placa.id}`} className={`px-3 py-2 text-right ${resultColor}`}>
-                                {money(valor)}
-                              </td>
-                            );
-                          })}
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <InsightMiniCard
+                    title="Melhor resultado"
+                    primary={dreOperacional.insights.melhorResultado ? `${dreOperacional.insights.melhorResultado.nome} · ${money(dreOperacional.insights.melhorResultado.resultado)}` : "Sem dados"}
+                    secondary={dreOperacional.insights.melhorResultado ? `Margem ${dreOperacional.insights.melhorResultado.margem.toFixed(1)}%` : undefined}
+                    accent="positive"
+                  />
+                  <InsightMiniCard
+                    title="Menor resultado"
+                    primary={dreOperacional.insights.piorResultado ? `${dreOperacional.insights.piorResultado.nome} · ${money(dreOperacional.insights.piorResultado.resultado)}` : "Sem dados"}
+                    secondary={dreOperacional.insights.piorResultado ? `Margem ${dreOperacional.insights.piorResultado.margem.toFixed(1)}%` : undefined}
+                    accent={dreOperacional.insights.piorResultado && dreOperacional.insights.piorResultado.resultado < 0 ? "negative" : "neutral"}
+                  />
+                  <InsightMiniCard
+                    title="Maior margem"
+                    primary={dreOperacional.insights.maiorMargem ? `${dreOperacional.insights.maiorMargem.nome} · ${dreOperacional.insights.maiorMargem.margem.toFixed(1)}%` : "Sem dados"}
+                    secondary={dreOperacional.insights.maiorMargem ? `Resultado ${money(dreOperacional.insights.maiorMargem.resultado)}` : undefined}
+                    accent="positive"
+                  />
+                  <InsightMiniCard
+                    title="Maior custo/km"
+                    primary={dreOperacional.insights.maiorCustoKm ? `${dreOperacional.insights.maiorCustoKm.nome} · ${money(dreOperacional.insights.maiorCustoKm.custoKm)}` : "Sem dados"}
+                    secondary={dreOperacional.insights.maiorCustoKm ? `${Math.round(dreOperacional.insights.maiorCustoKm.distanciaKm).toLocaleString("pt-BR")} km` : undefined}
+                    accent="negative"
+                  />
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_360px]">
+                  <div className="overflow-x-auto rounded-lg border">
+                    <table aria-label="Resumo analítico por placa" className="w-full min-w-[980px] text-sm">
+                      <thead className="bg-muted/70">
+                        <tr className="border-b text-left text-muted-foreground">
+                          <th className="px-3 py-2 font-medium">Placa</th>
+                          <th className="px-3 py-2 text-right font-medium">Viagens</th>
+                          <th className="px-3 py-2 text-right font-medium">Receita</th>
+                          <th className="px-3 py-2 text-right font-medium">Despesa</th>
+                          <th className="px-3 py-2 text-right font-medium">Resultado</th>
+                          <th className="px-3 py-2 text-right font-medium">Margem</th>
+                          <th className="px-3 py-2 text-right font-medium">Km</th>
+                          <th className="px-3 py-2 text-right font-medium">Custo/km</th>
+                          <th className="px-3 py-2 text-right font-medium">Lucro/km</th>
+                          <th className="px-3 py-2 font-medium">Custos predominantes</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {dreOperacional.placas.map((placa) => {
+                          const principais = custoAnalitico.principaisPorPlaca.get(placa.id) || [];
+                          return (
+                            <tr key={placa.id} className="border-b align-top last:border-0 hover:bg-muted/20">
+                              <td className="px-3 py-3 font-semibold">{placa.nome}</td>
+                              <td className="px-3 py-3 text-right">{placa.viagens}</td>
+                              <td className="px-3 py-3 text-right">{money(placa.receita)}</td>
+                              <td className="px-3 py-3 text-right text-red-700 dark:text-red-300">{money(placa.despesa)}</td>
+                              <td className={`px-3 py-3 text-right font-semibold ${placa.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
+                                {money(placa.resultado)}
+                              </td>
+                              <td className={`px-3 py-3 text-right font-semibold ${placa.margem >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
+                                {placa.margem.toFixed(1)}%
+                              </td>
+                              <td className="px-3 py-3 text-right">{Math.round(placa.distanciaKm).toLocaleString("pt-BR")}</td>
+                              <td className="px-3 py-3 text-right text-red-700 dark:text-red-300">{money(placa.custoKm)}</td>
+                              <td className={`px-3 py-3 text-right ${placa.lucroKm >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
+                                {money(placa.lucroKm)}
+                              </td>
+                              <td className="px-3 py-3">
+                                {principais.length === 0 ? (
+                                  <span className="text-xs text-muted-foreground">Sem custos detalhados</span>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {principais.map((item) => (
+                                      <span key={`${placa.id}-${item.label}`} className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
+                                        {item.label}: {money(item.valor)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot className="bg-muted/40">
+                        <tr className="font-semibold">
+                          <td className="px-3 py-3">Total</td>
+                          <td className="px-3 py-3 text-right">{dreOperacional.totais.viagens}</td>
+                          <td className="px-3 py-3 text-right">{money(dreOperacional.totais.receita)}</td>
+                          <td className="px-3 py-3 text-right text-red-700 dark:text-red-300">{money(dreOperacional.totais.despesa)}</td>
+                          <td className={`px-3 py-3 text-right ${dreOperacional.totais.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{money(dreOperacional.totais.resultado)}</td>
+                          <td className={`px-3 py-3 text-right ${dreOperacional.totais.margem >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{dreOperacional.totais.margem.toFixed(1)}%</td>
+                          <td className="px-3 py-3 text-right">{Math.round(dreOperacional.totais.distanciaKm).toLocaleString("pt-BR")}</td>
+                          <td className="px-3 py-3 text-right text-red-700 dark:text-red-300">{money(dreOperacional.totais.custoKm)}</td>
+                          <td className={`px-3 py-3 text-right ${dreOperacional.totais.lucroKm >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{money(dreOperacional.totais.lucroKm)}</td>
+                          <td className="px-3 py-3 text-xs text-muted-foreground">Leitura consolidada do período</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="rounded-lg border p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold">Composição de custos</div>
+                          <div className="text-xs text-muted-foreground">Distribuição analítica das despesas da DRE.</div>
+                        </div>
+                        <div className="text-sm font-semibold text-red-700 dark:text-red-300">{money(dreOperacional.totais.despesa)}</div>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {custoAnalitico.categorias.length === 0 ? (
+                          <div className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                            Sem custos detalhados para o período.
+                          </div>
+                        ) : (
+                          custoAnalitico.categorias.map((item) => (
+                            <div key={item.id} className="space-y-1.5">
+                              <div className="flex items-center justify-between gap-3 text-sm">
+                                <span className="font-medium">{item.label}</span>
+                                <span className="font-semibold">{money(item.valor)}</span>
+                              </div>
+                              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                                <div className="h-full rounded-full bg-red-500/80" style={{ width: `${Math.min(item.percentual, 100)}%` }} />
+                              </div>
+                              <div className="text-right text-[11px] text-muted-foreground">{item.percentual.toFixed(1)}% da despesa</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border bg-muted/20 p-4">
+                      <div className="text-sm font-semibold">Leitura rápida</div>
+                      <div className="mt-3 space-y-2 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">Receita líquida da operação</span>
+                          <span className="font-semibold text-emerald-700 dark:text-emerald-300">{money(dreOperacional.totais.receita)}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">Despesa consolidada</span>
+                          <span className="font-semibold text-red-700 dark:text-red-300">{money(dreOperacional.totais.despesa)}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">Resultado operacional</span>
+                          <span className={`font-semibold ${dreOperacional.totais.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{money(dreOperacional.totais.resultado)}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">Margem operacional</span>
+                          <span className={`font-semibold ${dreOperacional.totais.margem >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{dreOperacional.totais.margem.toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </>
             )}
