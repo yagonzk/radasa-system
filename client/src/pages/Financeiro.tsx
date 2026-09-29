@@ -103,7 +103,6 @@ type LancamentoForm = {
 
 const money = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const numberFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
 const today = () => new Date().toISOString().slice(0, 10);
 const currentMonthRange = () => {
   const now = new Date();
@@ -540,60 +539,16 @@ export default function Financeiro() {
               </div>
             ) : (
               <>
-                <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-                  {[
-                    ["Receita", money(dreOperacional.totais.receita), "text-green-600 dark:text-green-400"],
-                    ["Custos", money(dreOperacional.totais.despesa), ""],
-                    [
-                      "Resultado",
-                      money(dreOperacional.totais.resultado),
-                      dreOperacional.totais.resultado >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
-                    ],
-                    ["Margem", `${dreOperacional.totais.margem.toFixed(1)}%`, ""],
-                    ["Custo/km", money(dreOperacional.totais.custoKm), ""],
-                    ["Lucro/km", money(dreOperacional.totais.lucroKm), dreOperacional.totais.lucroKm >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"],
-                  ].map(([label, value, color]) => (
-                    <div key={label} className="rounded-lg border bg-muted/20 p-3">
-                      <div className="text-[11px] font-semibold uppercase text-muted-foreground">{label}</div>
-                      <div className={`mt-1 text-lg font-bold ${color}`}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  {[
-                    ["Melhor resultado", dreOperacional.insights.melhorResultado?.nome ?? "-", money(Number(dreOperacional.insights.melhorResultado?.resultado || 0)), "text-green-600 dark:text-green-400"],
-                    ["Menor resultado", dreOperacional.insights.piorResultado?.nome ?? "-", money(Number(dreOperacional.insights.piorResultado?.resultado || 0)), Number(dreOperacional.insights.piorResultado?.resultado || 0) >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"],
-                    ["Maior margem", dreOperacional.insights.maiorMargem?.nome ?? "-", `${Number(dreOperacional.insights.maiorMargem?.margem || 0).toFixed(1)}%`, ""],
-                    ["Maior custo/km", dreOperacional.insights.maiorCustoKm?.nome ?? "-", money(Number(dreOperacional.insights.maiorCustoKm?.custoKm || 0)), ""],
-                  ].map(([label, plate, value, color]) => (
-                    <div key={label} className="rounded-lg border p-3">
-                      <div className="text-[11px] font-semibold uppercase text-muted-foreground">{label}</div>
-                      <div className="mt-1 truncate font-semibold">{plate}</div>
-                      <div className={`text-sm font-bold ${color}`}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-
                 <div className="overflow-x-auto rounded-lg border">
-                  <table aria-label="Matriz DRE operacional por placa" className="w-full min-w-[1280px] border-collapse text-xs">
+                  <table aria-label="Matriz DRE operacional por placa" className="w-full min-w-[760px] border-collapse text-xs">
                     <thead className="bg-muted/70">
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="sticky left-0 z-20 w-48 bg-muted px-3 py-2 font-semibold">Indicador / custo</th>
                         {dreOperacional.placas.map((placa) => (
                           <th key={placa.id} className="min-w-36 px-3 py-2 text-right align-top font-semibold">
                             <span className="block text-foreground">{placa.nome}</span>
-                            <span className="block text-[11px] font-normal text-muted-foreground">
-                              {numberFormatter.format(placa.viagens)} viagem(ns) · {numberFormatter.format(placa.distanciaKm)} km
-                            </span>
                           </th>
                         ))}
-                        <th className="min-w-32 px-3 py-2 text-right align-top font-semibold">
-                          <span className="block text-foreground">Total</span>
-                          <span className="block text-[11px] font-normal text-muted-foreground">
-                            {numberFormatter.format(dreOperacional.totais.viagens)} viagem(ns)
-                          </span>
-                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -601,46 +556,19 @@ export default function Financeiro() {
                         <tr
                           key={linha.id}
                           className={`border-b last:border-0 hover:bg-muted/30 ${
-                            linha.id === "custos" || linha.id === "resultado" ? "bg-muted/20 font-semibold" : ""
+                            linha.id === "receita" || linha.id === "custo-total" ? "bg-muted/20 font-semibold" : ""
                           }`}
                         >
                           <td className="sticky left-0 z-10 bg-card px-3 py-2 font-medium">{linha.label}</td>
                           {dreOperacional.placas.map((placa) => {
                             const valor = Number(linha.valores.get(placa.id) || 0);
-                            const resultColor = linha.destaque === "resultado"
-                              ? valor >= 0
-                                ? "text-green-600 dark:text-green-400"
-                                : "text-red-600 dark:text-red-400"
-                              : linha.destaque === "positivo"
-                                ? "text-green-600 dark:text-green-400"
-                                : "";
+                            const resultColor = linha.destaque === "positivo" ? "text-green-600 dark:text-green-400" : "";
                             return (
                               <td key={`${linha.id}-${placa.id}`} className={`px-3 py-2 text-right ${resultColor}`}>
-                                {linha.tipo === "percentual"
-                                  ? `${valor.toFixed(1)}%`
-                                  : linha.tipo === "numero"
-                                    ? numberFormatter.format(valor)
-                                    : money(valor)}
+                                {money(valor)}
                               </td>
                             );
                           })}
-                          <td
-                            className={`px-3 py-2 text-right font-bold ${
-                              linha.destaque === "resultado"
-                                ? Number(linha.total || 0) >= 0
-                                  ? "text-green-600 dark:text-green-400"
-                                  : "text-red-600 dark:text-red-400"
-                                : linha.destaque === "positivo"
-                                  ? "text-green-600 dark:text-green-400"
-                                  : ""
-                            }`}
-                          >
-                            {linha.tipo === "percentual"
-                              ? `${Number(linha.total || 0).toFixed(1)}%`
-                              : linha.tipo === "numero"
-                                ? numberFormatter.format(Number(linha.total || 0))
-                                : money(Number(linha.total || 0))}
-                          </td>
                         </tr>
                       ))}
                     </tbody>
