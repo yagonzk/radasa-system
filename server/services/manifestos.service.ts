@@ -483,17 +483,41 @@ export const manifestosService = {
       accepted.push({ index, input, clienteId, key });
     });
 
+    // A validação definitiva do veículo acontece no servidor, diretamente no
+    // banco. Assim a importação não depende de cache/lista de veículos do
+    // navegador. `veiculoCodigo` só é aceito se for um ID interno real; caso
+    // contrário a placa do PDF é usada para localizar o cadastro.
+    const vehicles = await prisma.veiculo.findMany({
+      select: { id: true, placa: true, modelo: true },
+    });
+    const vehicleLookups = buildVehicleLookups(vehicles);
+    const resolvedAccepted: Array<(typeof accepted)[number] & { vehicle: VehicleMetadata }> = [];
+
+    for (const entry of accepted) {
+      const vehicle =
+        (entry.input?.veiculoCodigo ? vehicleLookups.byId.get(String(entry.input.veiculoCodigo)) : undefined) ??
+        vehicleLookups.byPlate.get(normalizeKeyPart(entry.input?.placaVeiculo));
+      if (!vehicle) {
+        failed.push({
+          index: entry.index,
+          message: `Placa ${formatPlate(entry.input?.placaVeiculo) || "não identificada"} não cadastrada em Veículos.`,
+        });
+        continue;
+      }
+      resolvedAccepted.push({ ...entry, vehicle });
+    }
+
     // A importação em massa não precisa devolver o PDF em base64 nem todos os
     // produtos recém-criados. Retornar só o ID evita baixar de volta dezenas de
     // megabytes que o navegador acabou de enviar.
     const imported: Array<{ index: number; id: string }> = [];
     let nextIndex = 0;
-    const workerCount = Math.min(2, accepted.length);
+    const workerCount = Math.min(2, resolvedAccepted.length);
     const workers = Array.from({ length: workerCount }, async () => {
       while (true) {
         const cursor = nextIndex++;
-        if (cursor >= accepted.length) return;
-        const entry = accepted[cursor];
+        if (cursor >= resolvedAccepted.length) return;
+        const entry = resolvedAccepted[cursor];
         try {
           const item = await prisma.manifesto.create({
             select: { id: true },
@@ -505,9 +529,9 @@ export const manifestosService = {
               pdfUrl: entry.input.pdfUrl || null,
               transportadoraCodigo: entry.input.transportadoraCodigo || "",
               transportadoraNome: entry.input.transportadoraNome || "",
-              veiculoCodigo: entry.input.veiculoCodigo || "",
-              placaVeiculo: formatPlate(entry.input.placaVeiculo),
-              modeloVeiculo: entry.input.modeloVeiculo || "",
+              veiculoCodigo: entry.vehicle.id,
+              placaVeiculo: formatPlate(entry.vehicle.placa),
+              modeloVeiculo: entry.vehicle.modelo ?? entry.input.modeloVeiculo ?? "",
               romaneios: entry.input.romaneios || "",
               notasFiscais: entry.input.notasFiscais || "",
               createdAt: entry.input.createdAt ? new Date(entry.input.createdAt) : undefined,

@@ -675,7 +675,10 @@ export default function Romaneios() {
             ? formatPlate(registered.placa)
             : String(importedPlate ?? "").trim().toUpperCase(),
           modeloVeiculo: registered?.modelo ?? normalizedResult.documento.modeloVeiculo ?? "",
-          veiculoCodigo: registered?.id ?? normalizedResult.documento.veiculoCodigo ?? "",
+          // `veiculoCodigo` recebido do parser é o código impresso no SIGA
+          // (ex.: 00002174), não o ID interno do cadastro de veículos. Só
+          // persistimos este campo quando o vínculo real foi confirmado.
+          veiculoCodigo: registered?.id ?? "",
         },
       },
       matched: Boolean(registered),
@@ -683,12 +686,11 @@ export default function Romaneios() {
     };
   };
 
-  const isBulkEntryReady = (entry: BulkImportEntry, sourceVehicles: Veiculo[] = veiculos) =>
+  const isBulkEntryReady = (entry: BulkImportEntry, _sourceVehicles: Veiculo[] = veiculos) =>
     Boolean(
       entry.result &&
       !entry.error &&
-      (entry.result.documento.veiculoCodigo ||
-        resolveRegisteredVehicle(entry.result.documento, sourceVehicles)),
+      normalizePlate(entry.result.documento.placaVeiculo).length === 7,
     );
 
   const updateReviewDocument = (patch: Partial<PdfResponse["documento"]>) => {
@@ -2026,30 +2028,22 @@ export default function Romaneios() {
     const vehicleSource = Array.isArray(refreshedVehicles) && refreshedVehicles.length
       ? refreshedVehicles
       : veiculos;
-    const validEntries = allResultEntries
-      .map((entry) => ({
-        ...entry,
-        result: bindImportedVehicle(entry.result, vehicleSource).result,
-      }))
-      .filter((entry) => Boolean(resolveRegisteredVehicle(entry.result.documento, vehicleSource)));
-    const unmatchedVehicles = allResultEntries.filter(
-      (entry) => !resolveRegisteredVehicle(entry.result.documento, vehicleSource),
+    const reboundEntries = allResultEntries.map((entry) => ({
+      ...entry,
+      result: bindImportedVehicle(entry.result, vehicleSource).result,
+    }));
+    const validEntries = reboundEntries.filter(
+      (entry) => normalizePlate(entry.result.documento.placaVeiculo).length === 7,
+    );
+    const invalidPlateEntries = reboundEntries.filter(
+      (entry) => normalizePlate(entry.result.documento.placaVeiculo).length !== 7,
     );
 
-    if (unmatchedVehicles.length) {
-      const plates = Array.from(new Set(
-        unmatchedVehicles
-          .map((entry) => formatPlate(entry.result.documento.placaVeiculo))
-          .filter(Boolean),
-      ));
-      toast.error(
-        plates.length
-          ? `Placa(s) não encontrada(s) no cadastro de veículos: ${plates.join(", ")}.`
-          : `${unmatchedVehicles.length} romaneio(s) estão sem placa cadastrada correspondente.`,
-      );
+    if (invalidPlateEntries.length) {
+      toast.error(`${invalidPlateEntries.length} romaneio(s) estão sem uma placa legível no PDF.`);
     }
     if (!validEntries.length) {
-      toast.error("Nenhum PDF pode ser cadastrado até a placa do veículo ser reconhecida no cadastro.");
+      toast.error("Nenhum PDF possui uma placa válida para cadastrar.");
       return;
     }
 
@@ -2077,7 +2071,6 @@ export default function Romaneios() {
           ).map(({ item }) => item);
           const documento = entry.result.documento;
           const registeredVehicle = resolveRegisteredVehicle(documento, vehicleSource);
-          if (!registeredVehicle) throw new Error("A placa lida não corresponde a um veículo cadastrado.");
           const pdfUrl = await fileToDataUrl(entry.file);
           const payload = {
             clienteId: first.cliente.id,
@@ -2086,9 +2079,12 @@ export default function Romaneios() {
             pdfUrl,
             transportadoraCodigo: documento.transportadoraCodigo,
             transportadoraNome: documento.transportadoraNome,
-            veiculoCodigo: registeredVehicle.id,
-            placaVeiculo: formatPlate(registeredVehicle.placa),
-            modeloVeiculo: registeredVehicle.modelo ?? "",
+            // O backend faz a validação definitiva direto no banco. Quando o
+            // cache local já conhece o veículo, enviamos o ID interno; caso
+            // contrário enviamos somente a placa lida para o servidor resolver.
+            veiculoCodigo: registeredVehicle?.id ?? "",
+            placaVeiculo: formatPlate(registeredVehicle?.placa ?? documento.placaVeiculo),
+            modeloVeiculo: registeredVehicle?.modelo ?? documento.modeloVeiculo ?? "",
             romaneios: documento.romaneios.join(", "),
             notasFiscais: documento.notasFiscais.join(", "),
             produtos: orderedEntries.map(({ produto, cliente, cadastro }) => {
@@ -3261,7 +3257,7 @@ export default function Romaneios() {
                                 <span className="inline-flex rounded-full bg-destructive/15 px-2.5 py-1 text-xs font-semibold text-destructive">Erro</span>
                                 <p className="mt-1 text-xs text-destructive">
                                   {entry.error ?? (entry.result?.documento.placaVeiculo
-                                    ? `Placa ${entry.result.documento.placaVeiculo} não encontrada no cadastro de veículos.`
+                                    ? `Placa ${entry.result.documento.placaVeiculo} não possui formato válido.`
                                     : "O PDF não possui uma placa de veículo reconhecível.")}
                                 </p>
                               </div>

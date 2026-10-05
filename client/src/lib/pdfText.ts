@@ -517,11 +517,17 @@ export async function extrairTextoPdf(file: File, onProgress?: ProgressCallback,
       // backend fazer a fusão linha-a-linha. Para outros PDFs mantemos o fluxo
       // simples anterior.
       if (forceOcr) {
-        // Modo OCR-first dos Romaneios: o PDF inteiro foi rasterizado em alta
-        // resolução ANTES de qualquer interpretação. Não misturamos a camada
-        // digital incompleta com as linhas OCR, porque essa fusão podia deslocar
-        // colunas e gerar quantidades/preços absurdos.
-        pages.push(`${OCR_PRIMARY_MARKER}\n${ocrText}`);
+        // Modo OCR-first dos Romaneios: os ITENS continuam vindo somente do OCR
+        // completo em alta resolução. Porém o cabeçalho estrutural do SIGA
+        // (transportadora, código do veículo, placa e modelo) é muito mais
+        // confiável quando já existe na camada digital do próprio PDF.
+        //
+        // Colocamos apenas essas linhas de cabeçalho ANTES do OCR. O parser usa
+        // a primeira ocorrência para os metadados e mantém o OCR como fonte
+        // autoritativa para CLIENTE/produtos/valores, sem reintroduzir a antiga
+        // mistura de colunas que causava quantidades/preços incorretos.
+        const trustedHeader = digitalHeader ? `${digitalHeader}\n` : "";
+        pages.push(`${OCR_PRIMARY_MARKER}\n${trustedHeader}${ocrText}`);
       } else if (isSiga && searchableCharacters(digitalText) > 0) {
         pages.push(
           `${DIGITAL_TEXT_MARKER}\n${digitalText}\n${OCR_TEXT_MARKER}\n${ocrText}`,
