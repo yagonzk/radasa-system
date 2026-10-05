@@ -500,12 +500,14 @@ model ViagemAbastecimento {
 }
 
 model Fechamento {
-  id          String             @id @default(cuid())
-  motoristaId String
-  dataInicio  DateTime           @db.Date
-  dataFim     DateTime           @db.Date
-  valorTotal  Decimal            @db.Decimal(14, 2)
-  createdAt   DateTime           @default(now())
+  id             String             @id @default(cuid())
+  motoristaId    String
+  dataInicio     DateTime           @db.Date
+  dataFim        DateTime           @db.Date
+  salarioFixo    Decimal            @default(0) @db.Decimal(14, 2)
+  valorComissoes Decimal            @default(0) @db.Decimal(14, 2)
+  valorTotal     Decimal            @db.Decimal(14, 2)
+  createdAt      DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   motorista   Motorista          @relation(fields: [motoristaId], references: [id], onDelete: Restrict)
   viagens     FechamentoViagem[]

@@ -54,7 +54,9 @@ export function exportToCSV(
     "Data Fim",
     "Viagens (Data - Destino)",
     "Total de Viagens",
-    "Valor Total",
+    "Salário Fixo",
+    "Comissões",
+    "Total do Holerite",
   ];
 
   const rows = fechamentos.map((f) => {
@@ -74,6 +76,8 @@ export function exportToCSV(
       formatDate(f.dataFim),
       locaisStr,
       String(totalViagens),
+      formatBRL(f.salarioFixo || 0),
+      formatBRL(f.valorComissoes || 0),
       formatBRL(f.valorTotal),
     ];
   });
@@ -89,7 +93,7 @@ export function exportToCSV(
   const link = document.createElement("a");
   link.href = url;
   const hoje = new Date().toLocaleDateString("pt-BR").replaceAll("/", "-");
-  link.download = `fechamentos_${hoje}.csv`;
+  link.download = `holerites_${hoje}.csv`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -136,10 +140,12 @@ export function exportToPDF(
             </thead>
             <tbody>${locaisStr}</tbody>
           </table>
-          <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:bold;color:#0062B1;">
-            <span>Total de viagens: ${totalViagens}</span>
-            <span>Valor Total: ${formatBRL(f.valorTotal)}</span>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;font-size:13px;">
+            <div style="padding:8px;border:1px solid #ddd;border-radius:6px;"><span style="display:block;color:#666;font-size:11px;">SALÁRIO FIXO</span><strong>${formatBRL(f.salarioFixo || 0)}</strong></div>
+            <div style="padding:8px;border:1px solid #ddd;border-radius:6px;"><span style="display:block;color:#666;font-size:11px;">COMISSÕES</span><strong>${formatBRL(f.valorComissoes || 0)}</strong></div>
+            <div style="padding:8px;border:1px solid #0062B1;border-radius:6px;"><span style="display:block;color:#666;font-size:11px;">TOTAL DO HOLERITE</span><strong style="color:#0062B1;">${formatBRL(f.valorTotal)}</strong></div>
           </div>
+          <div style="margin-top:8px;font-size:12px;color:#555;">Total de viagens: ${totalViagens}</div>
         </div>
       `;
     })
@@ -150,7 +156,7 @@ export function exportToPDF(
     <html lang="pt-BR">
     <head>
       <meta charset="utf-8" />
-      <title>Fechamentos de Comissão</title>
+      <title>Holerites</title>
       <style>
         * { font-family: 'Inter', Arial, sans-serif; }
         body { padding: 32px; color: #0A0E21; }
@@ -163,9 +169,9 @@ export function exportToPDF(
       </style>
     </head>
     <body>
-      <h1>Fechamentos de Comissão</h1>
+      <h1>Holerites</h1>
       <h2>Relatório gerado em ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")}</h2>
-      ${fechamentos.length === 0 ? "<p style='color:#999;'>Nenhum fechamento no período selecionado.</p>" : rows}
+      ${fechamentos.length === 0 ? "<p style='color:#999;'>Nenhum holerite no período selecionado.</p>" : rows}
       <div class="no-print" style="margin-top:24px;text-align:center;">
         <button onclick="window.print()" style="background:#0062B1;color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;">Imprimir / Salvar PDF</button>
       </div>

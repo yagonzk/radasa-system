@@ -20,7 +20,6 @@ import {
   ListChecks,
   History,
   Truck,
-  Users,
   Route,
   Check,
   ChevronDown,
@@ -99,6 +98,8 @@ type LancamentoForm = {
 
 const money = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const moneyTable = (v: number) =>
+  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const today = () => new Date().toISOString().slice(0, 10);
 const currentMonthRange = () => {
   const now = new Date();
@@ -337,7 +338,6 @@ export default function Financeiro() {
   const [baixaObs, setBaixaObs] = useState("");
   const [baixaComprovanteUrl, setBaixaComprovanteUrl] = useState("");
   const [historico, setHistorico] = useState<{item:Lancamento;baixas:Baixa[]}|null>(null);
-  const [ranking, setRanking] = useState<"VEICULO" | "CLIENTE" | "VIAGEM">("VEICULO");
   const [placaSelecionadaId, setPlacaSelecionadaId] = useState<string>("TODAS");
   const [novoCentro, setNovoCentro] = useState("");
   const [open, setOpen] = useState(false);
@@ -494,7 +494,7 @@ export default function Financeiro() {
     const custoKm = placaSelecionada?.custoKm ?? dreOperacional.totais.custoKm;
     const lucroKm = placaSelecionada?.lucroKm ?? dreOperacional.totais.lucroKm;
     const categorias = dreOperacional.linhas
-      .filter((linha) => ["diaria", "chapa", "pedagio", "diesel", "manutencao", "comissao"].includes(linha.id))
+      .filter((linha) => !["receita", "custo-total"].includes(linha.id))
       .map((linha) => ({
         id: linha.id,
         label: linha.label,
@@ -514,6 +514,49 @@ export default function Financeiro() {
     { title: "Custo por km", value: money(dreSelecionada.custoKm), helper: `${Math.round(dreSelecionada.distanciaKm).toLocaleString("pt-BR")} km`, icon: Truck, accent: "neutral" as const },
     { title: "Lucro por km", value: money(dreSelecionada.lucroKm), helper: "Resultado por km rodado", icon: Route, accent: dreSelecionada.lucroKm >= 0 ? ("positive" as const) : ("negative" as const) },
   ];
+  const comparativoPlacas = useMemo(() => {
+    const linha = (id: string) => dreOperacional.linhas.find((item) => item.id === id);
+    const valor = (id: string, placaId: string) => Number(linha(id)?.valores.get(placaId) || 0);
+
+    return dreOperacional.placas.map((placa) => {
+      const diaria = valor("diaria", placa.id);
+      const chapa = valor("chapa", placa.id);
+      const comissao = valor("comissao", placa.id);
+      const diesel = valor("diesel", placa.id);
+      const pedagio = valor("pedagio", placa.id);
+      const manutencao = valor("manutencao", placa.id);
+      const pneus = valor("pneus", placa.id);
+      const documentacao = valor("documentacao", placa.id);
+      const multas = valor("multas", placa.id);
+      const outrosBase = valor("outros", placa.id);
+      const outros = pneus + documentacao + multas + outrosBase;
+      return { ...placa, diaria, chapa, comissao, diesel, pedagio, manutencao, outros };
+    });
+  }, [dreOperacional]);
+  const comparativoTotais = useMemo(() => comparativoPlacas.reduce(
+    (total, placa) => ({
+      cargas: total.cargas + placa.viagens,
+      diaria: total.diaria + placa.diaria,
+      chapa: total.chapa + placa.chapa,
+      comissao: total.comissao + placa.comissao,
+      diesel: total.diesel + placa.diesel,
+      pedagio: total.pedagio + placa.pedagio,
+      manutencao: total.manutencao + placa.manutencao,
+      outros: total.outros + placa.outros,
+      custo: total.custo + placa.despesa,
+    }),
+    { cargas: 0, diaria: 0, chapa: 0, comissao: 0, diesel: 0, pedagio: 0, manutencao: 0, outros: 0, custo: 0 },
+  ), [comparativoPlacas]);
+  const comparativoBlocos = useMemo(() => {
+    const blocos = [] as typeof comparativoPlacas[];
+    for (let i = 0; i < comparativoPlacas.length; i += 4) blocos.push(comparativoPlacas.slice(i, i + 4));
+    return blocos;
+  }, [comparativoPlacas]);
+  const comparativoBlocosMobile = useMemo(() => {
+    const blocos = [] as typeof comparativoPlacas[];
+    for (let i = 0; i < comparativoPlacas.length; i += 2) blocos.push(comparativoPlacas.slice(i, i + 2));
+    return blocos;
+  }, [comparativoPlacas]);
 
 
   return (
@@ -696,50 +739,102 @@ export default function Financeiro() {
               </div>
             </div>
 
-            {!placaSelecionada && dreOperacional.placas.length > 0 ? (
+            {!placaSelecionada && comparativoPlacas.length > 0 ? (
               <div>
-                <div className="mb-3 flex items-end justify-between gap-3">
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold">Comparativo entre placas</div>
-                    <div className="text-xs text-muted-foreground">Ordenado pelo resultado operacional, sem rolagem horizontal.</div>
+                    <div className="text-sm font-semibold">Comparativo de custos por placa</div>
+                    <div className="text-xs text-muted-foreground">Leitura em formato de planilha. Comissão calculada automaticamente por cidade e por carga.</div>
                   </div>
-                  <span className="text-xs text-muted-foreground">Clique em uma placa acima para aprofundar.</span>
+                  <span className="text-[11px] text-muted-foreground">Diesel já inclui ARLA · Outros agrupa pneus, documentação, multas e custos adicionais.</span>
                 </div>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {dreOperacional.placas.map((placa) => (
-                    <button
-                      type="button"
-                      key={placa.id}
-                      onClick={() => setPlacaSelecionadaId(placa.id)}
-                      className="rounded-lg border p-4 text-left transition-colors hover:bg-muted/30"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="font-semibold">{placa.nome}</div>
-                          <div className="mt-0.5 text-xs text-muted-foreground">{placa.viagens} viagem(ns) · {Math.round(placa.distanciaKm).toLocaleString("pt-BR")} km</div>
-                        </div>
-                        <div className={`text-sm font-bold ${placa.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
-                          {placa.margem.toFixed(1)}%
-                        </div>
+
+                <div className="hidden space-y-3 sm:block">
+                  {comparativoBlocos.map((bloco, blocoIndex) => (
+                    <div key={`custos-${blocoIndex}`} className="overflow-hidden rounded-lg border">
+                      <div
+                        className="grid bg-muted/60 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                        style={{ gridTemplateColumns: `minmax(118px, 1.15fr) repeat(${bloco.length}, minmax(0, 1fr))` }}
+                      >
+                        <div className="px-3 py-2.5 text-left">Custo / indicador</div>
+                        {bloco.map((placa) => (
+                          <button
+                            type="button"
+                            key={placa.id}
+                            onClick={() => setPlacaSelecionadaId(placa.id)}
+                            className="truncate border-l px-2 py-2.5 text-center font-bold text-foreground hover:bg-muted"
+                            title={placa.nome}
+                          >
+                            {placa.nome}
+                          </button>
+                        ))}
                       </div>
-                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                        <div>
-                          <div className="text-muted-foreground">Receita</div>
-                          <div className="mt-0.5 font-semibold">{money(placa.receita)}</div>
+
+                      {([
+                        ["Cargas", (placa: (typeof comparativoPlacas)[number]) => String(placa.viagens), false],
+                        ["Diária", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.diaria), false],
+                        ["Chapa", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.chapa), false],
+                        ["Comissão", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.comissao), false],
+                        ["Diesel + ARLA", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.diesel), false],
+                        ["Pedágio", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.pedagio), false],
+                        ["Manutenção", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.manutencao), false],
+                        ["Outros", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.outros), false],
+                        ["Custo total", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.despesa), true],
+                      ] as const).map(([label, getValue, destaque]) => (
+                        <div
+                          key={label}
+                          className={`grid border-t text-[11px] ${destaque ? "bg-muted/30 font-semibold" : ""}`}
+                          style={{ gridTemplateColumns: `minmax(118px, 1.15fr) repeat(${bloco.length}, minmax(0, 1fr))` }}
+                        >
+                          <div className="px-3 py-2.5 font-medium">{label}</div>
+                          {bloco.map((placa) => (
+                            <div key={`${label}-${placa.id}`} className="min-w-0 border-l px-2 py-2.5 text-center" title={label === "Cargas" ? `${placa.viagens} carga(s)` : undefined}>
+                              {getValue(placa)}
+                            </div>
+                          ))}
                         </div>
-                        <div>
-                          <div className="text-muted-foreground">Custo</div>
-                          <div className="mt-0.5 font-semibold">{money(placa.despesa)}</div>
-                        </div>
-                        <div>
-                          <div className="text-muted-foreground">Resultado</div>
-                          <div className={`mt-0.5 font-semibold ${placa.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
-                            {money(placa.resultado)}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
+                      ))}
+                    </div>
                   ))}
+                </div>
+
+                <div className="space-y-3 sm:hidden">
+                  {comparativoBlocosMobile.map((bloco, blocoIndex) => (
+                    <div key={`custos-mobile-${blocoIndex}`} className="overflow-hidden rounded-lg border">
+                      <div
+                        className="grid bg-muted/60 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                        style={{ gridTemplateColumns: `108px repeat(${bloco.length}, minmax(0, 1fr))` }}
+                      >
+                        <div className="px-2 py-2.5">Custo</div>
+                        {bloco.map((placa) => (
+                          <button type="button" key={placa.id} onClick={() => setPlacaSelecionadaId(placa.id)} className="truncate border-l px-1.5 py-2.5 text-center font-bold text-foreground">
+                            {placa.nome}
+                          </button>
+                        ))}
+                      </div>
+                      {([
+                        ["Cargas", (placa: (typeof comparativoPlacas)[number]) => String(placa.viagens), false],
+                        ["Diária", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.diaria), false],
+                        ["Chapa", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.chapa), false],
+                        ["Comissão", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.comissao), false],
+                        ["Diesel + ARLA", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.diesel), false],
+                        ["Pedágio", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.pedagio), false],
+                        ["Manutenção", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.manutencao), false],
+                        ["Outros", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.outros), false],
+                        ["Custo total", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.despesa), true],
+                      ] as const).map(([label, getValue, destaque]) => (
+                        <div key={label} className={`grid border-t text-[10px] ${destaque ? "bg-muted/30 font-semibold" : ""}`} style={{ gridTemplateColumns: `108px repeat(${bloco.length}, minmax(0, 1fr))` }}>
+                          <div className="px-2 py-2.5 font-medium">{label}</div>
+                          {bloco.map((placa) => <div key={`${label}-${placa.id}`} className="border-l px-1.5 py-2.5 text-center">{getValue(placa)}</div>)}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <span>Total da frota: <strong className="text-foreground">{comparativoTotais.cargas} carga(s)</strong></span>
+                  <span>Custo consolidado: <strong className="text-foreground">{money(comparativoTotais.custo)}</strong></span>
                 </div>
               </div>
             ) : null}
@@ -748,58 +843,101 @@ export default function Financeiro() {
 
         <Card className={activeTab === "GERAL" ? "" : "hidden"}>
           <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <CardTitle className="text-base">Rentabilidade comparativa</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">Compare desempenho sem tabelas largas.</p>
+                <CardTitle className="text-base">Rentabilidade por placa</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">Cabeçalho compacto para comparar receita, custo e eficiência da frota.</p>
               </div>
-              <div className="flex flex-wrap rounded-lg border p-1">
-                {([
-                  ["VEICULO", "Caminhões", Truck],
-                  ["CLIENTE", "Clientes", Users],
-                  ["VIAGEM", "Viagens", Route],
-                ] as const).map(([key, label, Icon]) => (
-                  <Button key={key} size="sm" variant={ranking === key ? "default" : "ghost"} onClick={() => setRanking(key)}>
-                    <Icon className="mr-1.5 h-4 w-4" />{label}
-                  </Button>
-                ))}
-              </div>
+              <span className="text-[11px] text-muted-foreground">Valores completos aparecem ao passar o mouse.</span>
             </div>
           </CardHeader>
           <CardContent>
-            {(() => {
-              const rows = ranking === "VEICULO"
-                ? (analise?.porVeiculo || [])
-                : ranking === "CLIENTE"
-                  ? (analise?.porCliente || [])
-                  : (analise?.porViagem || []).map((v) => ({ ...v, nome: `${v.placa} · ${v.destino}`, viagens: 1 }));
-              const ordenados = [...rows].sort((a, b) => b.resultado - a.resultado);
-              if (!ordenados.length) return <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Sem dados de rentabilidade para o período selecionado.</div>;
-              return (
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {ordenados.slice(0, 12).map((row: any, index) => (
-                    <div key={row.id} className="rounded-lg border p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate font-semibold">{row.nome}</div>
-                          <div className="mt-0.5 text-xs text-muted-foreground">{row.viagens} viagem(ns){row.distanciaKm ? ` · ${Math.round(row.distanciaKm).toLocaleString("pt-BR")} km` : ""}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-[11px] text-muted-foreground">#{index + 1}</div>
-                          <div className={`text-sm font-bold ${row.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{row.margem.toFixed(1)}%</div>
-                        </div>
+            {comparativoPlacas.length === 0 ? (
+              <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Sem dados de rentabilidade para o período selecionado.</div>
+            ) : (
+              <>
+                <div className="hidden space-y-3 sm:block">
+                  {comparativoBlocos.map((bloco, blocoIndex) => (
+                    <div key={`rentabilidade-${blocoIndex}`} className="overflow-hidden rounded-lg border">
+                      <div
+                        className="grid bg-muted/60 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                        style={{ gridTemplateColumns: `minmax(118px, 1.15fr) repeat(${bloco.length}, minmax(0, 1fr))` }}
+                      >
+                        <div className="px-3 py-2.5">Indicador</div>
+                        {bloco.map((placa) => (
+                          <button
+                            type="button"
+                            key={placa.id}
+                            onClick={() => setPlacaSelecionadaId(placa.id)}
+                            className="truncate border-l px-2 py-2.5 text-center font-bold text-foreground hover:bg-muted"
+                            title={placa.nome}
+                          >
+                            {placa.nome}
+                          </button>
+                        ))}
                       </div>
-                      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                        <div><div className="text-xs text-muted-foreground">Receita</div><div className="font-semibold">{money(row.receita)}</div></div>
-                        <div><div className="text-xs text-muted-foreground">Custos</div><div className="font-semibold">{money(row.despesa)}</div></div>
-                        <div><div className="text-xs text-muted-foreground">Resultado</div><div className={`font-semibold ${row.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>{money(row.resultado)}</div></div>
-                        <div><div className="text-xs text-muted-foreground">Lucro/km</div><div className="font-semibold">{money(row.lucroKm)}</div></div>
-                      </div>
+
+                      {([
+                        ["Cargas", (placa: (typeof comparativoPlacas)[number]) => String(placa.viagens), () => ""],
+                        ["Receita", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.receita), () => ""],
+                        ["Custos", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.despesa), () => ""],
+                        ["Resultado", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.resultado), (placa: (typeof comparativoPlacas)[number]) => placa.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"],
+                        ["Margem", (placa: (typeof comparativoPlacas)[number]) => `${placa.margem.toFixed(1)}%`, (placa: (typeof comparativoPlacas)[number]) => placa.margem >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"],
+                        ["Custo/km", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.custoKm), () => ""],
+                        ["Lucro/km", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.lucroKm), (placa: (typeof comparativoPlacas)[number]) => placa.lucroKm >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"],
+                      ] as const).map(([label, getValue, getClass]) => (
+                        <div
+                          key={label}
+                          className={`grid border-t text-[11px] ${label === "Resultado" || label === "Margem" ? "bg-muted/20 font-semibold" : ""}`}
+                          style={{ gridTemplateColumns: `minmax(118px, 1.15fr) repeat(${bloco.length}, minmax(0, 1fr))` }}
+                        >
+                          <div className="px-3 py-2.5 font-medium">{label}</div>
+                          {bloco.map((placa) => (
+                            <div key={`${label}-${placa.id}`} className={`min-w-0 border-l px-2 py-2.5 text-center ${getClass(placa)}`}>
+                              {getValue(placa)}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
-              );
-            })()}
+
+                <div className="space-y-3 sm:hidden">
+                  {comparativoBlocosMobile.map((bloco, blocoIndex) => (
+                    <div key={`rentabilidade-mobile-${blocoIndex}`} className="overflow-hidden rounded-lg border">
+                      <div className="grid bg-muted/60 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" style={{ gridTemplateColumns: `108px repeat(${bloco.length}, minmax(0, 1fr))` }}>
+                        <div className="px-2 py-2.5">Indicador</div>
+                        {bloco.map((placa) => (
+                          <button type="button" key={placa.id} onClick={() => setPlacaSelecionadaId(placa.id)} className="truncate border-l px-1.5 py-2.5 text-center font-bold text-foreground">
+                            {placa.nome}
+                          </button>
+                        ))}
+                      </div>
+                      {([
+                        ["Cargas", (placa: (typeof comparativoPlacas)[number]) => String(placa.viagens), () => ""],
+                        ["Receita", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.receita), () => ""],
+                        ["Custos", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.despesa), () => ""],
+                        ["Resultado", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.resultado), (placa: (typeof comparativoPlacas)[number]) => placa.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"],
+                        ["Margem", (placa: (typeof comparativoPlacas)[number]) => `${placa.margem.toFixed(1)}%`, (placa: (typeof comparativoPlacas)[number]) => placa.margem >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"],
+                        ["Custo/km", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.custoKm), () => ""],
+                        ["Lucro/km", (placa: (typeof comparativoPlacas)[number]) => moneyTable(placa.lucroKm), (placa: (typeof comparativoPlacas)[number]) => placa.lucroKm >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"],
+                      ] as const).map(([label, getValue, getClass]) => (
+                        <div key={label} className={`grid border-t text-[10px] ${label === "Resultado" || label === "Margem" ? "bg-muted/20 font-semibold" : ""}`} style={{ gridTemplateColumns: `108px repeat(${bloco.length}, minmax(0, 1fr))` }}>
+                          <div className="px-2 py-2.5 font-medium">{label}</div>
+                          {bloco.map((placa) => <div key={`${label}-${placa.id}`} className={`border-l px-1.5 py-2.5 text-center ${getClass(placa)}`}>{getValue(placa)}</div>)}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <span>Resultado consolidado: <strong className={dreOperacional.totais.resultado >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}>{money(dreOperacional.totais.resultado)}</strong></span>
+                  <span>Margem: <strong className="text-foreground">{dreOperacional.totais.margem.toFixed(1)}%</strong></span>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 

@@ -11,11 +11,23 @@ function listDateRange(query?: Record<string, unknown>) {
   const to = typeof query?.to === "string" && query.to ? parseDateOnly(query.to) : undefined;
   return from || to ? { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } : undefined;
 }
+
 const serialize = (item: any) => ({
-  id: item.id, motoristaId: item.motoristaId, dataInicio: dateOnly(item.dataInicio), dataFim: dateOnly(item.dataFim),
-  viagens: item.viagens.map((v: any) => ({ localId: v.localId, quantidade: v.quantidade, dataViagem: v.dataViagem ? dateOnly(v.dataViagem) : undefined })),
-  valorTotal: number(item.valorTotal), createdAt: created(item.createdAt),
+  id: item.id,
+  motoristaId: item.motoristaId,
+  dataInicio: dateOnly(item.dataInicio),
+  dataFim: dateOnly(item.dataFim),
+  viagens: item.viagens.map((v: any) => ({
+    localId: v.localId,
+    quantidade: v.quantidade,
+    dataViagem: v.dataViagem ? dateOnly(v.dataViagem) : undefined,
+  })),
+  salarioFixo: number(item.salarioFixo),
+  valorComissoes: number(item.valorComissoes),
+  valorTotal: number(item.valorTotal),
+  createdAt: created(item.createdAt),
 });
+
 const nested = (input: any) =>
   input.viagens.map((v: any) => ({
     localId: v.localId,
@@ -23,7 +35,7 @@ const nested = (input: any) =>
     dataViagem: v.dataViagem ? parseDateOnly(v.dataViagem) : null,
   }));
 
-async function calcularValorTotal(viagens: Array<{ localId: string; quantidade: number }>) {
+async function calcularValorComissoes(viagens: Array<{ localId: string; quantidade: number }>) {
   const localIds = Array.from(new Set(viagens.map((viagem) => viagem.localId)));
   const locais = await prisma.local.findMany({
     where: { id: { in: localIds } },
@@ -42,7 +54,7 @@ async function calcularValorTotal(viagens: Array<{ localId: string; quantidade: 
         uf: local.uf,
         valorLegado: number(local.valorComissao),
       }),
-    ])
+    ]),
   );
 
   return viagens.reduce((total, viagem) => {
@@ -54,28 +66,46 @@ async function calcularValorTotal(viagens: Array<{ localId: string; quantidade: 
 async function ensureMotoristaDisponivel(motoristaId: string, fechamentoId?: string) {
   const motorista = await prisma.motorista.findUnique({
     where: { id: motoristaId },
-    select: { status: true },
+    select: { status: true, salarioBase: true },
   });
   if (!motorista) throw new AppError(404, "Motorista não encontrado.");
-  if (motorista.status === "ATIVO") return;
+  if (motorista.status === "ATIVO") return motorista;
 
   if (fechamentoId) {
     const atual = await prisma.fechamento.findUnique({
       where: { id: fechamentoId },
       select: { motoristaId: true },
     });
-    if (atual?.motoristaId === motoristaId) return;
+    if (atual?.motoristaId === motoristaId) return motorista;
   }
 
-  throw new AppError(409, "Motorista demitido não pode ser selecionado em um novo fechamento.");
+  throw new AppError(409, "Motorista demitido não pode ser selecionado em um novo holerite.");
 }
 
 export const fechamentosService = {
-  async list(query?: Record<string, unknown>) { const range = listDateRange(query); return (await prisma.fechamento.findMany({ where: range ? { dataInicio: range } : undefined, include, orderBy: { createdAt: "desc" } })).map(serialize); },
-  async get(id: string) { const item = await prisma.fechamento.findUnique({ where: { id }, include }); if (!item) throw new AppError(404, "Fechamento não encontrado."); return serialize(item); },
+  async list(query?: Record<string, unknown>) {
+    const range = listDateRange(query);
+    return (
+      await prisma.fechamento.findMany({
+        where: range ? { dataInicio: range } : undefined,
+        include,
+        orderBy: { createdAt: "desc" },
+      })
+    ).map(serialize);
+  },
+
+  async get(id: string) {
+    const item = await prisma.fechamento.findUnique({ where: { id }, include });
+    if (!item) throw new AppError(404, "Holerite não encontrado.");
+    return serialize(item);
+  },
+
   async create(input: any) {
-    await ensureMotoristaDisponivel(input.motoristaId);
-    const valorTotal = await calcularValorTotal(input.viagens);
+    const motorista = await ensureMotoristaDisponivel(input.motoristaId);
+    const valorComissoes = await calcularValorComissoes(input.viagens);
+    const salarioFixo = number(motorista.salarioBase);
+    const valorTotal = salarioFixo + valorComissoes;
+
     const item = await prisma.fechamento.create({
       include,
       data: {
@@ -83,6 +113,8 @@ export const fechamentosService = {
         motoristaId: input.motoristaId,
         dataInicio: parseDateOnly(input.dataInicio),
         dataFim: parseDateOnly(input.dataFim),
+        salarioFixo,
+        valorComissoes,
         valorTotal,
         createdAt: input.createdAt ? new Date(input.createdAt) : undefined,
         viagens: { create: nested(input) },
@@ -90,9 +122,13 @@ export const fechamentosService = {
     });
     return serialize(item);
   },
+
   async update(id: string, input: any) {
-    await ensureMotoristaDisponivel(input.motoristaId, id);
-    const valorTotal = await calcularValorTotal(input.viagens);
+    const motorista = await ensureMotoristaDisponivel(input.motoristaId, id);
+    const valorComissoes = await calcularValorComissoes(input.viagens);
+    const salarioFixo = number(motorista.salarioBase);
+    const valorTotal = salarioFixo + valorComissoes;
+
     const item = await prisma.$transaction(async (tx: any) => {
       await tx.fechamentoViagem.deleteMany({ where: { fechamentoId: id } });
       return tx.fechamento.update({
@@ -102,6 +138,8 @@ export const fechamentosService = {
           motoristaId: input.motoristaId,
           dataInicio: parseDateOnly(input.dataInicio),
           dataFim: parseDateOnly(input.dataFim),
+          salarioFixo,
+          valorComissoes,
           valorTotal,
           viagens: { create: nested(input) },
         },
@@ -109,5 +147,8 @@ export const fechamentosService = {
     });
     return serialize(item);
   },
-  async remove(id: string) { await prisma.fechamento.delete({ where: { id } }); },
+
+  async remove(id: string) {
+    await prisma.fechamento.delete({ where: { id } });
+  },
 };

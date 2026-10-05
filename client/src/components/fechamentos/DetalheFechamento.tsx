@@ -39,7 +39,7 @@ export default function DetalheFechamento({
     <Dialog open={Boolean(fechamento)} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>Detalhes do Fechamento</DialogTitle>
+          <DialogTitle>Detalhes do Holerite</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -102,14 +102,20 @@ export default function DetalheFechamento({
             </div>
           </div>
 
-          {/* Total */}
-          <div className="flex items-center justify-between rounded-lg bg-primary/5 p-4">
-            <span className="text-sm font-semibold text-muted-foreground">
-              Valor Total
-            </span>
-            <span className="font-display text-2xl font-bold text-primary">
-              {formatBRL(fechamento.valorTotal)}
-            </span>
+          {/* Resumo financeiro */}
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div className="rounded-lg border border-border bg-muted/20 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Salário Fixo</p>
+              <p className="mt-1 text-lg font-bold text-foreground">{formatBRL(fechamento.salarioFixo || 0)}</p>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/20 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comissões</p>
+              <p className="mt-1 text-lg font-bold text-foreground">{formatBRL(fechamento.valorComissoes || 0)}</p>
+            </div>
+            <div className="rounded-lg bg-primary/5 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total do Holerite</p>
+              <p className="mt-1 font-display text-xl font-bold text-primary">{formatBRL(fechamento.valorTotal)}</p>
+            </div>
           </div>
         </div>
 

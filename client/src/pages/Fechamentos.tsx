@@ -79,7 +79,7 @@ export default function Fechamentos() {
 
   const handleOpenCreate = () => {
     if (motoristasAtivos.length === 0) {
-      toast.error("Cadastre ou reative pelo menos um motorista antes de criar um fechamento.");
+      toast.error("Cadastre ou reative pelo menos um motorista antes de criar um holerite.");
       return;
     }
     if (locais.length === 0) {
@@ -99,16 +99,16 @@ export default function Fechamentos() {
   const handleDelete = async (f: Fechamento) => {
     try {
       await remove(f.id);
-      toast.success("Fechamento excluído com sucesso!");
+      toast.success("Holerite excluído com sucesso!");
     } catch (error: any) {
       console.error("Falha ao excluir fechamento.", error);
-      toast.error(error?.response?.data?.message ?? "Não foi possível excluir o fechamento.");
+      toast.error(error?.response?.data?.message ?? "Não foi possível excluir o holerite.");
     }
   };
 
   const handleExportCSV = () => {
     if (filteredFechamentos.length === 0) {
-      toast.error("Nenhum fechamento para exportar.");
+      toast.error("Nenhum holerite para exportar.");
       return;
     }
     exportToCSV(filteredFechamentos, motoristas, locais, viagensCadastradas);
@@ -117,7 +117,7 @@ export default function Fechamentos() {
 
   const handleExportPDF = () => {
     if (filteredFechamentos.length === 0) {
-      toast.error("Nenhum fechamento para exportar.");
+      toast.error("Nenhum holerite para exportar.");
       return;
     }
     exportToPDF(filteredFechamentos, motoristas, locais, viagensCadastradas);
@@ -137,16 +137,15 @@ export default function Fechamentos() {
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="font-display text-2xl font-bold text-foreground">
-              Cálculo de Comissão
+              Holerite
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Selecione o motorista e o período. As viagens são carregadas automaticamente
-              da aba Acerto de Viagem conforme o destino.
+              Salário fixo do motorista somado às comissões das viagens do período, carregadas automaticamente do Acerto de Viagem.
             </p>
           </div>
           <Button onClick={handleOpenCreate}>
             <Plus className="mr-1.5 h-4 w-4" />
-            Novo Fechamento
+            Novo Holerite
           </Button>
         </div>
 
@@ -237,7 +236,13 @@ export default function Fechamentos() {
                     Viagens
                   </th>
                   <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
-                    Valor Total
+                    Salário Fixo
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
+                    Comissões
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
+                    Total do Holerite
                   </th>
                   <th className="px-4 py-3 text-center font-semibold text-muted-foreground">
                     Detalhes
@@ -248,10 +253,10 @@ export default function Fechamentos() {
                 {filteredFechamentos.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={7}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
-                      Nenhum fechamento encontrado. Clique em "Novo Fechamento"
+                      Nenhum holerite encontrado. Clique em "Novo Holerite"
                       para começar.
                     </td>
                   </tr>
@@ -278,6 +283,12 @@ export default function Fechamentos() {
                         <td className="px-4 py-3 text-center text-card-foreground">
                           {totalViagens}
                         </td>
+                        <td className="px-4 py-3 text-right text-card-foreground">
+                          {formatBRL(f.salarioFixo || 0)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-card-foreground">
+                          {formatBRL(f.valorComissoes || 0)}
+                        </td>
                         <td className="px-4 py-3 text-right font-bold text-primary">
                           {formatBRL(f.valorTotal)}
                         </td>
@@ -301,7 +312,7 @@ export default function Fechamentos() {
 
         {filteredFechamentos.length > 0 && (
           <p className="mt-3 text-sm text-muted-foreground">
-            {filteredFechamentos.length} fechamento(s) nos filtros selecionados.
+            {filteredFechamentos.length} holerite(s) nos filtros selecionados.
           </p>
         )}
       </div>

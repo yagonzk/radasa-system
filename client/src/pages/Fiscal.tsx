@@ -238,7 +238,7 @@ export default function Fiscal() {
     const despesas = [
       ["Despesa", "Valor"],
       ["Abastecimento", data.despesas.abastecimento],
-      ["Comissões", data.despesas.comissoes],
+      ["Holerite", data.despesas.comissoes],
       ["Almoxarifado - entradas", data.despesas.almoxarifado],
       ["Pneus - compras", data.despesas.pneusCompra],
       ["Pneus - manutenção", data.despesas.pneusManutencao],
@@ -252,7 +252,7 @@ export default function Fiscal() {
     XLSX.utils.book_append_sheet(workbook, wsDespesas, "Despesas");
 
     const mensal = [
-      ["Mês", "Faturamento", "Abastecimento", "Comissões", "Almoxarifado", "Pneus compra", "Pneus manutenção", "Pedágios", "Diárias", "Chapas", "Despesas", "Resultado"],
+      ["Mês", "Faturamento", "Abastecimento", "Holerite", "Almoxarifado", "Pneus compra", "Pneus manutenção", "Pedágios", "Diárias", "Chapas", "Despesas", "Resultado"],
       ...data.mensal.map((row) => [
         row.label,
         row.faturamento,
@@ -278,7 +278,7 @@ export default function Fiscal() {
 
   const despesasRows = data ? [
     ["Abastecimento", data.despesas.abastecimento, <Fuel className="h-4 w-4" />],
-    ["Comissões", data.despesas.comissoes, <HandCoins className="h-4 w-4" />],
+    ["Holerite", data.despesas.comissoes, <HandCoins className="h-4 w-4" />],
     ["Almoxarifado (entradas)", data.despesas.almoxarifado, <PackageOpen className="h-4 w-4" />],
     ["Pneus (compras)", data.despesas.pneusCompra, <CircleDotDashed className="h-4 w-4" />],
     ["Pneus (manutenção)", data.despesas.pneusManutencao, <CircleDotDashed className="h-4 w-4" />],
@@ -419,7 +419,7 @@ export default function Fiscal() {
                         <th className="px-4 py-3 text-left">Mês</th>
                         <th className="px-3 py-3 text-right">Faturamento</th>
                         <th className="px-3 py-3 text-right">Abastecimento</th>
-                        <th className="px-3 py-3 text-right">Comissões</th>
+                        <th className="px-3 py-3 text-right">Holerite</th>
                         <th className="px-3 py-3 text-right">Almoxarifado</th>
                         <th className="px-3 py-3 text-right">Pneus</th>
                         <th className="px-3 py-3 text-right">Pedágios</th>

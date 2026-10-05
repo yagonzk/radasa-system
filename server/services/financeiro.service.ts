@@ -4,6 +4,7 @@ import { parseDateOnly } from "../utils/date.js";
 import { dateOnly, number, created } from "../utils/serialize.js";
 import { maintenanceDreValue, isGeneratedMaintenanceEntry } from "./financeiro-dre.js";
 import { runWithConcurrency } from "../utils/concurrency.js";
+import { valorComissaoPorDestino } from "../utils/comissao.js";
 const clean=(v:any)=>v?String(v):null;
 const serialize=(x:any)=>({...x,valor:number(x.valor),dataCompetencia:dateOnly(x.dataCompetencia),dataVencimento:x.dataVencimento?dateOnly(x.dataVencimento):null,dataPagamento:x.dataPagamento?dateOnly(x.dataPagamento):null,createdAt:created(x.createdAt)});
 const data=(i:any)=>{
@@ -18,7 +19,14 @@ const data=(i:any)=>{
 const normalizeCategory=(value:any)=>String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase();
 const isManualFuelCategory=(value:any)=>{const c=normalizeCategory(value);return c.includes("COMBUST")||c.includes("DIESEL")||c.includes("ABASTEC")||c.includes("ARLA")};
 const isFreightRevenueCategory=(value:any)=>{const c=normalizeCategory(value);return c.includes("FRETE")};
+const isManualCommissionCategory=(value:any)=>normalizeCategory(value).includes("COMISSAO");
 const classifyFuelProduct=(name:any)=>{const n=normalizeCategory(name);if(n.includes("ARLA"))return "ARLA";if(n.includes("DIESEL"))return "DIESEL";return null};
+const normalizeCidade=(value:any)=>normalizeCategory(value).replace(/\s*[\/,-]?\s*(MT|PA)$/i, "").trim();
+const comissaoDaViagem=(viagem:any,locais:any[])=>{
+ const local=locais.find((item:any)=>normalizeCidade(item.cidade)===normalizeCidade(viagem.cidadeEntrega));
+ if(local)return valorComissaoPorDestino({cidade:local.cidade,uf:local.uf,valorLegado:number(local.valorComissao)});
+ return number(viagem.valorComissao);
+};
 export const financeiroService={
  async list(query?:Record<string,unknown>){
   const from=typeof query?.from==="string"&&query.from?parseDateOnly(query.from):undefined,to=typeof query?.to==="string"&&query.to?parseDateOnly(query.to):undefined;
@@ -37,7 +45,7 @@ export const financeiroService={
  },
  async resumo(from?:string,to?:string){
   const range=(from||to)?{...(from?{gte:parseDateOnly(from)}:{}),...(to?{lte:parseDateOnly(to)}:{})}:undefined;
-  const [manual,viagens,romaneios,abastecimentos,estoque,pneus,recapagens,consertos,ordensManutencao,baixasResumo]=await runWithConcurrency([
+  const [manual,viagens,romaneios,abastecimentos,estoque,pneus,recapagens,consertos,ordensManutencao,locais,baixasResumo]=await runWithConcurrency([
    () => prisma.lancamentoFinanceiro.findMany({where:range?{dataCompetencia:range}:undefined}),
    () => prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}),
    () => prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{produtos:{select:{valorTotal:true}}}}),
@@ -47,35 +55,42 @@ export const financeiroService={
    () => prisma.pneuRecapagem.findMany({where:range?{dataEnvio:range}:undefined}),
    () => prisma.pneuConserto.findMany({where:range?{data:range}:undefined}),
    () => prisma.ordemServico.findMany({where:{status:"CONCLUIDA",...(range?{dataConclusao:range}:{})},select:{numero:true,valorPecas:true,valorMaoObra:true,valorOutros:true,desconto:true}}),
+   () => prisma.local.findMany({select:{cidade:true,uf:true,valorComissao:true}}),
    () => prisma.baixaFinanceira.findMany()
   ] as const, 2);
   const categorias:Record<string,number>={}; const add=(k:string,v:any)=>categorias[k]=(categorias[k]||0)+number(v);
   let receitasAutomaticas=0,despesasAutomaticas=0;
   // Receita de frete da DRE vem exclusivamente dos Romaneios.
   for(const m of romaneios){for(const p of m.produtos){const valor=number(p.valorTotal);receitasAutomaticas+=valor;add("Receita de fretes",valor)}}
-  // Custos operacionais da viagem continuam vindo do Acerto de Viagem, sem usar abastecimento, comissão ou custo extra: esses três não entram no DRE Operacional.
-  for(const v of viagens){for(const [k,val] of [["Pedágios",v.valorPedagio],["Diárias",v.valorDiaria],["Chapas",v.valorChapa],["Multas",v.valorMulta]] as const){despesasAutomaticas+=number(val);add(k,val)}}
-  // Combustível é calculado pelos itens reais dos Abastecimentos: Diesel separado de ARLA.
-  for(const x of abastecimentos){for(const p of x.produtos){const tipo=classifyFuelProduct(p.produto.nome);if(tipo==="DIESEL"){despesasAutomaticas+=number(p.valorTotal);add("Abastecimento",p.valorTotal)}else if(tipo==="ARLA"){despesasAutomaticas+=number(p.valorTotal);add("ARLA",p.valorTotal)}}}
-  // Comissão do Acerto/Fechamento de Viagem é custo interno da viagem e não compõe o DRE Operacional.
+  // Custos operacionais da viagem vêm do Acerto de Viagem. A comissão usa a mesma regra oficial do Fechamento:
+  // uma comissão por carga/viagem, calculada automaticamente pela cidade de entrega.
+  for(const v of viagens){
+   for(const [k,val] of [["Pedágios",v.valorPedagio],["Diárias",v.valorDiaria],["Chapas",v.valorChapa],["Multas",v.valorMulta]] as const){despesasAutomaticas+=number(val);add(k,val)}
+   const comissao=comissaoDaViagem(v,locais);if(comissao>0){despesasAutomaticas+=comissao;add("Comissão",comissao)}
+  }
+  // Diesel e ARLA são somados no mesmo grupo operacional para leitura compacta da DRE.
+  for(const x of abastecimentos){for(const p of x.produtos){const tipo=classifyFuelProduct(p.produto.nome);if(tipo){despesasAutomaticas+=number(p.valorTotal);add("Diesel",p.valorTotal)}}}
+  // A comissão passa a compor o DRE automaticamente, sem depender de lançamento manual.
   for(const x of estoque){despesasAutomaticas+=number(x.valorTotal);add(x.produto.categoria||"Almoxarifado",x.valorTotal)} for(const x of pneus){despesasAutomaticas+=number(x.valorCompra);add("Pneus",x.valorCompra)} for(const x of recapagens){despesasAutomaticas+=number(x.valor);add("Recapagem",x.valor)} for(const x of consertos){despesasAutomaticas+=number(x.valor);add("Conserto de pneus",x.valor)}
   // Manutenção no DRE vem diretamente das OS concluídas. Peças continuam separadas pelo Almoxarifado; aqui entram apenas mão de obra/outros, líquido do desconto.
   for(const os of ordensManutencao){const valor=maintenanceDreValue(os);if(valor>0){despesasAutomaticas+=valor;add("Manutenção",valor)}}
   const numerosOsManutencao=new Set(ordensManutencao.map(os=>os.numero));
   const pagosResumo=new Map<string,number>();for(const b of baixasResumo)pagosResumo.set(b.lancamentoId,(pagosResumo.get(b.lancamentoId)||0)+number(b.valor));
-  let receitasManuais=0,despesasManuais=0,aReceber=0,aPagar=0; for(const x of manual){if(x.status==="CANCELADO")continue; const v=number(x.valor),saldo=Math.max(0,v-(pagosResumo.get(x.id)||0)); if(x.tipo==="RECEITA"){aReceber+=saldo;if(isFreightRevenueCategory(x.categoria))continue;receitasManuais+=v;add(x.categoria,v)}else{aPagar+=saldo;if(isManualFuelCategory(x.categoria)||isGeneratedMaintenanceEntry(x,numerosOsManutencao))continue;despesasManuais+=v;add(x.categoria,v)}}
+  let receitasManuais=0,despesasManuais=0,aReceber=0,aPagar=0; for(const x of manual){if(x.status==="CANCELADO")continue; const v=number(x.valor),saldo=Math.max(0,v-(pagosResumo.get(x.id)||0)); if(x.tipo==="RECEITA"){aReceber+=saldo;if(isFreightRevenueCategory(x.categoria))continue;receitasManuais+=v;add(x.categoria,v)}else{aPagar+=saldo;if(isManualFuelCategory(x.categoria)||isManualCommissionCategory(x.categoria)||isGeneratedMaintenanceEntry(x,numerosOsManutencao))continue;despesasManuais+=v;add(x.categoria,v)}}
   const receitas=receitasAutomaticas+receitasManuais, despesas=despesasAutomaticas+despesasManuais, resultado=receitas-despesas; return {receitas,despesas,resultado,margem:receitas?resultado/receitas*100:0,aReceber,aPagar,receitasAutomaticas,despesasAutomaticas,receitasManuais,despesasManuais,categorias:Object.entries(categorias).map(([categoria,valor])=>({categoria,valor})).sort((a,b)=>b.valor-a.valor)};
  },
  async analise(from?:string,to?:string){
   const range=(from||to)?{...(from?{gte:parseDateOnly(from)}:{}),...(to?{lte:parseDateOnly(to)}:{})}:undefined;
-  const [viagens,manual,clientes,veiculos,manifestos,abastecimentos,pneusDetalhe]=await runWithConcurrency([
+  const [viagens,manual,clientes,veiculos,manifestos,abastecimentos,pneusDetalhe,ordensManutencao,locais]=await runWithConcurrency([
    () => prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}),
    () => prisma.lancamentoFinanceiro.findMany({where:{...(range?{dataCompetencia:range}:{}),status:{not:"CANCELADO"}}}),
    () => prisma.cliente.findMany({select:{id:true,nomeFantasia:true,razaoSocial:true}}),
    () => prisma.veiculo.findMany({select:{id:true,placa:true,ipvaValor:true,ipvaVencimento:true,ipvaPago:true,licenciamentoValor:true,licenciamentoVencimento:true,seguroValor:true,seguroValidade:true}}),
    () => prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{id:true,clienteId:true,dataManifesto:true,placaVeiculo:true}}),
    () => prisma.abastecimento.findMany({where:range?{dataEmissao:range}:undefined,select:{veiculoId:true,valorTotal:true,produtos:{select:{valorTotal:true,produto:{select:{nome:true}}}}}}),
-   () => prisma.pneu.findMany({where:{deletedAt:null,...(range?{dataCompra:range}:{})},select:{valorCompra:true,instalacoes:{orderBy:{createdAt:"asc"},take:1,select:{veiculoId:true}}}})
+   () => prisma.pneu.findMany({where:{deletedAt:null,...(range?{dataCompra:range}:{})},select:{valorCompra:true,instalacoes:{orderBy:{createdAt:"asc"},take:1,select:{veiculoId:true}}}}),
+   () => prisma.ordemServico.findMany({where:{status:"CONCLUIDA",...(range?{dataConclusao:range}:{})},select:{numero:true,veiculoId:true,valorPecas:true,valorMaoObra:true,valorOutros:true,desconto:true}}),
+   () => prisma.local.findMany({select:{cidade:true,uf:true,valorComissao:true}})
   ] as const, 2);
   const clienteNome=new Map(clientes.map(x=>[x.id,x.nomeFantasia||x.razaoSocial||"Sem cliente"]));
   const veiculoPlaca=new Map(veiculos.map(x=>[x.id,x.placa]));
@@ -106,8 +121,8 @@ export const financeiroService={
    const idsClientes=clientesDaViagem(v);
    const nomesClientes=idsClientes.map(id=>clienteNome.get(id)||"Sem cliente");
    const cliente=nomesClientes.length?nomesClientes.join(", "):"Sem cliente";
-   const receita=number(v.valorFrete),despesa=number(v.valorPedagio)+number(v.valorDiaria)+number(v.valorChapa)+number(v.valorMulta),dist=number(v.distanciaKm);
-   const vk=norm(placa)||placa;const vr=ensure(byVeiculo,vk,placa);vr.receita+=receita;vr.despesa+=despesa;vr.viagens.add(v.id);vr.distanciaKm+=dist;addCusto(vk,placa,"Pedágios",v.valorPedagio);addCusto(vk,placa,"Diárias",v.valorDiaria);addCusto(vk,placa,"Chapas",v.valorChapa);addCusto(vk,placa,"Multas",v.valorMulta);
+   const receita=number(v.valorFrete),comissao=comissaoDaViagem(v,locais),despesa=number(v.valorPedagio)+number(v.valorDiaria)+number(v.valorChapa)+number(v.valorMulta)+comissao,dist=number(v.distanciaKm);
+   const vk=norm(placa)||placa;const vr=ensure(byVeiculo,vk,placa);vr.receita+=receita;vr.despesa+=despesa;vr.viagens.add(v.id);vr.distanciaKm+=dist;addCusto(vk,placa,"Pedágios",v.valorPedagio);addCusto(vk,placa,"Diárias",v.valorDiaria);addCusto(vk,placa,"Chapas",v.valorChapa);addCusto(vk,placa,"Comissão",comissao);addCusto(vk,placa,"Multas",v.valorMulta);
    if(idsClientes.length){
      const divisor=idsClientes.length;
      for(const clienteId of idsClientes){
@@ -117,23 +132,26 @@ export const financeiroService={
    }
    viagensRows.set(v.id,{id:v.id,codigo:`VIAGEM ${dateOnly(v.dataManifesto)}`,placa,cliente,destino:v.cidadeEntrega||"—",data:dateOnly(v.dataManifesto),receita,despesa,distanciaKm:dist});
   }
-  for(const a of abastecimentos){const placa=veiculoPlaca.get(a.veiculoId)||"";if(placa){const vk=norm(placa)||placa,r=ensure(byVeiculo,vk,placa);for(const p of a.produtos){const tipo=classifyFuelProduct(p.produto.nome);if(!tipo)continue;const valor=number(p.valorTotal);r.despesa+=valor;addCusto(vk,placa,tipo==="ARLA"?"ARLA":"Diesel",valor)}}}
+  for(const a of abastecimentos){const placa=veiculoPlaca.get(a.veiculoId)||"";if(placa){const vk=norm(placa)||placa,r=ensure(byVeiculo,vk,placa);for(const p of a.produtos){const tipo=classifyFuelProduct(p.produto.nome);if(!tipo)continue;const valor=number(p.valorTotal);r.despesa+=valor;addCusto(vk,placa,"Diesel",valor)}}}
   for(const v of veiculos){const vk=norm(v.placa)||v.placa,r=ensure(byVeiculo,vk,v.placa);if(inRange(v.ipvaVencimento)&&!v.ipvaPago){r.despesa+=number(v.ipvaValor);addCusto(vk,v.placa,"IPVA",v.ipvaValor)}if(inRange(v.licenciamentoVencimento)){r.despesa+=number(v.licenciamentoValor);addCusto(vk,v.placa,"Licenciamento",v.licenciamentoValor)}if(inRange(v.seguroValidade)){r.despesa+=number(v.seguroValor);addCusto(vk,v.placa,"Seguro",v.seguroValor)}}
   for(const pneu of pneusDetalhe){const vid=pneu.instalacoes[0]?.veiculoId,placa=vid?veiculoPlaca.get(vid)||"":"";if(placa){const vk=norm(placa)||placa;const r=ensure(byVeiculo,vk,placa);r.despesa+=number(pneu.valorCompra);addCusto(vk,placa,"Pneus",pneu.valorCompra)}}
+  const numerosOsManutencao=new Set(ordensManutencao.map((os:any)=>os.numero));
+  for(const os of ordensManutencao){const placa=veiculoPlaca.get(os.veiculoId)||"";const valor=maintenanceDreValue(os);if(placa&&valor>0){const vk=norm(placa)||placa,r=ensure(byVeiculo,vk,placa);r.despesa+=valor;addCusto(vk,placa,"Manutenção",valor)}}
   for(const x of manual){
    const val=number(x.valor),isRec=x.tipo==="RECEITA"; const viagem=x.viagemId?viagemMap.get(x.viagemId):null;
+   const ignoraDespesa=!isRec&&(isManualFuelCategory(x.categoria)||isManualCommissionCategory(x.categoria)||isGeneratedMaintenanceEntry(x,numerosOsManutencao));
    const placa=x.veiculoId?veiculoPlaca.get(x.veiculoId)||"":viagem?.placa||"";
-   if(placa){const vk=norm(placa)||placa,r=ensure(byVeiculo,vk,placa);if(isRec)r.receita+=val;else if(!isManualFuelCategory(x.categoria)){r.despesa+=val;addCusto(vk,placa,x.categoria||"Outras despesas",val)}if(x.viagemId)r.viagens.add(x.viagemId)}
+   if(placa){const vk=norm(placa)||placa,r=ensure(byVeiculo,vk,placa);if(isRec)r.receita+=val;else if(!ignoraDespesa){r.despesa+=val;addCusto(vk,placa,x.categoria||"Outras despesas",val)}if(x.viagemId)r.viagens.add(x.viagemId)}
    const idsClientes=x.clienteId?[x.clienteId]:(viagem?clientesDaViagem(viagem):[]);
    if(idsClientes.length){
      const divisor=idsClientes.length;
      for(const clienteId of idsClientes){
        const r=ensure(byCliente,clienteId,clienteNome.get(clienteId)||"Sem cliente");
-       if(isRec)r.receita+=val/divisor;else r.despesa+=val/divisor;
+       if(isRec)r.receita+=val/divisor;else if(!ignoraDespesa)r.despesa+=val/divisor;
        if(x.viagemId)r.viagens.add(x.viagemId);
      }
    }
-   if(x.viagemId&&viagensRows.has(x.viagemId)){const r=viagensRows.get(x.viagemId)!;if(isRec)r.receita+=val;else r.despesa+=val}
+   if(x.viagemId&&viagensRows.has(x.viagemId)){const r=viagensRows.get(x.viagemId)!;if(isRec)r.receita+=val;else if(!ignoraDespesa)r.despesa+=val}
   }
   const finish=(m:any):Row[]=>Array.from(m.values()).map((x:any)=>{const resultado=x.receita-x.despesa;return{id:x.id,nome:x.nome,receita:x.receita,despesa:x.despesa,resultado,margem:x.receita?resultado/x.receita*100:0,viagens:x.viagens.size,distanciaKm:x.distanciaKm,custoKm:x.distanciaKm?x.despesa/x.distanciaKm:0,lucroKm:x.distanciaKm?resultado/x.distanciaKm:0}}).sort((a:any,b:any)=>b.resultado-a.resultado);
   const porViagem=Array.from(viagensRows.values()).map(x=>{const resultado=x.receita-x.despesa;return{...x,resultado,margem:x.receita?resultado/x.receita*100:0,custoKm:x.distanciaKm?x.despesa/x.distanciaKm:0,lucroKm:x.distanciaKm?resultado/x.distanciaKm:0}}).sort((a,b)=>b.resultado-a.resultado);

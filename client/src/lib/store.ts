@@ -67,7 +67,7 @@ export interface EstoqueMovimentacao { id:string; produtoId:string; tipo:TipoMov
 export interface EstoqueResumo { produto:EstoqueProduto; entradas:number; saidas:number; estoque:number; valorEstoque:number; }
 export interface Local { id: string; cidade: string; uf?: string | null; valorComissao: number; createdAt: string; }
 export interface ViagemFechamento { localId: string; quantidade: number; dataViagem?: string; }
-export interface Fechamento { id: string; motoristaId: string; dataInicio: string; dataFim: string; viagens: ViagemFechamento[]; valorTotal: number; createdAt: string; }
+export interface Fechamento { id: string; motoristaId: string; dataInicio: string; dataFim: string; viagens: ViagemFechamento[]; salarioFixo: number; valorComissoes: number; valorTotal: number; createdAt: string; }
 export type SubcategoriaVeiculo = "CAMINHAO" | "CARRO" | "MOTO";
 export interface Veiculo {
   id: string; placa: string; modelo?: string; marca?: string; renavam?: string; chassi?: string; anoFabricacao?: number | null;

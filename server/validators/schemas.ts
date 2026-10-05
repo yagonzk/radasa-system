@@ -251,7 +251,7 @@ export const viagemBody = z.object({
 export const fechamentoBody = z.object({
   id: id.optional(), motoristaId: id, dataInicio: dateOnly, dataFim: dateOnly,
   viagens: z.array(z.object({ localId: id, quantidade: z.coerce.number().int().min(1), dataViagem: dateOnly.optional().nullable() })),
-  valorTotal: money.optional(), createdAt: z.string().optional(),
+  salarioFixo: money.optional(), valorComissoes: money.optional(), valorTotal: money.optional(), createdAt: z.string().optional(),
 });
 export const tipoManifesto = z.enum(["Bonificação - Lebrinha", "Acertar c/ Lebrinha", "Receber c/ Cliente", "Vasilhame"]);
 export const manifestoProdutoBody = z.object({

@@ -39,11 +39,10 @@ const navGroups = [
     icon: <WalletCards className="h-[18px] w-[18px]" />,
     items: [
       { label: "DRE Operacional", href: "/financeiro", icon: <WalletCards className="h-4 w-4" />, matchPaths: ["/financeiro"] },
-      { label: "Comissões", href: "/fechamentos", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/fechamentos"] },
+      { label: "Holerite", href: "/holerite", icon: <HandCoins className="h-4 w-4" />, matchPaths: ["/holerite", "/fechamentos"] },
       { label: "Almoxarifado", href: "/estoque", icon: <Boxes className="h-4 w-4" />, matchPaths: ["/estoque"] },
       { label: "CIOT", href: "/ciot/gerar", icon: <FileBadge2 className="h-4 w-4" />, matchPaths: ["/ciot"] },
       { label: "BI Gerencial", href: "/bi", icon: <BarChart3 className="h-4 w-4" />, matchPaths: ["/bi"] },
-      { label: "BI v2", href: "/bi-v2", icon: <BarChart3 className="h-4 w-4" />, matchPaths: ["/bi-v2"] },
     ],
   },
   {
@@ -79,7 +78,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isDark = theme === "dark";
   const configuredPermissions = user?.permissoes && Object.keys(user.permissoes).length > 0;
-  const permissionFor = (href: string) => href.startsWith("/demandas") ? "demandas" : href.startsWith("/romaneios") ? "romaneios" : href.startsWith("/viagens") || href.startsWith("/pedagios") ? "viagens" : href.startsWith("/abastecimentos") ? "abastecimentos" : href.startsWith("/manutencao") || href.startsWith("/pneus") ? "frota" : href.startsWith("/financeiro") || href.startsWith("/fechamentos") ? "financeiro" : href.startsWith("/ciot") || href.startsWith("/fiscal") ? "fiscal" : href.startsWith("/comercial") ? "comercial" : href.startsWith("/bi") ? "bi" : href.startsWith("/cadastros") || href.startsWith("/estoque") ? "cadastros" : href.startsWith("/portal-motorista") ? "portal_motorista" : href.startsWith("/alertas") ? "dashboard" : "dashboard";
+  const permissionFor = (href: string) => href.startsWith("/demandas") ? "demandas" : href.startsWith("/romaneios") ? "romaneios" : href.startsWith("/viagens") || href.startsWith("/pedagios") ? "viagens" : href.startsWith("/abastecimentos") ? "abastecimentos" : href.startsWith("/manutencao") || href.startsWith("/pneus") ? "frota" : href.startsWith("/financeiro") || href.startsWith("/fechamentos") || href.startsWith("/holerite") ? "financeiro" : href.startsWith("/ciot") || href.startsWith("/fiscal") ? "fiscal" : href.startsWith("/comercial") ? "comercial" : href.startsWith("/bi") ? "bi" : href.startsWith("/cadastros") || href.startsWith("/estoque") ? "cadastros" : href.startsWith("/portal-motorista") ? "portal_motorista" : href.startsWith("/alertas") ? "dashboard" : "dashboard";
   const canAccessItem = (item: NavItem) => user?.role === "ADMIN" || !configuredPermissions || user?.permissoes?.[permissionFor(item.href)] === true;
   const canAccessStandalone = (permission: string) => user?.role === "ADMIN" || !configuredPermissions || user?.permissoes?.[permission] === true;
 

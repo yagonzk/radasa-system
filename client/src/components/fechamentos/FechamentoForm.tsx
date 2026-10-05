@@ -221,10 +221,13 @@ export default function FechamentoForm({
     setViagens(viagens.filter((_, i) => i !== index));
   };
 
-  const valorTotal = viagens.reduce((sum, v) => {
+  const motoristaSelecionado = motoristas.find((motorista) => motorista.id === motoristaId);
+  const salarioFixo = Number(motoristaSelecionado?.salarioBase || 0);
+  const valorComissoes = viagens.reduce((sum, v) => {
     const local = locais.find((l) => l.id === v.localId);
     return sum + (local ? local.valorComissao : 0);
   }, 0);
+  const valorTotalHolerite = salarioFixo + valorComissoes;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -253,15 +256,15 @@ export default function FechamentoForm({
           viagens,
           locais
         );
-        toast.success("Fechamento atualizado com sucesso!");
+        toast.success("Holerite atualizado com sucesso!");
       } else {
         await onCreate(motoristaId, dataInicio, dataFim, viagens, locais);
-        toast.success("Fechamento criado com sucesso!");
+        toast.success("Holerite criado com sucesso!");
       }
       onClose();
     } catch (error: any) {
       console.error("Falha ao salvar fechamento.", error);
-      toast.error(error?.response?.data?.message ?? "Não foi possível salvar o fechamento.");
+      toast.error(error?.response?.data?.message ?? "Não foi possível salvar o holerite.");
     } finally {
       setSaving(false);
     }
@@ -272,7 +275,7 @@ export default function FechamentoForm({
       <DialogContent className="w-[calc(100vw-1.5rem)] max-w-[1280px] max-h-[calc(100vh-1.5rem)] overflow-x-hidden overflow-y-auto p-4 sm:p-5">
         <DialogHeader>
           <DialogTitle>
-            {editingFechamento ? "Editar Fechamento" : "Novo Fechamento"}
+            {editingFechamento ? "Editar Holerite" : "Novo Holerite"}
           </DialogTitle>
         </DialogHeader>
 
@@ -416,14 +419,20 @@ export default function FechamentoForm({
             )}
           </div>
 
-          {/* Total */}
-          <div className="flex items-center justify-between rounded-lg bg-primary/5 px-4 py-3">
-            <span className="text-sm font-semibold text-muted-foreground">
-              Valor Total da Comissão
-            </span>
-            <span className="font-display text-2xl font-bold text-primary">
-              {formatBRL(valorTotal)}
-            </span>
+          {/* Resumo do holerite */}
+          <div className="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 sm:grid-cols-3">
+            <div className="rounded-md bg-background px-3 py-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Salário Fixo</div>
+              <div className="mt-1 text-lg font-bold text-foreground">{formatBRL(salarioFixo)}</div>
+            </div>
+            <div className="rounded-md bg-background px-3 py-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comissões</div>
+              <div className="mt-1 text-lg font-bold text-foreground">{formatBRL(valorComissoes)}</div>
+            </div>
+            <div className="rounded-md bg-primary/5 px-3 py-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total do Holerite</div>
+              <div className="mt-1 font-display text-xl font-bold text-primary">{formatBRL(valorTotalHolerite)}</div>
+            </div>
           </div>
 
           <DialogFooter>
@@ -432,7 +441,7 @@ export default function FechamentoForm({
                 ? "Salvando..."
                 : editingFechamento
                   ? "Salvar alterações"
-                  : "Criar fechamento"}
+                  : "Criar holerite"}
             </Button>
           </DialogFooter>
         </form>

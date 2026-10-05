@@ -29,7 +29,6 @@ const Fiscal = lazy(() => import("./pages/Fiscal"));
 const Financeiro = lazy(() => import("./pages/Financeiro"));
 const Manutencao = lazy(() => import("./pages/Manutencao"));
 const BIGerencial = lazy(() => import("./pages/BIGerencial"));
-const BIV2 = lazy(() => import("./pages/BIV2"));
 const Administracao = lazy(() => import("./pages/Administracao"));
 const CiotGerar = lazy(() => import("./pages/CiotGerar"));
 const CiotGerados = lazy(() => import("./pages/CiotGerados"));
@@ -56,9 +55,9 @@ function Router() {
       <Route path="/financeiro" component={Financeiro} />
       <Route path="/manutencao" component={Manutencao} />
       <Route path="/bi" component={BIGerencial} />
-      <Route path="/bi-v2" component={BIV2} />
       <Route path="/administracao" component={Administracao} />
       <Route path="/manifestos" component={Romaneios} />
+      <Route path="/holerite" component={Fechamentos} />
       <Route path="/fechamentos" component={Fechamentos} />
       <Route path="/abastecimentos" component={Abastecimentos} />
       <Route path="/ciot/gerar" component={CiotGerar} />

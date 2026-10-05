@@ -15,7 +15,7 @@ export const migrationService = {
       for (const x of data.viagens) await tx.viagem.upsert({ where: { id: x.id }, update: {}, create: { ...x, dataManifesto: parseDateOnly(x.dataManifesto), createdAt: x.createdAt ? new Date(x.createdAt) : undefined } });
       for (const x of data.fechamentos) {
         const exists = await tx.fechamento.findUnique({ where: { id: x.id } });
-        if (!exists) await tx.fechamento.create({ data: { id: x.id, motoristaId: x.motoristaId, dataInicio: parseDateOnly(x.dataInicio), dataFim: parseDateOnly(x.dataFim), valorTotal: x.valorTotal ?? 0, createdAt: x.createdAt ? new Date(x.createdAt) : undefined, viagens: { create: x.viagens } } });
+        if (!exists) await tx.fechamento.create({ data: { id: x.id, motoristaId: x.motoristaId, dataInicio: parseDateOnly(x.dataInicio), dataFim: parseDateOnly(x.dataFim), salarioFixo: x.salarioFixo ?? 0, valorComissoes: x.valorComissoes ?? x.valorTotal ?? 0, valorTotal: x.valorTotal ?? 0, createdAt: x.createdAt ? new Date(x.createdAt) : undefined, viagens: { create: x.viagens } } });
       }
       for (const x of data.manifestos) {
         const exists = await tx.manifesto.findUnique({ where: { id: x.id } });
