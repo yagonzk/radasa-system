@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import Layout from "@/components/Layout";
 import FiscalRentabilidade from "@/components/fiscal/FiscalRentabilidade";
 import { api } from "@/lib/api";
+import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
 import { formatBRL } from "@/lib/exportUtils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -188,6 +189,20 @@ export default function Fiscal() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const handler = (event: Event) => {
+      if (!realtimeChangeTouches(event, "fiscal")) return;
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => { void load(); }, 250);
+    };
+    window.addEventListener(REALTIME_CHANGE_EVENT, handler);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener(REALTIME_CHANGE_EVENT, handler);
+    };
   }, [load]);
 
   const applyCurrentMonth = () => {

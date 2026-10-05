@@ -16,6 +16,16 @@
     "run_worker_first": ["/api/*"]
   },
 
+  "durable_objects": {
+    "bindings": [
+      { "name": "REALTIME_HUB", "class_name": "RadasaRealtimeHub" }
+    ]
+  },
+
+  "migrations": [
+    { "tag": "v1-realtime", "new_sqlite_classes": ["RadasaRealtimeHub"] }
+  ],
+
   // HYPERDRIVE (opcional, recomendado): depois de criar a configuração,
   // adicione abaixo antes de "vars":
   // "hyperdrive": [

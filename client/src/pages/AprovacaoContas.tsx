@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
 import { useAuth } from "@/contexts/AuthContext";
 import { Check, Clock3, LoaderCircle, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
@@ -53,6 +54,20 @@ export default function AprovacaoContas() {
 
   useEffect(() => {
     void loadPending();
+  }, [loadPending]);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const handler = (event: Event) => {
+      if (!realtimeChangeTouches(event, "usuarios", "admin")) return;
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => { void loadPending(); }, 250);
+    };
+    window.addEventListener(REALTIME_CHANGE_EVENT, handler);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener(REALTIME_CHANGE_EVENT, handler);
+    };
   }, [loadPending]);
 
   const approve = async (account: PendingUser) => {

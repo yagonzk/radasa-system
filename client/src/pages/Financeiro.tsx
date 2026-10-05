@@ -1,5 +1,6 @@
 import Layout from "@/components/Layout";
 import { api } from "@/lib/api";
+import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
 import { useClientes, useVeiculos, useViagens } from "@/lib/store";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -443,6 +444,25 @@ export default function Financeiro() {
   useEffect(() => {
     if (open) void loadCentros();
   }, [open]);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const handler = (event: Event) => {
+      if (!realtimeChangeTouches(event, "financeiro")) return;
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void loadDre(from, to);
+        void loadFluxo();
+        if (["RECEBER", "PAGAR", "MOVIMENTACOES"].includes(activeTab)) void loadLancamentos(from, to);
+        if (activeTab === "CENTROS") void loadCentros();
+      }, 250);
+    };
+    window.addEventListener(REALTIME_CHANGE_EVENT, handler);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener(REALTIME_CHANGE_EVENT, handler);
+    };
+  }, [from, to, activeTab]);
 
   const filtered = useMemo(
     () =>

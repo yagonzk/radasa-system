@@ -1,9 +1,10 @@
 import Layout from "@/components/Layout";
 import {api} from "@/lib/api";
-import {useEffect,useState} from "react";
+import {useCallback,useEffect,useState} from "react";
 import {Link} from "wouter";
 import {Card,CardContent,CardHeader,CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
+import {REALTIME_CHANGE_EVENT,realtimeChangeTouches} from "@/lib/realtime";
 import {Truck,WalletCards,TrendingUp,Fuel,Route,AlertTriangle,Wrench,ArrowRight,Building2} from "lucide-react";
 
 const money=(v:number)=>Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -23,30 +24,39 @@ export default function Dashboard(){
  const[alertsError,setAlertsError]=useState("");
  const[rankingsError,setRankingsError]=useState("");
 
- useEffect(()=>{
-  let active=true;
-  const load=async()=>{
-   try{
-    const core=await api.get("/dashboard/gerencial");
-    if(active){setData(core.data);setError("");}
-   }catch(e:any){if(active)setError(e?.response?.data?.message||"Não foi possível carregar a Visão Geral.");}
-   finally{if(active)setLoading(false);}
+ const loadDashboard=useCallback(async(silent=false)=>{
+  if(!silent){setLoading(true);setFinanceLoading(true);setAlertsLoading(true);}
+  try{
+   const core=await api.get("/dashboard/gerencial");
+   setData(core.data);setError("");
+  }catch(e:any){setError(e?.response?.data?.message||"Não foi possível carregar a Visão Geral.");}
+  finally{setLoading(false);}
 
-   try{
-    const fin=await api.get("/dashboard/financeiro");
-    if(active){setFinanceiro(fin.data?.financeiro||{});setFinanceError("");}
-   }catch(e:any){if(active)setFinanceError(e?.response?.data?.message||"Financeiro indisponível nesta atualização.");}
-   finally{if(active)setFinanceLoading(false);}
+  try{
+   const fin=await api.get("/dashboard/financeiro");
+   setFinanceiro(fin.data?.financeiro||{});setFinanceError("");
+  }catch(e:any){setFinanceError(e?.response?.data?.message||"Financeiro indisponível nesta atualização.");}
+  finally{setFinanceLoading(false);}
 
-   try{
-    const alerts=await api.get("/dashboard/alertas",{params:{limit:12}});
-    if(active){setAlertas(Array.isArray(alerts.data)?alerts.data:[]);setAlertsError("");}
-   }catch(e:any){if(active)setAlertsError(e?.response?.data?.message||"Alertas indisponíveis nesta atualização.");}
-   finally{if(active)setAlertsLoading(false);}
-  };
-  void load();
-  return()=>{active=false};
+  try{
+   const alerts=await api.get("/dashboard/alertas",{params:{limit:12}});
+   setAlertas(Array.isArray(alerts.data)?alerts.data:[]);setAlertsError("");
+  }catch(e:any){setAlertsError(e?.response?.data?.message||"Alertas indisponíveis nesta atualização.");}
+  finally{setAlertsLoading(false);}
  },[]);
+
+ useEffect(()=>{void loadDashboard(false)},[loadDashboard]);
+
+ useEffect(()=>{
+  let timer:number|undefined;
+  const handler=(event:Event)=>{
+   if(!realtimeChangeTouches(event,"dashboard"))return;
+   if(timer)window.clearTimeout(timer);
+   timer=window.setTimeout(()=>{void loadDashboard(true)},250);
+  };
+  window.addEventListener(REALTIME_CHANGE_EVENT,handler);
+  return()=>{if(timer)window.clearTimeout(timer);window.removeEventListener(REALTIME_CHANGE_EVENT,handler)};
+ },[loadDashboard]);
 
  const loadRankings=async()=>{
   if(rankingsLoading)return;

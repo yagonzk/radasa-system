@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, setAccessToken } from "@/lib/api";
 import { migrateLegacyLocalStorage } from "@/lib/legacyMigration";
+import { startRealtimeSync } from "@/lib/realtime";
 
 export type AuthUser = {
   id: string;
@@ -47,6 +48,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("radasa:unauthorized", handleUnauthorized);
     return () => window.removeEventListener("radasa:unauthorized", handleUnauthorized);
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    return startRealtimeSync();
+  }, [user?.id]);
 
   useEffect(() => {
     let active = true;

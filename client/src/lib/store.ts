@@ -307,6 +307,7 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string, opti
   const sourceId = useRef(generateId()).current;
   const optimistic = options?.optimistic !== false;
   const mutationRevision = useRef(0);
+  const activeRangeRef = useRef<{ from?: string; to?: string } | null>(null);
   const replaceLocalItem = useCallback((item: T) => {
     setItems(current => {
       const index = current.findIndex(currentItem => currentItem.id === item.id);
@@ -338,6 +339,7 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string, opti
   // Permite que telas históricas busquem outro período no servidor sem voltar
   // a carregar todo o histórico na montagem. Datas vazias significam "todo o período".
   const loadRange = useCallback(async (from?: string, to?: string) => {
+    activeRangeRef.current = { from, to };
     const revisionAtStart = mutationRevision.current;
     try {
       const response = await api.get<unknown>(`/${resource}`, {
@@ -360,11 +362,13 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string, opti
     const handler = (event: Event) => {
       const source = (event as CustomEvent<ApiChangeDetail>).detail?.source;
       if (source === sourceId) return;
-      void load(true);
+      const activeRange = activeRangeRef.current;
+      if (activeRange) void loadRange(activeRange.from, activeRange.to);
+      else void load(true);
     };
     window.addEventListener(eventName(resource), handler);
     return () => window.removeEventListener(eventName(resource), handler);
-  }, [load, resource, sourceId]);
+  }, [load, loadRange, resource, sourceId]);
 
   const create = useCallback(async (data: Omit<T, "id" | "createdAt">): Promise<T> => {
     const newItem = { ...data, id: generateId(), createdAt: new Date().toISOString() } as T;
@@ -565,6 +569,11 @@ export function useEstoque() {
     setMovimentacoes(movimentosResponse.data); setResumo(resumoResponse.data);
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    const handler = () => { void refresh(); };
+    window.addEventListener(eventName("estoque"), handler);
+    return () => window.removeEventListener(eventName("estoque"), handler);
+  }, [refresh]);
   const create = useCallback(async (data: Omit<EstoqueMovimentacao,"id"|"produto"|"valorTotal"|"createdAt">) => { const item=(await api.post<EstoqueMovimentacao>("/estoque",data)).data; await refresh(); return item; },[refresh]);
   const update = useCallback(async (id:string, data:{ tipo:TipoMovimentacaoEstoque; quantidade:number; valorUnitario:number; data:string; observacoes?:string }) => { const item=(await api.put<EstoqueMovimentacao>(`/estoque/${id}`,data)).data; await refresh(); return item; },[refresh]);
   const remove = useCallback(async (id:string)=>{ await api.delete(`/estoque/${id}`); await refresh(); },[refresh]);
@@ -583,6 +592,11 @@ export function usePneuOperacoes() {
     setRodizios(rodiziosResponse.data);
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    const handler = () => { void refresh(); };
+    window.addEventListener(eventName("pneus"), handler);
+    return () => window.removeEventListener(eventName("pneus"), handler);
+  }, [refresh]);
   const instalar = useCallback(async (pneuId: string, data: Omit<PneuInstalacao, "id" | "pneuId" | "pneu" | "veiculo" | "carreta" | "ativo" | "createdAt">) => {
     const item = (await api.post<PneuInstalacao>(`/pneus/${pneuId}/instalar`, data)).data;
     await refresh();
@@ -614,6 +628,11 @@ export function usePneuManutencao(pneuId?: string) {
   const [data, setData] = useState<PneuManutencao | null>(null);
   const refresh = useCallback(async () => { if (!pneuId) { setData(null); return; } setData((await api.get<PneuManutencao>(`/pneus/${pneuId}/manutencao`)).data); }, [pneuId]);
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    const handler = () => { void refresh(); };
+    window.addEventListener(eventName("pneus"), handler);
+    return () => window.removeEventListener(eventName("pneus"), handler);
+  }, [refresh]);
   const post = useCallback(async (path:string, body:unknown) => { if(!pneuId) throw new Error("Selecione um pneu."); await api.post(`/pneus/${pneuId}/${path}`, body); await refresh(); window.dispatchEvent(new Event(eventName("pneus"))); }, [pneuId, refresh]);
   return { data, refresh, addSulco:(body:unknown)=>post("sulcos",body), addCalibragem:(body:unknown)=>post("calibragens",body), addRecapagem:(body:unknown)=>post("recapagens",body), addConserto:(body:unknown)=>post("consertos",body), addInspecao:(body:unknown)=>post("inspecoes",body) };
 }

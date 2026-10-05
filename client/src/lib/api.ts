@@ -1,6 +1,19 @@
 import axios from "axios";
 
 const TOKEN_KEY = "radasa_access_token";
+let realtimeClientId: string | null = null;
+
+export function getAccessToken() {
+  return sessionStorage.getItem(TOKEN_KEY);
+}
+
+export function getRealtimeClientId() {
+  if (realtimeClientId) return realtimeClientId;
+  realtimeClientId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return realtimeClientId;
+}
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "/api",
@@ -33,6 +46,7 @@ function requestId(prefix: string) {
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem(TOKEN_KEY);
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  config.headers["X-Radasa-Client-Id"] = getRealtimeClientId();
   config.headers["X-Request-Id"] = requestId("req");
   const method = String(config.method ?? "get").toLowerCase();
   if (!["get", "head", "options"].includes(method)) {

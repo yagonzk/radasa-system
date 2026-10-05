@@ -1,5 +1,6 @@
 import Layout from "@/components/Layout";
 import { api } from "@/lib/api";
+import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
 import { useEstoqueProdutos, useFornecedores, useVeiculos } from "@/lib/store";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -134,6 +135,19 @@ export default function Manutencao() {
     }
   };
   useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let timer: number | undefined;
+    const handler = (event: Event) => {
+      if (!realtimeChangeTouches(event, "manutencao")) return;
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => { void load(); }, 250);
+    };
+    window.addEventListener(REALTIME_CHANGE_EVENT, handler);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener(REALTIME_CHANGE_EVENT, handler);
+    };
+  }, []);
 
   const refreshOrdersAndDashboard = async () => {
     const [dashboardResponse, ordersResponse] = await Promise.all([

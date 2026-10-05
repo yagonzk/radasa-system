@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
 import { api } from "@/lib/api";
+import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -117,6 +118,23 @@ export default function Pedagios() {
   const refreshStatus = () => api.get("/pedagios/status").then((r) => setProviderConfigured(Boolean(r.data?.authenticated))).catch(() => setProviderConfigured(false));
   const loadCadastros = () => api.get("/pedagios/cadastros").then((r) => setCadastros(Array.isArray(r.data) ? r.data : [])).catch(() => toast.error("Não foi possível carregar os pedágios cadastrados."));
   useEffect(() => { void refreshStatus(); }, []);
+  useEffect(() => {
+    let timer: number | undefined;
+    const handler = (event: Event) => {
+      if (!realtimeChangeTouches(event, "pedagios")) return;
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void refreshStatus();
+        if (manageOpen) void loadCadastros();
+      }, 250);
+    };
+    window.addEventListener(REALTIME_CHANGE_EVENT, handler);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener(REALTIME_CHANGE_EVENT, handler);
+    };
+  }, [manageOpen]);
+
 
   useEffect(() => {
     let alive = true;
