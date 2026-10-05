@@ -540,7 +540,7 @@ export function usePneus() {
 
 export function useFechamentos() {
   const crud = useApiCrud<Fechamento>("fechamentos", "Fechamento");
-  const create = useCallback((motoristaId: string, dataInicio: string, dataFim: string, viagens: ViagemFechamento[]) => crud.create({ motoristaId, dataInicio, dataFim, viagens, valorTotal: 0 }), [crud.create]);
+  const create = useCallback((motoristaId: string, dataInicio: string, dataFim: string, viagens: ViagemFechamento[]) => crud.create({ motoristaId, dataInicio, dataFim, viagens, salarioFixo: 0, valorComissoes: 0, valorTotal: 0 }), [crud.create]);
   const update = useCallback((id: string, motoristaId: string, dataInicio: string, dataFim: string, viagens: ViagemFechamento[]) => crud.update(id, { motoristaId, dataInicio, dataFim, viagens }), [crud.update]);
   return { ...crud, create, update };
 }
