@@ -644,29 +644,52 @@ export default function Romaneios() {
     });
   }, [sourceRomaneios, veiculos]);
 
+  const resolveRegisteredVehicle = (
+    documento: Pick<PdfResponse["documento"], "veiculoCodigo" | "placaVeiculo">,
+    sourceVehicles: Veiculo[] = veiculos,
+  ) => {
+    if (documento.veiculoCodigo) {
+      const byId = sourceVehicles.find((veiculo) => veiculo.id === documento.veiculoCodigo);
+      if (byId) return byId;
+    }
+    return findRegisteredVehicleByPlate(documento.placaVeiculo, sourceVehicles);
+  };
+
   const bindImportedVehicle = (result: PdfResponse, sourceVehicles: Veiculo[] = veiculos) => {
     // Segunda barreira de segurança no frontend: o total exibido na revisão e
     // na importação em massa é recalculado a partir dos itens. Nunca confiamos
     // cegamente no número lido do RESUMO do PDF/OCR.
     const normalizedResult = refreshReviewDocument(result);
     const importedPlate = normalizedResult.documento.placaVeiculo;
-    const registered = findRegisteredVehicleByPlate(importedPlate, sourceVehicles);
+    const registered = resolveRegisteredVehicle(normalizedResult.documento, sourceVehicles);
 
     return {
       result: {
         ...normalizedResult,
         documento: {
           ...normalizedResult.documento,
-          // Placa importada só é mantida quando existe no cadastro de veículos.
-          placaVeiculo: registered ? formatPlate(registered.placa) : "",
-          modeloVeiculo: registered?.modelo ?? "",
-          veiculoCodigo: registered?.id ?? "",
+          // Nunca apaga a placa lida pelo OCR quando a lista de veículos ainda
+          // não carregou ou sofreu uma falha transitória. Assim uma atualização
+          // posterior consegue vincular o PDF sem perder a referência original.
+          placaVeiculo: registered
+            ? formatPlate(registered.placa)
+            : String(importedPlate ?? "").trim().toUpperCase(),
+          modeloVeiculo: registered?.modelo ?? normalizedResult.documento.modeloVeiculo ?? "",
+          veiculoCodigo: registered?.id ?? normalizedResult.documento.veiculoCodigo ?? "",
         },
       },
       matched: Boolean(registered),
       importedPlate: importedPlate ?? "",
     };
   };
+
+  const isBulkEntryReady = (entry: BulkImportEntry, sourceVehicles: Veiculo[] = veiculos) =>
+    Boolean(
+      entry.result &&
+      !entry.error &&
+      (entry.result.documento.veiculoCodigo ||
+        resolveRegisteredVehicle(entry.result.documento, sourceVehicles)),
+    );
 
   const updateReviewDocument = (patch: Partial<PdfResponse["documento"]>) => {
     setReview((current) => current ? {
@@ -1852,7 +1875,7 @@ export default function Romaneios() {
       // Atualiza a lista pelo cache/batcher compartilhado e usa o retorno da
       // própria leitura, sem disparar uma segunda request de veículos.
       const vehicles = await refreshVeiculos();
-      const registeredVehicles = Array.isArray(vehicles) ? vehicles : [];
+      const registeredVehicles = Array.isArray(vehicles) && vehicles.length ? vehicles : veiculos;
 
       // Envia somente texto, em lotes pequenos para manter requests leves no Worker.
       const TEXT_BATCH_SIZE = 20;
@@ -1902,12 +1925,32 @@ export default function Romaneios() {
       // Todos os arquivos já passaram pelo OCR completo de alta resolução na
       // primeira etapa; não existe segunda leitura híbrida/digital.
 
-      await Promise.all([refreshClientes(), refreshProdutos(), refreshVeiculos()]);
-      setBulkReview(processed);
-      const valid = processed.filter((entry) => entry.result).length;
-      const failed = processed.length - valid;
+      const [, , refreshedVehicles] = await Promise.all([
+        refreshClientes(),
+        refreshProdutos(),
+        refreshVeiculos(),
+      ]);
+      const latestVehicles = Array.isArray(refreshedVehicles) && refreshedVehicles.length
+        ? refreshedVehicles
+        : registeredVehicles;
+      const rebound = processed.map((entry) =>
+        entry.result
+          ? { ...entry, result: bindImportedVehicle(entry.result, latestVehicles).result }
+          : entry,
+      );
+      setBulkReview(rebound);
+      const valid = rebound.filter((entry) => isBulkEntryReady(entry, latestVehicles)).length;
+      const interpretationFailures = rebound.filter((entry) => entry.error || !entry.result).length;
+      const unmatchedVehicles = rebound.filter(
+        (entry) => entry.result && !entry.error && !isBulkEntryReady(entry, latestVehicles),
+      ).length;
       if (valid) toast.success(`${valid} PDF(s) preparado(s) para importação.`);
-      if (failed) toast.error(`${failed} PDF(s) não puderam ser interpretados.`);
+      if (interpretationFailures) {
+        toast.error(`${interpretationFailures} PDF(s) não puderam ser interpretados.`);
+      }
+      if (unmatchedVehicles) {
+        toast.warning(`${unmatchedVehicles} PDF(s) aguardam correspondência com um veículo cadastrado.`);
+      }
     } finally {
       setBulkImporting(false);
       setBulkImportProgress("");
@@ -1973,19 +2016,40 @@ export default function Romaneios() {
 
   const confirmBulkImport = async () => {
     const allResultEntries = (bulkReview ?? []).filter(
-      (entry): entry is BulkImportEntry & { result: PdfResponse } => Boolean(entry.result),
+      (entry): entry is BulkImportEntry & { result: PdfResponse } => Boolean(entry.result) && !entry.error,
     );
+
+    // Revalida os veículos no clique de confirmação. A lista pode ter terminado
+    // de carregar depois da leitura do PDF ou ter falhado temporariamente na
+    // primeira tentativa. Isso evita o falso "Pronto" seguido de "Nenhum PDF".
+    const refreshedVehicles = await refreshVeiculos();
+    const vehicleSource = Array.isArray(refreshedVehicles) && refreshedVehicles.length
+      ? refreshedVehicles
+      : veiculos;
+    const validEntries = allResultEntries
+      .map((entry) => ({
+        ...entry,
+        result: bindImportedVehicle(entry.result, vehicleSource).result,
+      }))
+      .filter((entry) => Boolean(resolveRegisteredVehicle(entry.result.documento, vehicleSource)));
     const unmatchedVehicles = allResultEntries.filter(
-      (entry) => !findRegisteredVehicleByPlate(entry.result.documento.placaVeiculo),
+      (entry) => !resolveRegisteredVehicle(entry.result.documento, vehicleSource),
     );
-    const validEntries = allResultEntries.filter(
-      (entry) => Boolean(findRegisteredVehicleByPlate(entry.result.documento.placaVeiculo)),
-    );
+
     if (unmatchedVehicles.length) {
-      toast.error(`${unmatchedVehicles.length} romaneio(s) estão sem placa cadastrada correspondente e não serão importados.`);
+      const plates = Array.from(new Set(
+        unmatchedVehicles
+          .map((entry) => formatPlate(entry.result.documento.placaVeiculo))
+          .filter(Boolean),
+      ));
+      toast.error(
+        plates.length
+          ? `Placa(s) não encontrada(s) no cadastro de veículos: ${plates.join(", ")}.`
+          : `${unmatchedVehicles.length} romaneio(s) estão sem placa cadastrada correspondente.`,
+      );
     }
     if (!validEntries.length) {
-      toast.error("Nenhum PDF válido para cadastrar.");
+      toast.error("Nenhum PDF pode ser cadastrado até a placa do veículo ser reconhecida no cadastro.");
       return;
     }
 
@@ -2012,7 +2076,7 @@ export default function Romaneios() {
             (item) => item.produto.descricao,
           ).map(({ item }) => item);
           const documento = entry.result.documento;
-          const registeredVehicle = findRegisteredVehicleByPlate(documento.placaVeiculo);
+          const registeredVehicle = resolveRegisteredVehicle(documento, vehicleSource);
           if (!registeredVehicle) throw new Error("A placa lida não corresponde a um veículo cadastrado.");
           const pdfUrl = await fileToDataUrl(entry.file);
           const payload = {
@@ -3167,8 +3231,8 @@ export default function Romaneios() {
             <div className="space-y-4">
               <div className="grid gap-3 rounded-lg border bg-muted/20 p-3 text-sm sm:grid-cols-3">
                 <div><p className="text-xs text-muted-foreground">Arquivos selecionados</p><p className="text-xl font-bold">{bulkReview.length}</p></div>
-                <div><p className="text-xs text-muted-foreground">Prontos para cadastrar</p><p className="text-xl font-bold text-emerald-600">{bulkReview.filter((entry) => entry.result && !entry.error).length}</p></div>
-                <div><p className="text-xs text-muted-foreground">Com erro</p><p className="text-xl font-bold text-destructive">{bulkReview.filter((entry) => entry.error || !entry.result).length}</p></div>
+                <div><p className="text-xs text-muted-foreground">Prontos para cadastrar</p><p className="text-xl font-bold text-emerald-600">{bulkReview.filter((entry) => isBulkEntryReady(entry)).length}</p></div>
+                <div><p className="text-xs text-muted-foreground">Com erro</p><p className="text-xl font-bold text-destructive">{bulkReview.filter((entry) => entry.error || !entry.result || !isBulkEntryReady(entry)).length}</p></div>
               </div>
 
               <div className="overflow-x-auto rounded-lg border">
@@ -3190,10 +3254,17 @@ export default function Romaneios() {
                           <td className="px-3 py-3 text-center font-semibold">{clientCount}</td>
                           <td className="whitespace-nowrap px-3 py-3 text-right font-bold tabular-nums">{entry.result ? formatBRL(entry.result.documento.valorTotal) : "—"}</td>
                           <td className="max-w-[250px] px-3 py-3">
-                            {entry.result && !entry.error ? (
+                            {isBulkEntryReady(entry) ? (
                               <span className="inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">Pronto</span>
                             ) : (
-                              <div><span className="inline-flex rounded-full bg-destructive/15 px-2.5 py-1 text-xs font-semibold text-destructive">Erro</span><p className="mt-1 text-xs text-destructive">{entry.error}</p></div>
+                              <div>
+                                <span className="inline-flex rounded-full bg-destructive/15 px-2.5 py-1 text-xs font-semibold text-destructive">Erro</span>
+                                <p className="mt-1 text-xs text-destructive">
+                                  {entry.error ?? (entry.result?.documento.placaVeiculo
+                                    ? `Placa ${entry.result.documento.placaVeiculo} não encontrada no cadastro de veículos.`
+                                    : "O PDF não possui uma placa de veículo reconhecível.")}
+                                </p>
+                              </div>
                             )}
                           </td>
                           <td className="px-3 py-3 text-right"><Button size="icon" variant="ghost" title="Remover da importação" disabled={bulkSaving} onClick={() => setBulkReview((current) => {
@@ -3209,9 +3280,9 @@ export default function Romaneios() {
 
               <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" disabled={bulkSaving} onClick={() => setBulkReview(null)}>Cancelar</Button>
-                <Button disabled={bulkSaving || !bulkReview.some((entry) => entry.result)} onClick={() => void confirmBulkImport()}>
+                <Button disabled={bulkSaving || !bulkReview.some((entry) => isBulkEntryReady(entry))} onClick={() => void confirmBulkImport()}>
                   {bulkSaving ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                  {bulkSaving ? "Cadastrando..." : `Cadastrar ${bulkReview.filter((entry) => entry.result).length} romaneio(s)`}
+                  {bulkSaving ? "Cadastrando..." : `Cadastrar ${bulkReview.filter((entry) => isBulkEntryReady(entry)).length} romaneio(s)`}
                 </Button>
               </div>
             </div>

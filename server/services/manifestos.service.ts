@@ -338,6 +338,17 @@ export const manifestosService = {
     if (!rows.length) throw new AppError(400, "O romaneio não possui itens para importar.");
 
     const cleanCode = (value: unknown) => String(value ?? "").trim().split("/")[0];
+    const codeKey = (value: unknown) => {
+      const normalized = normalizeKeyPart(cleanCode(value));
+      return /^\d+$/.test(normalized) ? normalized.replace(/^0+(?=\d)/, "") : normalized;
+    };
+    const codeVariants = (values: string[]) => Array.from(new Set(values.flatMap((value) => {
+      const raw = cleanCode(value);
+      const key = codeKey(value);
+      if (!key) return [];
+      if (!/^\d+$/.test(key)) return [raw, key];
+      return Array.from({ length: 12 }, (_, index) => key.padStart(index + 1, "0")).concat(raw);
+    })));
     const plateKey = normalizeKeyPart(input?.placaVeiculo);
     if (!plateKey) throw new AppError(400, "Informe a placa do veículo.");
 
@@ -351,36 +362,38 @@ export const manifestosService = {
     const productCodes: string[] = Array.from(new Set<string>(rows.map((row: any) => cleanCode(row.produtoCodigo)).filter((code: string) => Boolean(code))));
 
     const [existingClients, existingProducts] = await Promise.all([
-      prisma.cliente.findMany({ where: { codigoInterno: { in: clientCodes } } }),
-      prisma.produto.findMany({ where: { codigoInterno: { in: productCodes } } }),
+      prisma.cliente.findMany({ where: { codigoInterno: { in: codeVariants(clientCodes), mode: "insensitive" } } }),
+      prisma.produto.findMany({ where: { codigoInterno: { in: codeVariants(productCodes), mode: "insensitive" } } }),
     ]);
-    const clients = new Map(existingClients.map((item) => [cleanCode(item.codigoInterno), item]));
-    const products = new Map(existingProducts.map((item) => [cleanCode(item.codigoInterno), item]));
+    const clients = new Map(existingClients.map((item) => [codeKey(item.codigoInterno), item]));
+    const products = new Map(existingProducts.map((item) => [codeKey(item.codigoInterno), item]));
 
     // Cria somente os cadastros realmente ausentes deste romaneio. Como esta rota
     // recebe um romaneio por request, cada chamada permanece pequena no Worker.
     for (const row of rows) {
-      const code = cleanCode(row.clienteCodigo);
+      const rawCode = cleanCode(row.clienteCodigo);
+      const code = codeKey(rawCode);
       if (!code || clients.has(code)) continue;
-      const name = String(row.clienteNome || code).trim() || code;
+      const name = String(row.clienteNome || rawCode || code).trim() || rawCode || code;
       const createdClient = await prisma.cliente.create({
-        data: { nomeFantasia: name, razaoSocial: name, codigoInterno: code, cnpj: "", email: "-", telefone: "-", enderecoFiscal: "-" },
+        data: { nomeFantasia: name, razaoSocial: name, codigoInterno: rawCode || code, cnpj: "", email: "-", telefone: "-", enderecoFiscal: "-" },
       });
       clients.set(code, createdClient);
     }
     for (const row of rows) {
-      const code = cleanCode(row.produtoCodigo);
+      const rawCode = cleanCode(row.produtoCodigo);
+      const code = codeKey(rawCode);
       if (!code || products.has(code)) continue;
-      const name = String(row.produtoDescricao || code).trim() || code;
+      const name = String(row.produtoDescricao || rawCode || code).trim() || rawCode || code;
       const createdProduct = await prisma.produto.create({
-        data: { nome: name, codigoInterno: code, categoriaEstoque: "Produtos de piscina" },
+        data: { nome: name, codigoInterno: rawCode || code, categoriaEstoque: "Produtos de piscina" },
       });
       products.set(code, createdProduct);
     }
 
     const produtos = rows.map((row: any) => {
-      const cliente = clients.get(cleanCode(row.clienteCodigo));
-      const produto = products.get(cleanCode(row.produtoCodigo));
+      const cliente = clients.get(codeKey(row.clienteCodigo));
+      const produto = products.get(codeKey(row.produtoCodigo));
       if (!cliente || !produto) throw new AppError(400, "Não foi possível resolver cliente/produto do romaneio.");
       return {
         produtoId: produto.id,

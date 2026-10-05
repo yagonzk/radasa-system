@@ -58,6 +58,7 @@ const normalize = (value: string) =>
     .replace(/[^A-Z0-9]/g, "");
 
 const digits = (value: string) => value.replace(/\D/g, "");
+const canonicalCode = (value: string) => { const code = digits(value); return code.replace(/^0+(?=\d)/, ""); };
 
 function normalizeVisualLine(value: string) {
   return value
@@ -1895,12 +1896,14 @@ async function sugerirVinculosComSession(
   }
 
   async function ensureCliente(pdf: RomaneioPdfCliente) {
-    const code = digits(pdf.codigo);
-    let cadastro = clientes.find((item) =>
-      (code && digits(item.codigoInterno ?? "") === code) ||
-      normalize(item.nomeFantasia ?? "") === normalize(pdf.nome),
-    );
-    if (!cadastro && pdf.nome) {
+    const code = canonicalCode(pdf.codigo);
+    let cadastro = code
+      ? clientes.find((item) => canonicalCode(item.codigoInterno ?? "") === code)
+      : undefined;
+    if (!cadastro && !code) {
+      cadastro = clientes.find((item) => normalize(item.nomeFantasia ?? "") === normalize(pdf.nome));
+    }
+    if (!cadastro && !code && pdf.nome) {
       const pdfName = normalize(pdf.nome);
       cadastro = clientes
         .map((item) => ({ item, distance: textEditDistance(item.nomeFantasia ?? "", pdf.nome) }))
@@ -1930,30 +1933,20 @@ async function sugerirVinculosComSession(
   }
 
   async function ensureProduto(pdf: RomaneioPdfProduto) {
-    const code = digits(pdf.codigo);
+    const code = canonicalCode(pdf.codigo);
     const nomePdf = normalize(pdf.descricao);
-    let cadastro = produtos.find((item) => normalize(item.nome ?? "") === nomePdf);
+    let cadastro = code
+      ? produtos.find((item) => canonicalCode(item.codigoInterno ?? "") === code)
+      : undefined;
 
-    if (!cadastro) {
+    if (!cadastro && !code) {
+      cadastro = produtos.find((item) => normalize(item.nome ?? "") === nomePdf);
+    }
+
+    if (!cadastro && !code) {
       const family = hybridProductFamily(pdf.descricao);
       if (family && family !== nomePdf) {
         cadastro = produtos.find((item) => hybridProductFamily(item.nome ?? "") === family);
-      }
-    }
-
-    if (!cadastro && code) {
-      const porCodigo = produtos.find((item) => digits(item.codigoInterno ?? "") === code);
-      if (porCodigo) {
-        const nomeCadastro = normalize(porCodigo.nome ?? "");
-        const pdfVasilhame = nomePdf.includes("VASILHAME");
-        const cadastroVasilhame = nomeCadastro.includes("VASILHAME");
-        const pdfGarrafao = nomePdf.includes("GARRAFAO");
-        const cadastroGarrafao = nomeCadastro.includes("GARRAFAO");
-        const familiasConflitantes =
-          (pdfVasilhame && cadastroGarrafao) ||
-          (pdfGarrafao && cadastroVasilhame);
-
-        if (!familiasConflitantes) cadastro = porCodigo;
       }
     }
 
@@ -1976,7 +1969,7 @@ async function sugerirVinculosComSession(
   const clientesPorCodigo = new Map<string, Awaited<ReturnType<typeof ensureCliente>>>();
 
   for (const clientePdf of documento.clientes) {
-    clientesPorCodigo.set(digits(clientePdf.codigo), await ensureCliente(clientePdf));
+    clientesPorCodigo.set(canonicalCode(clientePdf.codigo), await ensureCliente(clientePdf));
   }
 
   const itens: Array<{
@@ -1985,7 +1978,7 @@ async function sugerirVinculosComSession(
     cadastro: Awaited<ReturnType<typeof ensureProduto>> & { criadoAutomaticamente: boolean };
   }> = [];
   for (const produtoPdf of documento.produtos) {
-    const cliente = clientesPorCodigo.get(digits(produtoPdf.clienteCodigo)) ??
+    const cliente = clientesPorCodigo.get(canonicalCode(produtoPdf.clienteCodigo)) ??
       await ensureCliente({ codigo: produtoPdf.clienteCodigo, nome: produtoPdf.clienteNome });
     const cadastro = await ensureProduto(produtoPdf);
 

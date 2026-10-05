@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useClientes, useProdutos, useRomaneios } from "@/lib/store";
-import { canonicalProductIdentity, formatPlate, mergeStagingBiFacts, readStagingBiFacts, type StagingBiFact } from "@/lib/bi-staging";
+import { canonicalClientIdentity, canonicalProductIdentity, formatPlate, mergeStagingBiFacts, readStagingBiFacts, type StagingBiFact } from "@/lib/bi-staging";
 import { BarChart3, Check, ChevronDown, Database, FileSpreadsheet, RotateCcw, Search } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -39,9 +39,21 @@ export default function BIGerencial(){
  const [tabProdutos,setTabProdutos]=useState<string[]>([]),[tabClientes,setTabClientes]=useState<string[]>([]),[tabPlacas,setTabPlacas]=useState<string[]>([]);
  const clienteMap=useMemo(()=>new Map(clientes.map(c=>[c.id,c])),[clientes]); const produtoMap=useMemo(()=>new Map(produtos.map(p=>[p.id,p])),[produtos]);
  const clienteLookup=useMemo(()=>{const m=new Map<string,(typeof clientes)[number]>();for(const c of clientes)for(const n of [c.nomeFantasia,c.razaoSocial]){const k=norm(n);if(k&&!m.has(k))m.set(k,c)}return m},[clientes]);
+ const clienteByCode=useMemo(()=>{const m=new Map<string,(typeof clientes)[number]>();for(const c of clientes){const key=canonicalClientIdentity(c.codigoInterno,"","");if(c.codigoInterno&&!m.has(key))m.set(key,c)}return m},[clientes]);
+ const produtoByCode=useMemo(()=>{const m=new Map<string,(typeof produtos)[number]>();for(const p of produtos){const key=canonicalProductIdentity(p.codigoInterno,"");if(p.codigoInterno&&key&&!m.has(key))m.set(key,p)}return m},[produtos]);
  const liveStagingFacts=useMemo<StagingBiFact[]>(()=>romaneios.flatMap(r=>r.produtos.map((p,i)=>{const clienteId=p.clienteId||r.clienteId,c=clienteMap.get(clienteId),prod=produtoMap.get(p.produtoId),qtd=Number(p.quantidade||0),frete=Number(p.valorTotal||0);return{id:`biv2-live-${r.id}-${p.id||i}`,data:r.dataManifesto,romaneio:p.romaneio||r.romaneios||"",nf:p.notaFiscal||"",serie:p.serieNf||"",nfSerie:p.notaFiscal?`${p.notaFiscal}${p.serieNf?`/${p.serieNf}`:""}`:"",clienteId,cliente:c?.nomeFantasia||c?.razaoSocial||"Sem cliente",razaoSocial:c?.razaoSocial||c?.nomeFantasia||"",clienteCod:c?.codigoInterno||"",clienteLoja:"",produtoId:p.produtoId,produtoCod:prod?.codigoInterno||"",produto:prod?.nome||"Produto não identificado",placa:formatPlate(r.placaVeiculo),quantidade:qtd,valorUnitProduto:0,freteUnit:qtd?frete/qtd:0,frete,faturamento:0,municipio:c?.enderecoFiscal||"",tipo:p.tipoManifesto||r.tipoManifesto,instrucao:p.instrucaoCobranca||""}})),[romaneios,clienteMap,produtoMap]);
  const stagingFacts=useMemo(()=>mergeStagingBiFacts(manualFacts,liveStagingFacts),[manualFacts,liveStagingFacts]);
- const facts=useMemo<Fact[]>(()=>stagingFacts.map(x=>{const cadastro=clienteLookup.get(norm(x.cliente))||clienteLookup.get(norm(x.razaoSocial));const produtoKey=canonicalProductIdentity(x.produtoCod,x.produto);return{...x,clienteCod:x.clienteCod||cadastro?.codigoInterno||"",produtoKey,mes:String(x.data||"").slice(0,7),percentual:x.faturamento?x.frete/x.faturamento*100:0}}),[stagingFacts,clienteLookup]);
+ const facts=useMemo<Fact[]>(()=>stagingFacts.map(x=>{
+  const clienteCadastro=x.clienteCod?clienteByCode.get(canonicalClientIdentity(x.clienteCod,"","")):(clienteLookup.get(norm(x.cliente))||clienteLookup.get(norm(x.razaoSocial)));
+  const clienteCod=x.clienteCod||clienteCadastro?.codigoInterno||"";
+  const produtoCadastro=x.produtoCod?produtoByCode.get(canonicalProductIdentity(x.produtoCod,"")):undefined;
+  const produtoCod=x.produtoCod||produtoCadastro?.codigoInterno||"";
+  const produto=produtoCadastro?.nome||x.produto;
+  const produtoKey=canonicalProductIdentity(produtoCod,produto);
+  const cliente=clienteCadastro?.nomeFantasia||x.cliente;
+  const razaoSocial=clienteCadastro?.razaoSocial||x.razaoSocial||cliente;
+  return{...x,clienteId:`bi-cliente:${canonicalClientIdentity(clienteCod,cliente,razaoSocial)}`,cliente,razaoSocial,clienteCod,produtoId:`bi-produto:${produtoKey}`,produtoCod,produto,produtoKey,mes:String(x.data||"").slice(0,7),percentual:x.faturamento?x.frete/x.faturamento*100:0}
+ }),[stagingFacts,clienteLookup,clienteByCode,produtoByCode]);
  const plateOptions=useMemo(()=>[...new Set(facts.map(x=>x.placa).filter(x=>x&&x!=="Sem placa"))].sort().map(x=>({value:x,label:x})),[facts]);
  const clientOptions=useMemo(()=>Array.from(new Map(facts.map(x=>[x.clienteId,{value:x.clienteId,label:`${x.clienteCod?`${x.clienteCod} - `:""}${x.cliente}`}])).values()).sort((a,b)=>a.label.localeCompare(b.label,"pt-BR")),[facts]);
  const productOptions=useMemo(()=>Array.from(new Map(facts.map(x=>[x.produtoKey,{value:x.produtoKey,label:`${x.produtoCod?`${x.produtoCod} - `:""}${x.produto}`}])).values()).filter(x=>x.value).sort((a,b)=>a.label.localeCompare(b.label,"pt-BR",{numeric:true})),[facts]);
