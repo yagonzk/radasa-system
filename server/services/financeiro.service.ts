@@ -60,19 +60,20 @@ export const financeiroService={
  },
  async resumo(from?:string,to?:string){
   const range=(from||to)?{...(from?{gte:parseDateOnly(from)}:{}),...(to?{lte:parseDateOnly(to)}:{})}:undefined;
-  const [manual,viagens,romaneios,abastecimentos,estoque,pneus,recapagens,consertos,ordensManutencao,locais,baixasResumo]=await runWithConcurrency([
-   () => prisma.lancamentoFinanceiro.findMany({where:range?{dataCompetencia:range}:undefined}),
-   () => prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}),
+  const [manual,viagens,romaneios,abastecimentos,estoque,pneus,recapagens,consertos,ordensManutencao,locais]=await runWithConcurrency([
+   () => prisma.lancamentoFinanceiro.findMany({where:range?{dataCompetencia:range}:undefined,select:{id:true,tipo:true,categoria:true,valor:true,status:true,numeroDocumento:true}}),
+   () => prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined,select:{valorPedagio:true,valorDiaria:true,valorChapa:true,valorMulta:true,valorComissao:true,cidadeEntrega:true}}),
    () => prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{produtos:{select:{valorTotal:true}}}}),
    () => prisma.abastecimento.findMany({where:range?{dataEmissao:range}:undefined,select:{produtos:{select:{valorTotal:true,produto:{select:{nome:true}}}}}}),
-   () => prisma.estoqueMovimentacao.findMany({where:{tipo:"ENTRADA",...(range?{data:range}:{})},include:{produto:{select:{categoria:true}}}}),
-   () => prisma.pneu.findMany({where:range?{dataCompra:range}:undefined}),
-   () => prisma.pneuRecapagem.findMany({where:range?{dataEnvio:range}:undefined}),
-   () => prisma.pneuConserto.findMany({where:range?{data:range}:undefined}),
+   () => prisma.estoqueMovimentacao.findMany({where:{tipo:"ENTRADA",...(range?{data:range}:{})},select:{valorTotal:true,produto:{select:{categoria:true}}}}),
+   () => prisma.pneu.findMany({where:range?{dataCompra:range}:undefined,select:{valorCompra:true}}),
+   () => prisma.pneuRecapagem.findMany({where:range?{dataEnvio:range}:undefined,select:{valor:true}}),
+   () => prisma.pneuConserto.findMany({where:range?{data:range}:undefined,select:{valor:true}}),
    () => prisma.ordemServico.findMany({where:{status:"CONCLUIDA",...(range?{dataConclusao:range}:{})},select:{numero:true,valorPecas:true,valorMaoObra:true,valorOutros:true,desconto:true}}),
-   () => prisma.local.findMany({select:{cidade:true,uf:true,valorComissao:true}}),
-   () => prisma.baixaFinanceira.findMany()
+   () => prisma.local.findMany({select:{cidade:true,uf:true,valorComissao:true}})
   ] as const, 2);
+  const manualIds=manual.map(x=>x.id);
+  const baixasResumo=manualIds.length?await prisma.baixaFinanceira.groupBy({by:["lancamentoId"],where:{lancamentoId:{in:manualIds}},_sum:{valor:true}}):[];
   const categorias:Record<string,number>={}; const add=(k:string,v:any)=>categorias[k]=(categorias[k]||0)+number(v);
   let receitasAutomaticas=0,despesasAutomaticas=0;
   // Receita de frete da DRE vem exclusivamente dos Romaneios.
@@ -90,7 +91,7 @@ export const financeiroService={
   // Manutenção no DRE vem diretamente das OS concluídas. Peças continuam separadas pelo Almoxarifado; aqui entram apenas mão de obra/outros, líquido do desconto.
   for(const os of ordensManutencao){const valor=maintenanceDreValue(os);if(valor>0){despesasAutomaticas+=valor;add("Manutenção",valor)}}
   const numerosOsManutencao=new Set(ordensManutencao.map(os=>os.numero));
-  const pagosResumo=new Map<string,number>();for(const b of baixasResumo)pagosResumo.set(b.lancamentoId,(pagosResumo.get(b.lancamentoId)||0)+number(b.valor));
+  const pagosResumo=new Map<string,number>();for(const b of baixasResumo)pagosResumo.set(b.lancamentoId,number(b._sum.valor));
   let receitasManuais=0,despesasManuais=0,aReceber=0,aPagar=0; for(const x of manual){if(x.status==="CANCELADO")continue; const v=number(x.valor),saldo=Math.max(0,v-(pagosResumo.get(x.id)||0)); if(x.tipo==="RECEITA"){aReceber+=saldo;if(isFreightRevenueCategory(x.categoria))continue;receitasManuais+=v;add(x.categoria,v)}else{aPagar+=saldo;if(isManualFuelCategory(x.categoria)||isManualCommissionCategory(x.categoria)||isGeneratedMaintenanceEntry(x,numerosOsManutencao))continue;despesasManuais+=v;add(x.categoria,v)}}
   const receitas=receitasAutomaticas+receitasManuais, despesas=despesasAutomaticas+despesasManuais, resultado=receitas-despesas; return {receitas,despesas,resultado,margem:receitas?resultado/receitas*100:0,aReceber,aPagar,receitasAutomaticas,despesasAutomaticas,receitasManuais,despesasManuais,categorias:Object.entries(categorias).map(([categoria,valor])=>({categoria,valor})).sort((a,b)=>b.valor-a.valor)};
  },
@@ -146,8 +147,8 @@ export const financeiroService={
  async analise(from?:string,to?:string){
   const range=(from||to)?{...(from?{gte:parseDateOnly(from)}:{}),...(to?{lte:parseDateOnly(to)}:{})}:undefined;
   const [viagens,manual,clientes,veiculos,manifestos,abastecimentos,pneusDetalhe,ordensManutencao,locais]=await runWithConcurrency([
-   () => prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined}),
-   () => prisma.lancamentoFinanceiro.findMany({where:{...(range?{dataCompetencia:range}:{}),status:{not:"CANCELADO"}}}),
+   () => prisma.viagem.findMany({where:range?{dataManifesto:range}:undefined,select:{id:true,placa:true,clienteId:true,valorFrete:true,dataManifesto:true,cidadeEntrega:true,distanciaKm:true,valorPedagio:true,valorDiaria:true,valorChapa:true,valorMulta:true,valorComissao:true}}),
+   () => prisma.lancamentoFinanceiro.findMany({where:{...(range?{dataCompetencia:range}:{}),status:{not:"CANCELADO"}},select:{tipo:true,categoria:true,valor:true,veiculoId:true,viagemId:true,clienteId:true,numeroDocumento:true,descricao:true}}),
    () => prisma.cliente.findMany({select:{id:true,nomeFantasia:true,razaoSocial:true}}),
    () => prisma.veiculo.findMany({select:{id:true,placa:true,ipvaValor:true,ipvaVencimento:true,ipvaPago:true,licenciamentoValor:true,licenciamentoVencimento:true,seguroValor:true,seguroValidade:true}}),
    () => prisma.manifesto.findMany({where:range?{dataManifesto:range}:undefined,select:{id:true,clienteId:true,dataManifesto:true,placaVeiculo:true}}),
