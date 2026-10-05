@@ -6,6 +6,7 @@ import { financeiroController } from "../controllers/financeiro.controller.js";
 export const financeiroRoutes = Router();
 financeiroRoutes.get("/resumo/dre", asyncHandler(financeiroController.resumo));
 financeiroRoutes.get("/analise/rentabilidade", asyncHandler(financeiroController.analise));
+financeiroRoutes.get("/analise/operacional", asyncHandler(financeiroController.analiseOperacional));
 financeiroRoutes.get("/fluxo-caixa", asyncHandler(financeiroController.fluxo));
 financeiroRoutes.get("/baixas", asyncHandler(financeiroController.baixas));
 financeiroRoutes.post("/:id/baixas", validate(idParamsSchema), asyncHandler(financeiroController.adicionarBaixa));

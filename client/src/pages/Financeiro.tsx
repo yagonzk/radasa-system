@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { api } from "@/lib/api";
 import { useClientes, useVeiculos, useViagens } from "@/lib/store";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,15 +48,7 @@ type Lancamento = {
   valorBaixado?: number; saldoRestante?: number;
 };
 
-type Resumo = {
-  receitas: number;
-  despesas: number;
-  resultado: number;
-  margem: number;
-  aReceber: number;
-  aPagar: number;
-  categorias: { categoria: string; valor: number }[];
-};
+
 
 type Centro = { id: string; nome: string; tipo: string; ativo: boolean };
 
@@ -105,6 +97,12 @@ const currentMonthRange = () => {
   const now = new Date();
   const local = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   return { from: local(new Date(now.getFullYear(), now.getMonth(), 1)), to: local(new Date(now.getFullYear(), now.getMonth()+1, 0)) };
+};
+const DRE_MAX_DAYS = 366;
+const daysInRange = (from: string, to: string) => {
+  const start = new Date(`${from}T00:00:00Z`).getTime();
+  const end = new Date(`${to}T00:00:00Z`).getTime();
+  return Math.floor((end - start) / 86400000) + 1;
 };
 const empty = {
   tipo: "DESPESA" as const,
@@ -326,10 +324,11 @@ export default function Financeiro() {
   const { items: veiculos } = useVeiculos();
   const { items: viagens } = useViagens();
   const [items, setItems] = useState<Lancamento[]>([]);
-  const [resumo, setResumo] = useState<Resumo | null>(null);
   const [centros, setCentros] = useState<Centro[]>([]);
   const [analise, setAnalise] = useState<Analise | null>(null);
   const [fluxo, setFluxo] = useState<Fluxo | null>(null);
+  const [loadingDre, setLoadingDre] = useState(false);
+  const [mostrarDetalhesDre, setMostrarDetalhesDre] = useState(false);
   const [baixaItem, setBaixaItem] = useState<Lancamento | null>(null);
   const [baixaValor, setBaixaValor] = useState("");
   const [parcelas, setParcelas] = useState("1");
@@ -342,35 +341,108 @@ export default function Financeiro() {
   const [novoCentro, setNovoCentro] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<LancamentoForm>({ ...empty, centroCustoId: "" });
-  const [from, setFrom] = useState(() => currentMonthRange().from);
-  const [to, setTo] = useState(() => currentMonthRange().to);
+  const initialRange = useMemo(() => currentMonthRange(), []);
+  const [from, setFrom] = useState(initialRange.from);
+  const [to, setTo] = useState(initialRange.to);
+  const [draftFrom, setDraftFrom] = useState(initialRange.from);
+  const [draftTo, setDraftTo] = useState(initialRange.to);
   const [activeTab, setActiveTab] = useState<"GERAL" | "RECEBER" | "PAGAR" | "MOVIMENTACOES" | "CENTROS">("GERAL");
   const [deletingAll, setDeletingAll] = useState(false);
+  const dreRequestId = useRef(0);
+  const listRequestId = useRef(0);
 
-  const load = async () => {
+  const loadDre = async (periodFrom = from, periodTo = to) => {
+    const requestId = ++dreRequestId.current;
+    setLoadingDre(true);
     try {
-      const [a, b, c, d, e] = await Promise.all([
-        api.get("/financeiro", { params: { from, to } }),
-        api.get("/financeiro/resumo/dre", {
-          params: { from: from || undefined, to: to || undefined },
-        }),
-        api.get("/centros-custo"),
-        api.get("/financeiro/analise/rentabilidade", { params: { from: from || undefined, to: to || undefined } }),
-        api.get("/financeiro/fluxo-caixa"),
-      ]);
-      setItems(a.data);
-      setResumo(b.data);
-      setCentros(c.data);
-      setAnalise(d.data);
-      setFluxo(e.data);
+      const response = await api.get("/financeiro/analise/operacional", { params: { from: periodFrom, to: periodTo } });
+      if (requestId === dreRequestId.current) setAnalise(response.data);
     } catch (e: any) {
-      toast.error(e.response?.data?.message || "Erro ao carregar financeiro");
+      if (requestId === dreRequestId.current) toast.error(e.response?.data?.message || "Erro ao carregar DRE Operacional");
+    } finally {
+      if (requestId === dreRequestId.current) setLoadingDre(false);
     }
   };
 
+  const loadLancamentos = async (periodFrom = from, periodTo = to) => {
+    const requestId = ++listRequestId.current;
+    try {
+      const response = await api.get("/financeiro", { params: { from: periodFrom, to: periodTo } });
+      if (requestId === listRequestId.current) setItems(response.data);
+    } catch (e: any) {
+      if (requestId === listRequestId.current) toast.error(e.response?.data?.message || "Erro ao carregar lançamentos financeiros");
+    }
+  };
+
+  const loadFluxo = async () => {
+    try {
+      const response = await api.get("/financeiro/fluxo-caixa");
+      setFluxo(response.data);
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Erro ao carregar fluxo de caixa");
+    }
+  };
+
+  const loadCentros = async () => {
+    try {
+      const response = await api.get("/centros-custo");
+      setCentros(response.data);
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Erro ao carregar centros de custo");
+    }
+  };
+
+  const refreshFinanceiro = async () => {
+    await Promise.all([loadDre(from, to), loadLancamentos(from, to), loadFluxo()]);
+  };
+
+  const aplicarPeriodo = () => {
+    if (!draftFrom || !draftTo) {
+      toast.error("Informe a data inicial e a data final.");
+      return;
+    }
+    if (draftFrom > draftTo) {
+      toast.error("A data inicial não pode ser maior que a data final.");
+      return;
+    }
+    const dias = daysInRange(draftFrom, draftTo);
+    if (dias > DRE_MAX_DAYS) {
+      toast.error(`Para proteger o sistema, consulte no máximo ${DRE_MAX_DAYS} dias por vez.`);
+      return;
+    }
+    if (draftFrom === from && draftTo === to) {
+      void loadDre(from, to);
+      if (["RECEBER", "PAGAR", "MOVIMENTACOES"].includes(activeTab)) void loadLancamentos(from, to);
+      return;
+    }
+    setFrom(draftFrom);
+    setTo(draftTo);
+  };
+
+  const voltarMesAtual = () => {
+    const range = currentMonthRange();
+    setDraftFrom(range.from);
+    setDraftTo(range.to);
+    setFrom(range.from);
+    setTo(range.to);
+  };
+
   useEffect(() => {
-    void load();
+    void loadDre(from, to);
   }, [from, to]);
+
+  useEffect(() => {
+    void loadFluxo();
+  }, []);
+
+  useEffect(() => {
+    if (["RECEBER", "PAGAR", "MOVIMENTACOES"].includes(activeTab)) void loadLancamentos(from, to);
+    if (activeTab === "CENTROS") void loadCentros();
+  }, [activeTab, from, to]);
+
+  useEffect(() => {
+    if (open) void loadCentros();
+  }, [open]);
 
   const filtered = useMemo(
     () =>
@@ -422,7 +494,7 @@ export default function Financeiro() {
     setOpen(false);
     setForm({ ...empty, centroCustoId: "" }); setParcelas("1"); setRecorrenteMensal(false);
     toast.success("Lançamento salvo.");
-    await load();
+    await refreshFinanceiro();
   };
 
   const abrirHistorico = async (item: Lancamento) => { const r=await api.get("/financeiro/baixas",{params:{lancamentoId:item.id}}); setHistorico({item,baixas:r.data}); };
@@ -430,7 +502,7 @@ export default function Financeiro() {
   const remove = async (id: string) => {
     await api.delete(`/financeiro/${id}`);
     toast.success("Lançamento removido.");
-    await load();
+    await refreshFinanceiro();
   };
 
   const removeAll = async () => {
@@ -441,7 +513,7 @@ export default function Financeiro() {
       setDeletingAll(true);
       const response = await api.delete("/financeiro/todos");
       toast.success(`${response.data?.removidos ?? items.length} movimentação(ões) removida(s) de uma vez.`);
-      await load();
+      await refreshFinanceiro();
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Não foi possível excluir todas as movimentações.");
     } finally {
@@ -457,12 +529,12 @@ export default function Financeiro() {
       ativo: true,
     });
     setNovoCentro("");
-    await load();
+    await loadCentros();
   };
 
   const delCentro = async (id: string) => {
     await api.delete(`/centros-custo/${id}`);
-    await load();
+    await loadCentros();
   };
 
   const quitar = async (item: Lancamento) => {
@@ -475,7 +547,7 @@ export default function Financeiro() {
     try {
       await api.post(`/financeiro/${baixaItem.id}/baixas`, { valor: Number(baixaValor), data: today(), formaPagamento: baixaForma || baixaItem.formaPagamento || "", observacoes: baixaObs, comprovanteUrl: baixaComprovanteUrl || null, comprovanteNome: baixaComprovanteUrl ? "Comprovante" : null });
       toast.success("Pagamento/recebimento registrado.");
-      setBaixaItem(null); setBaixaValor(""); await load();
+      setBaixaItem(null); setBaixaValor(""); await refreshFinanceiro();
     } catch(e:any){ toast.error(e.response?.data?.message || "Não foi possível registrar a baixa."); }
   };
 
@@ -592,20 +664,26 @@ export default function Financeiro() {
         </div>
 
         <Card>
-          <CardContent className="flex flex-wrap items-end gap-3 p-4">
-            <label className="text-xs font-medium text-muted-foreground">
-              DE
-              <Input type="date" className="mt-1 w-44" value={from} onChange={(e) => setFrom(e.target.value)} />
-            </label>
-            <label className="text-xs font-medium text-muted-foreground">
-              ATÉ
-              <Input type="date" className="mt-1 w-44" value={to} onChange={(e) => setTo(e.target.value)} />
-            </label>
-            {(from || to) && (
-              <Button variant="outline" onClick={() => { setFrom(""); setTo(""); }}>
-                Limpar período
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs font-medium text-muted-foreground">
+                DE
+                <Input type="date" className="mt-1 w-44" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} />
+              </label>
+              <label className="text-xs font-medium text-muted-foreground">
+                ATÉ
+                <Input type="date" className="mt-1 w-44" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} />
+              </label>
+              <Button onClick={aplicarPeriodo} disabled={loadingDre}>
+                {loadingDre ? "Carregando..." : "Aplicar período"}
               </Button>
-            )}
+              <Button variant="outline" onClick={voltarMesAtual} disabled={loadingDre}>
+                Mês atual
+              </Button>
+            </div>
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              Período aplicado: {formatDate(from)} a {formatDate(to)} · limite de {DRE_MAX_DAYS} dias por consulta para manter o sistema estável.
+            </div>
           </CardContent>
         </Card>
 
@@ -650,6 +728,11 @@ export default function Financeiro() {
                 accent={card.accent}
               />
             ))}
+          </div>
+          <div className="flex justify-end">
+            <Button size="sm" variant="outline" onClick={() => setMostrarDetalhesDre((value) => !value)}>
+              {mostrarDetalhesDre ? "Ocultar comparativos por placa" : "Mostrar comparativos por placa"}
+            </Button>
           </div>
         </div>
 
@@ -739,7 +822,7 @@ export default function Financeiro() {
               </div>
             </div>
 
-            {!placaSelecionada && comparativoPlacas.length > 0 ? (
+            {mostrarDetalhesDre && !placaSelecionada && comparativoPlacas.length > 0 ? (
               <div>
                 <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                   <div>
@@ -841,6 +924,7 @@ export default function Financeiro() {
           </CardContent>
         </Card>
 
+        {mostrarDetalhesDre ? (
         <Card className={activeTab === "GERAL" ? "" : "hidden"}>
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-end justify-between gap-3">
@@ -940,6 +1024,7 @@ export default function Financeiro() {
             )}
           </CardContent>
         </Card>
+        ) : null}
 
         <Card className={activeTab === "GERAL" ? "" : "hidden"}>
           <CardHeader className="pb-3"><CardTitle className="text-base">Fluxo de Caixa e Previsão</CardTitle></CardHeader>

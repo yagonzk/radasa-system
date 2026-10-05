@@ -27,11 +27,26 @@ const comissaoDaViagem=(viagem:any,locais:any[])=>{
  if(local)return valorComissaoPorDestino({cidade:local.cidade,uf:local.uf,valorLegado:number(local.valorComissao)});
  return number(viagem.valorComissao);
 };
+const DRE_OPERACIONAL_MAX_DIAS=366;
+const dreOperacionalRange=(from?:string,to?:string)=>{
+ const now=new Date();
+ const pad=(value:number)=>String(value).padStart(2,"0");
+ const localDate=(date:Date)=>`${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
+ const inicio=from||localDate(new Date(now.getFullYear(),now.getMonth(),1));
+ const fim=to||localDate(new Date(now.getFullYear(),now.getMonth()+1,0));
+ const inicioDate=parseDateOnly(inicio),fimDate=parseDateOnly(fim);
+ if(inicioDate>fimDate)throw new AppError(400,"A data inicial não pode ser maior que a data final.");
+ const dias=Math.floor((fimDate.getTime()-inicioDate.getTime())/86400000)+1;
+ if(dias>DRE_OPERACIONAL_MAX_DIAS)throw new AppError(400,`Para proteger o sistema, o DRE Operacional aceita no máximo ${DRE_OPERACIONAL_MAX_DIAS} dias por consulta.`);
+ return{inicio,fim,dias,range:{gte:inicioDate,lte:fimDate}};
+};
 export const financeiroService={
  async list(query?:Record<string,unknown>){
   const from=typeof query?.from==="string"&&query.from?parseDateOnly(query.from):undefined,to=typeof query?.to==="string"&&query.to?parseDateOnly(query.to):undefined;
   const range=(from||to)?{...(from?{gte:from}:{}),...(to?{lte:to}:{})}:undefined;
-  const [items,baixas]=await Promise.all([prisma.lancamentoFinanceiro.findMany({where:range?{dataCompetencia:range}:undefined,orderBy:[{dataCompetencia:"desc"},{createdAt:"desc"}]}),prisma.baixaFinanceira.groupBy({by:["lancamentoId"],_sum:{valor:true}})]);
+  const items=await prisma.lancamentoFinanceiro.findMany({where:range?{dataCompetencia:range}:undefined,orderBy:[{dataCompetencia:"desc"},{createdAt:"desc"}]});
+  const ids=items.map(x=>x.id);
+  const baixas=ids.length?await prisma.baixaFinanceira.groupBy({by:["lancamentoId"],where:{lancamentoId:{in:ids}},_sum:{valor:true}}):[];
   const pagos=new Map(baixas.map(x=>[x.lancamentoId,number(x._sum.valor)]));
   return items.map(x=>{const item=serialize(x),valorBaixado=pagos.get(x.id)||0;return{...item,valorBaixado,saldoRestante:Math.max(0,item.valor-valorBaixado)}})
  },
@@ -78,6 +93,55 @@ export const financeiroService={
   const pagosResumo=new Map<string,number>();for(const b of baixasResumo)pagosResumo.set(b.lancamentoId,(pagosResumo.get(b.lancamentoId)||0)+number(b.valor));
   let receitasManuais=0,despesasManuais=0,aReceber=0,aPagar=0; for(const x of manual){if(x.status==="CANCELADO")continue; const v=number(x.valor),saldo=Math.max(0,v-(pagosResumo.get(x.id)||0)); if(x.tipo==="RECEITA"){aReceber+=saldo;if(isFreightRevenueCategory(x.categoria))continue;receitasManuais+=v;add(x.categoria,v)}else{aPagar+=saldo;if(isManualFuelCategory(x.categoria)||isManualCommissionCategory(x.categoria)||isGeneratedMaintenanceEntry(x,numerosOsManutencao))continue;despesasManuais+=v;add(x.categoria,v)}}
   const receitas=receitasAutomaticas+receitasManuais, despesas=despesasAutomaticas+despesasManuais, resultado=receitas-despesas; return {receitas,despesas,resultado,margem:receitas?resultado/receitas*100:0,aReceber,aPagar,receitasAutomaticas,despesasAutomaticas,receitasManuais,despesasManuais,categorias:Object.entries(categorias).map(([categoria,valor])=>({categoria,valor})).sort((a,b)=>b.valor-a.valor)};
+ },
+ async analiseOperacional(from?:string,to?:string){
+  const periodo=dreOperacionalRange(from,to);
+  const range=periodo.range;
+  const [viagens,manual,veiculos,abastecimentos,pneusDetalhe,ordensManutencao,locais]=await runWithConcurrency([
+   () => prisma.viagem.findMany({where:{dataManifesto:range},select:{id:true,placa:true,valorFrete:true,valorPedagio:true,valorDiaria:true,valorComissao:true,valorChapa:true,valorMulta:true,distanciaKm:true,cidadeEntrega:true}}),
+   () => prisma.lancamentoFinanceiro.findMany({where:{dataCompetencia:range,status:{not:"CANCELADO"}},select:{tipo:true,valor:true,categoria:true,numeroDocumento:true,veiculoId:true,viagemId:true}}),
+   () => prisma.veiculo.findMany({select:{id:true,placa:true,ipvaValor:true,ipvaVencimento:true,ipvaPago:true,licenciamentoValor:true,licenciamentoVencimento:true,seguroValor:true,seguroValidade:true}}),
+   () => prisma.abastecimento.findMany({where:{dataEmissao:range},select:{veiculoId:true,produtos:{select:{valorTotal:true,produto:{select:{nome:true}}}}}}),
+   () => prisma.pneu.findMany({where:{deletedAt:null,dataCompra:range},select:{valorCompra:true,instalacoes:{orderBy:{createdAt:"asc"},take:1,select:{veiculoId:true}}}}),
+   () => prisma.ordemServico.findMany({where:{status:"CONCLUIDA",dataConclusao:range},select:{numero:true,veiculoId:true,valorPecas:true,valorMaoObra:true,valorOutros:true,desconto:true}}),
+   () => prisma.local.findMany({select:{cidade:true,uf:true,valorComissao:true}})
+  ] as const,2);
+
+  const veiculoPlaca=new Map(veiculos.map(x=>[x.id,x.placa]));
+  const viagemMap=new Map(viagens.map(v=>[v.id,v]));
+  const inRange=(d:Date|null)=>!!d&&d>=range.gte&&d<=range.lte;
+  const norm=(v:any)=>String(v||"").replace(/[^A-Z0-9]/gi,"").toUpperCase();
+  type Bucket={id:string;nome:string;receita:number;despesa:number;viagens:Set<string>;distanciaKm:number};
+  type Row={id:string;nome:string;receita:number;despesa:number;resultado:number;margem:number;viagens:number;distanciaKm:number;custoKm:number;lucroKm:number};
+  const byVeiculo=new Map<string,Bucket>();
+  const ensure=(id:string,nome:string)=>{if(!byVeiculo.has(id))byVeiculo.set(id,{id,nome,receita:0,despesa:0,viagens:new Set<string>(),distanciaKm:0});return byVeiculo.get(id)!};
+  const custosMap=new Map<string,{id:string;placa:string;categorias:Record<string,number>;total:number}>();
+  const addCusto=(veiculoKey:string,placa:string,categoria:string,valor:any)=>{if(!veiculoKey)return; if(!custosMap.has(veiculoKey))custosMap.set(veiculoKey,{id:veiculoKey,placa,categorias:{},total:0});const row=custosMap.get(veiculoKey)!;const n=number(valor);row.categorias[categoria]=(row.categorias[categoria]||0)+n;row.total+=n};
+
+  for(const v of viagens){
+   const placa=String(v.placa||"Sem placa"),vk=norm(placa)||placa,r=ensure(vk,placa);
+   const comissao=comissaoDaViagem(v,locais);
+   const despesa=number(v.valorPedagio)+number(v.valorDiaria)+number(v.valorChapa)+number(v.valorMulta)+comissao;
+   r.receita+=number(v.valorFrete);r.despesa+=despesa;r.viagens.add(v.id);r.distanciaKm+=number(v.distanciaKm);
+   addCusto(vk,placa,"Pedágios",v.valorPedagio);addCusto(vk,placa,"Diárias",v.valorDiaria);addCusto(vk,placa,"Chapas",v.valorChapa);addCusto(vk,placa,"Comissão",comissao);addCusto(vk,placa,"Multas",v.valorMulta);
+  }
+  for(const a of abastecimentos){const placa=veiculoPlaca.get(a.veiculoId)||"";if(!placa)continue;const vk=norm(placa)||placa,r=ensure(vk,placa);for(const p of a.produtos){if(!classifyFuelProduct(p.produto.nome))continue;const valor=number(p.valorTotal);r.despesa+=valor;addCusto(vk,placa,"Diesel",valor)}}
+  for(const v of veiculos){const vk=norm(v.placa)||v.placa,r=ensure(vk,v.placa);if(inRange(v.ipvaVencimento)&&!v.ipvaPago){r.despesa+=number(v.ipvaValor);addCusto(vk,v.placa,"IPVA",v.ipvaValor)}if(inRange(v.licenciamentoVencimento)){r.despesa+=number(v.licenciamentoValor);addCusto(vk,v.placa,"Licenciamento",v.licenciamentoValor)}if(inRange(v.seguroValidade)){r.despesa+=number(v.seguroValor);addCusto(vk,v.placa,"Seguro",v.seguroValor)}}
+  for(const pneu of pneusDetalhe){const vid=pneu.instalacoes[0]?.veiculoId,placa=vid?veiculoPlaca.get(vid)||"":"";if(!placa)continue;const vk=norm(placa)||placa,r=ensure(vk,placa);r.despesa+=number(pneu.valorCompra);addCusto(vk,placa,"Pneus",pneu.valorCompra)}
+  const numerosOsManutencao=new Set(ordensManutencao.map(os=>os.numero));
+  for(const os of ordensManutencao){const placa=veiculoPlaca.get(os.veiculoId)||"",valor=maintenanceDreValue(os);if(!placa||valor<=0)continue;const vk=norm(placa)||placa,r=ensure(vk,placa);r.despesa+=valor;addCusto(vk,placa,"Manutenção",valor)}
+  for(const x of manual){
+   const val=number(x.valor),isRec=x.tipo==="RECEITA",viagem=x.viagemId?viagemMap.get(x.viagemId):null;
+   const ignoraDespesa=!isRec&&(isManualFuelCategory(x.categoria)||isManualCommissionCategory(x.categoria)||isGeneratedMaintenanceEntry(x,numerosOsManutencao));
+   const placa=x.veiculoId?veiculoPlaca.get(x.veiculoId)||"":viagem?.placa||"";
+   if(!placa)continue;
+   const vk=norm(placa)||placa,r=ensure(vk,placa);
+   if(isRec)r.receita+=val;else if(!ignoraDespesa){r.despesa+=val;addCusto(vk,placa,x.categoria||"Outras despesas",val)}
+   if(x.viagemId)r.viagens.add(x.viagemId);
+  }
+  const porVeiculo:Row[]=Array.from(byVeiculo.values()).map(x=>{const resultado=x.receita-x.despesa;return{id:x.id,nome:x.nome,receita:x.receita,despesa:x.despesa,resultado,margem:x.receita?resultado/x.receita*100:0,viagens:x.viagens.size,distanciaKm:x.distanciaKm,custoKm:x.distanciaKm?x.despesa/x.distanciaKm:0,lucroKm:x.distanciaKm?resultado/x.distanciaKm:0}}).filter(x=>x.receita!==0||x.despesa!==0).sort((a,b)=>b.resultado-a.resultado);
+  const receita=porVeiculo.reduce((total,row)=>total+row.receita,0),despesa=porVeiculo.reduce((total,row)=>total+row.despesa,0),resultado=receita-despesa;
+  return{periodo:{from:periodo.inicio,to:periodo.fim,dias:periodo.dias,maxDias:DRE_OPERACIONAL_MAX_DIAS},resumo:{receita,despesa,resultado,margem:receita?resultado/receita*100:0,viagens:porVeiculo.reduce((total,row)=>total+row.viagens,0)},porVeiculo,porCliente:[],porViagem:[],custosPorVeiculo:Array.from(custosMap.values()).map(x=>({...x,categorias:Object.entries(x.categorias).map(([categoria,valor])=>({categoria,valor})).sort((a,b)=>b.valor-a.valor)})).sort((a,b)=>b.total-a.total)};
  },
  async analise(from?:string,to?:string){
   const range=(from||to)?{...(from?{gte:parseDateOnly(from)}:{}),...(to?{lte:parseDateOnly(to)}:{})}:undefined;
@@ -176,8 +240,8 @@ export const financeiroService={
   if(lanc)await prisma.lancamentoFinanceiro.update({where:{id:lanc.id},data:{status:"PENDENTE",dataPagamento:null}});
  },
  async fluxoCaixa(){
-  const [lancs,baixas]=await Promise.all([prisma.lancamentoFinanceiro.findMany({where:{status:{not:"CANCELADO"}}}),prisma.baixaFinanceira.findMany()]);
-  const pagos=new Map<string,number>();for(const b of baixas)pagos.set(b.lancamentoId,(pagos.get(b.lancamentoId)||0)+number(b.valor));
+  const [lancs,baixas]=await Promise.all([prisma.lancamentoFinanceiro.findMany({where:{status:{not:"CANCELADO"}},select:{id:true,tipo:true,valor:true,dataVencimento:true,dataCompetencia:true}}),prisma.baixaFinanceira.groupBy({by:["lancamentoId"],_sum:{valor:true}})]);
+  const pagos=new Map<string,number>();for(const b of baixas)pagos.set(b.lancamentoId,number(b._sum.valor));
   const hoje=new Date();hoje.setHours(0,0,0,0);const sete=new Date(hoje);sete.setDate(sete.getDate()+7);const trinta=new Date(hoje);trinta.setDate(trinta.getDate()+30);
   let saldoRealizado=0,aReceber=0,aPagar=0,vencidoReceber=0,vencidoPagar=0,receber7=0,pagar7=0,receber30=0,pagar30=0;
   for(const l of lancs){const total=number(l.valor),pago=pagos.get(l.id)||0,saldo=Math.max(0,total-pago);if(l.tipo==="RECEITA")saldoRealizado+=pago;else saldoRealizado-=pago;if(!saldo)continue;
