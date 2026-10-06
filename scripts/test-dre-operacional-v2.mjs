@@ -7,6 +7,7 @@ const finance=read('client/src/pages/Financeiro.tsx');
 const required=['Receita Bruta de Frete','Deduções da Receita','Receita Operacional Líquida','Custos Operacionais Diretos','Margem de Contribuição','Custos Indiretos Operacionais','EBITDA Operacional','Depreciação e Amortização','Resultado Operacional'];
 for(const term of required) if(!service.includes(term)) throw new Error(`DRE sem bloco: ${term}`);
 for(const route of ['/dre-operacional','/dre-operacional/detalhes']) if(!routes.includes(route)) throw new Error(`Rota ausente: ${route}`);
-for(const term of ['Top 10 clientes mais rentáveis','Top 10 clientes menos rentáveis','Rentabilidade por veículo','Rentabilidade por motorista','Receita x Custo x Resultado','Excel','PDF']) if(!ui.includes(term)) throw new Error(`UI DRE sem recurso: ${term}`);
+for(const term of ['Clientes mais rentáveis','Clientes com menor rentabilidade','Rentabilidade por veículo','Rentabilidade por motorista','Receita x Custo x Resultado','Excel','PDF']) if(!ui.includes(term)) throw new Error(`UI DRE sem recurso: ${term}`);
+for(const tab of ['Resumo','Rentabilidade','Análises']) if(!ui.includes(tab)) throw new Error(`Mini-aba DRE ausente: ${tab}`);
 if(!finance.includes('<DreOperacionalDashboard from={from} to={to} />')) throw new Error('Dashboard DRE não integrado ao Financeiro');
 console.log('DRE Operacional v2 regression checks passed');
