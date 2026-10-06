@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { crudController } from "./crud.controller.js";
 import { financeiroService } from "../services/financeiro.service.js";
+import { dreOperacionalService } from "../services/dre-operacional.service.js";
 
 const base = crudController(financeiroService);
 const queryDate = (value: unknown) => typeof value === "string" ? value : undefined;
@@ -18,4 +19,6 @@ export const financeiroController = {
   },
   removeAll: async (_req: Request, res: Response) => res.json(await financeiroService.removeAll()),
   fluxo: async (_req: Request, res: Response) => res.json(await financeiroService.fluxoCaixa()),
+  dreOperacionalV2: async (req: Request, res: Response) => res.json(await dreOperacionalService.dashboard(req.query as any)),
+  dreOperacionalDetalhes: async (req: Request, res: Response) => res.json(await dreOperacionalService.detalhes(req.query as any)),
 };

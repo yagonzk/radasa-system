@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+const read=(p)=>fs.readFileSync(new URL(`../${p}`,import.meta.url),'utf8');
+const service=read('server/services/dre-operacional.service.ts');
+const routes=read('server/routes/financeiro.routes.ts');
+const ui=read('client/src/components/financeiro/DreOperacionalDashboard.tsx');
+const finance=read('client/src/pages/Financeiro.tsx');
+const required=['Receita Bruta de Frete','Deduções da Receita','Receita Operacional Líquida','Custos Operacionais Diretos','Margem de Contribuição','Custos Indiretos Operacionais','EBITDA Operacional','Depreciação e Amortização','Resultado Operacional'];
+for(const term of required) if(!service.includes(term)) throw new Error(`DRE sem bloco: ${term}`);
+for(const route of ['/dre-operacional','/dre-operacional/detalhes']) if(!routes.includes(route)) throw new Error(`Rota ausente: ${route}`);
+for(const term of ['Top 10 clientes mais rentáveis','Top 10 clientes menos rentáveis','Rentabilidade por veículo','Rentabilidade por motorista','Receita x Custo x Resultado','Excel','PDF']) if(!ui.includes(term)) throw new Error(`UI DRE sem recurso: ${term}`);
+if(!finance.includes('<DreOperacionalDashboard from={from} to={to} />')) throw new Error('Dashboard DRE não integrado ao Financeiro');
+console.log('DRE Operacional v2 regression checks passed');
