@@ -267,8 +267,11 @@ export const dreOperacionalService = {
       for(const v of rows){for(const [label,val] of [["Pedágios pagos",v.valorPedagio],["Diárias",v.valorDiaria],["Ajudantes",v.valorChapa],["Comissão de motorista",v.valorComissao],["Despesas de viagem",v.valorCustoExtra],["Outros custos diretos",v.valorMulta]] as const){if(!number(val)||(cat&&norm(label)!==norm(cat)))continue;out.push({id:`${v.id}-${label}`,data:dateOnly(v.dataManifesto),tipo:"Custo",categoria:label,cliente:"",documento:"",viagem:v.codigo||v.id,placa:v.placa,valor:number(val)});}}
     }
     if(wants("Manutenção preventiva","Manutenção corretiva")){
-      const rows=await prisma.ordemServico.findMany({where:{status:"CONCLUIDA",dataConclusao:r.date,...(filterVehicle?{veiculoId:filterVehicle.id}:{})},select:{id:true,numero:true,tipo:true,dataConclusao:true,veiculo:{select:{placa:true}},valorPecas:true,valorMaoObra:true,valorOutros:true,desconto:true},orderBy:{dataConclusao:"desc"},take:120});
-      for(const os of rows){const label=String(os.tipo).toUpperCase().includes("PREVENT")?"Manutenção preventiva":"Manutenção corretiva";if(cat&&norm(label)!==norm(cat))continue;const val=maintenanceDreValue(os);if(val)out.push({id:os.id,data:os.dataConclusao?dateOnly(os.dataConclusao):"",tipo:"Custo",categoria:label,cliente:"",documento:os.numero,viagem:"",placa:os.veiculo.placa,valor:val});}
+      const rows=await prisma.ordemServico.findMany({where:{status:"CONCLUIDA",dataConclusao:r.date,...(filterVehicle?{veiculoId:filterVehicle.id}:{})},select:{id:true,numero:true,veiculoId:true,tipo:true,dataConclusao:true,valorPecas:true,valorMaoObra:true,valorOutros:true,desconto:true},orderBy:{dataConclusao:"desc"},take:120});
+      const osVehicleIds=Array.from(new Set(rows.map(x=>x.veiculoId)));
+      const osVehicles=filterVehicle?[filterVehicle]:(osVehicleIds.length?await prisma.veiculo.findMany({where:{id:{in:osVehicleIds}},select:{id:true,placa:true}}):[]);
+      const osPlate=new Map(osVehicles.map(v=>[v.id,v.placa]));
+      for(const os of rows){const label=String(os.tipo).toUpperCase().includes("PREVENT")?"Manutenção preventiva":"Manutenção corretiva";if(cat&&norm(label)!==norm(cat))continue;const val=maintenanceDreValue(os);if(val)out.push({id:os.id,data:os.dataConclusao?dateOnly(os.dataConclusao):"",tipo:"Custo",categoria:label,cliente:"",documento:os.numero,viagem:"",placa:osPlate.get(os.veiculoId)||"",valor:val});}
     }
     if(wants("Pneus","Recapagens")){
       const [pneusRows,recRows]=await Promise.all([
