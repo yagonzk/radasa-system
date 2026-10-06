@@ -418,7 +418,7 @@ export default function CiotGerarPage() {
 
   const empresaContratante = useMemo(() => {
     const certificadas = empresas.filter(
-      (empresa) => empresa.ativa && Boolean(empresa.certificadoArquivo?.trim()),
+      (empresa) => empresa.ativa && Boolean(empresa.certificadoConfigurado || empresa.certificadoArquivo?.trim()),
     );
     return (
       certificadas.find((empresa) => empresa.empresaPadrao) ??

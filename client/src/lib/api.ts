@@ -96,6 +96,7 @@ type BootstrapResponse = {
 
 const resourceCache = new Map<string, ResourceCacheEntry>();
 const resourceInflight = new Map<string, Promise<unknown>>();
+const resourceRangeInflight = new Map<string, Promise<unknown>>();
 const batchWaiters = new Map<string, Array<{ resolve: (value: unknown) => void; reject: (reason?: unknown) => void }>>();
 let batchScheduled = false;
 
@@ -107,10 +108,31 @@ function currentMonthParams() {
   return { from: local(new Date(now.getFullYear(), now.getMonth(), 1)), to: local(new Date(now.getFullYear(), now.getMonth()+1, 0)) };
 }
 
+// Cadastros pequenos continuam agrupados em /bootstrap. Coleções operacionais
+// maiores são carregadas separadamente para não sofrer "head-of-line blocking":
+// Romaneios, por exemplo, não precisa esperar Clientes + Produtos + Veículos
+// terminarem para começar a aparecer na tela.
 const BATCHABLE_RESOURCES = new Set([
-  "motoristas", "chapas", "clientes", "fornecedores", "empresa", "produtos", "locais",
-  "veiculos", "viagens", "fechamentos", "manifestos", "abastecimentos", "pneus",
+  "motoristas", "chapas", "clientes", "fornecedores", "empresa", "produtos", "locais", "veiculos",
 ]);
+const HEAVY_RESOURCES = new Set(["viagens", "fechamentos", "manifestos", "abastecimentos", "pneus"]);
+let heavyActive = 0;
+const heavyQueue: Array<() => void> = [];
+
+function runHeavyTask<T>(task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const start = () => {
+      heavyActive += 1;
+      void task().then(resolve, reject).finally(() => {
+        heavyActive = Math.max(0, heavyActive - 1);
+        const next = heavyQueue.shift();
+        if (next) next();
+      });
+    };
+    if (heavyActive < 2) start();
+    else heavyQueue.push(start);
+  });
+}
 
 // Cadastros mudam pouco e podem ser reaproveitados entre navegações/reloads da
 // mesma aba. O dado persistido é mostrado imediatamente e a atualização acontece
@@ -282,7 +304,9 @@ export function getResourceCollection<T>(resource: string, force = false): Promi
 
   const request = (BATCHABLE_RESOURCES.has(resource)
     ? enqueueResource(resource)
-    : fetchResourceDirect(resource)) as Promise<T[]>;
+    : HEAVY_RESOURCES.has(resource)
+      ? runHeavyTask(() => fetchResourceDirect(resource))
+      : fetchResourceDirect(resource)) as Promise<T[]>;
 
   resourceInflight.set(resource, request);
   const releaseInflight = () => {
@@ -291,6 +315,29 @@ export function getResourceCollection<T>(resource: string, force = false): Promi
   // Usamos os dois ramos de then em vez de finally solto para não criar uma
   // Promise rejeitada sem consumidor quando a API falha.
   void request.then(releaseInflight, releaseInflight);
+  return request;
+}
+
+export function getResourceRange<T>(resource: string, from?: string, to?: string): Promise<T[]> {
+  const key = `${resource}|${from || ""}|${to || ""}`;
+  const inflight = resourceRangeInflight.get(key);
+  if (inflight) return inflight as Promise<T[]>;
+
+  const fetchRange = async () => {
+    const response = await api.get<T[]>(`/${resource}`, {
+      params: { from: from || undefined, to: to || undefined },
+    });
+    return response.data;
+  };
+
+  const request = (HEAVY_RESOURCES.has(resource)
+    ? runHeavyTask(fetchRange)
+    : fetchRange()) as Promise<T[]>;
+  resourceRangeInflight.set(key, request);
+  const release = () => {
+    if (resourceRangeInflight.get(key) === request) resourceRangeInflight.delete(key);
+  };
+  void request.then(release, release);
   return request;
 }
 

@@ -3,10 +3,17 @@ import { created } from "../utils/serialize.js";
 import { AppError } from "../utils/app-error.js";
 
 function serialize(item: any) {
-  const { certificadoSenha: _certificadoSenha, ...safe } = item;
+  // O certificado pode ter vários MB. Listagens e GET cadastral devolvem apenas
+  // o estado configurado; o conteúdo continua restrito ao backend (SEFAZ/CIOT).
+  const {
+    certificadoSenha: _certificadoSenha,
+    certificadoArquivo: _certificadoArquivo,
+    ...safe
+  } = item;
 
   return {
     ...safe,
+    certificadoConfigurado: item.certificadoConfigurado ?? Boolean(item.certificadoArquivo),
     certificadoValidade:
       item.certificadoValidade instanceof Date
         ? item.certificadoValidade.toISOString()
@@ -20,6 +27,7 @@ function normalizeData(data: any, preservePassword = false): any {
     createdAt,
     certificadoValidade,
     certificadoSenha,
+    certificadoArquivo,
     ...rest
   } = data;
 
@@ -39,6 +47,12 @@ function normalizeData(data: any, preservePassword = false): any {
     normalized.certificadoSenha = "";
   }
 
+  if (certificadoArquivo) {
+    normalized.certificadoArquivo = certificadoArquivo;
+  } else if (!preservePassword && certificadoArquivo !== undefined) {
+    normalized.certificadoArquivo = "";
+  }
+
   if (createdAt) {
     normalized.createdAt = new Date(createdAt);
   }
@@ -48,26 +62,40 @@ function normalizeData(data: any, preservePassword = false): any {
 
 export const empresaService = {
   async list() {
-    return (
-      await prisma.empresa.findMany({
+    const [items, configured] = await Promise.all([
+      prisma.empresa.findMany({
+        omit: { certificadoArquivo: true, certificadoSenha: true },
         orderBy: [
           { empresaPadrao: "desc" },
           { createdAt: "desc" },
         ],
-      })
-    ).map(serialize);
+      }),
+      prisma.empresa.findMany({
+        where: { certificadoArquivo: { not: "" } },
+        select: { id: true },
+      }),
+    ]);
+    const configuredIds = new Set(configured.map((item) => item.id));
+    return items.map((item) => serialize({ ...item, certificadoConfigurado: configuredIds.has(item.id) }));
   },
 
   async get(id: string) {
-    const item = await prisma.empresa.findUnique({
-      where: { id },
-    });
+    const [item, configured] = await Promise.all([
+      prisma.empresa.findUnique({
+        where: { id },
+        omit: { certificadoArquivo: true, certificadoSenha: true },
+      }),
+      prisma.empresa.findFirst({
+        where: { id, certificadoArquivo: { not: "" } },
+        select: { id: true },
+      }),
+    ]);
 
     if (!item) {
       throw new AppError(404, "Empresa não encontrada.");
     }
 
-    return serialize(item);
+    return serialize({ ...item, certificadoConfigurado: Boolean(configured) });
   },
 
   async create(data: any) {
@@ -81,16 +109,21 @@ export const empresaService = {
 
       return tx.empresa.create({
         data: normalizeData(data),
+        omit: { certificadoArquivo: true, certificadoSenha: true },
       });
     });
 
-    return serialize(item);
+    return serialize({ ...item, certificadoConfigurado: Boolean(data.certificadoArquivo) });
   },
 
   async update(id: string, data: any) {
-    const current = await prisma.empresa.findUnique({
-      where: { id },
-    });
+    const [current, configured] = await Promise.all([
+      prisma.empresa.findUnique({ where: { id }, select: { id: true } }),
+      prisma.empresa.findFirst({
+        where: { id, certificadoArquivo: { not: "" } },
+        select: { id: true },
+      }),
+    ]);
 
     if (!current) {
       throw new AppError(404, "Empresa não encontrada.");
@@ -110,15 +143,20 @@ export const empresaService = {
       return tx.empresa.update({
         where: { id },
         data: normalizeData(data, true),
+        omit: { certificadoArquivo: true, certificadoSenha: true },
       });
     });
 
-    return serialize(item);
+    return serialize({
+      ...item,
+      certificadoConfigurado: Boolean(data.certificadoArquivo) || Boolean(configured),
+    });
   },
 
   async remove(id: string) {
     const current = await prisma.empresa.findUnique({
       where: { id },
+      select: { id: true, empresaPadrao: true },
     });
 
     if (!current) {

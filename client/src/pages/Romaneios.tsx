@@ -1,4 +1,4 @@
-﻿import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -556,8 +556,13 @@ export default function Romaneios() {
     } finally { setNfImporting(false); setNfDragActive(false); }
   };
 
-  const clienteById = (id?: string | null) => clientes.find((item) => item.id === id);
-  const produtoById = (id?: string | null) => produtos.find((item) => item.id === id);
+  // Mapas O(1): a tela fazia Array.find para cliente/produto repetidas vezes
+  // dentro de cada item de cada romaneio, multiplicando CPU conforme o histórico
+  // crescia. Os mapas são reconstruídos apenas quando o cadastro muda.
+  const clientesById = useMemo(() => new Map(clientes.map((item) => [item.id, item])), [clientes]);
+  const produtosById = useMemo(() => new Map(produtos.map((item) => [item.id, item])), [produtos]);
+  const clienteById = (id?: string | null) => id ? clientesById.get(id) : undefined;
+  const produtoById = (id?: string | null) => id ? produtosById.get(id) : undefined;
 
   const normalizePlate = (value?: string | null) =>
     String(value ?? "")
@@ -618,22 +623,22 @@ export default function Romaneios() {
     return ranked[0].veiculo;
   };
 
-  const romaneios = useMemo(() => {
-    const byId = new Map(veiculos.map((veiculo) => [veiculo.id, veiculo]));
-    const byPlate = new Map(
-      veiculos
-        .map((veiculo) => [normalizePlate(veiculo.placa), veiculo] as const)
-        .filter(([plate]) => Boolean(plate)),
-    );
+  const veiculosById = useMemo(() => new Map(veiculos.map((veiculo) => [veiculo.id, veiculo])), [veiculos]);
+  const veiculosByPlate = useMemo(() => new Map(
+    veiculos
+      .map((veiculo) => [normalizePlate(veiculo.placa), veiculo] as const)
+      .filter(([plate]) => Boolean(plate)),
+  ), [veiculos]);
 
+  const romaneios = useMemo(() => {
     // O cadastro de veículos já chega em paralelo à listagem. Enriquecemos o
     // modelo/placa no navegador em vez de fazer uma segunda leitura de veículos
     // dentro da própria query de Romaneios. Isso preserva o backfill visual das
     // versões anteriores e reduz uma ida extra ao banco a cada abertura.
     return sourceRomaneios.map((romaneio) => {
       const veiculo =
-        (romaneio.veiculoCodigo ? byId.get(romaneio.veiculoCodigo) : undefined) ??
-        byPlate.get(normalizePlate(romaneio.placaVeiculo));
+        (romaneio.veiculoCodigo ? veiculosById.get(romaneio.veiculoCodigo) : undefined) ??
+        veiculosByPlate.get(normalizePlate(romaneio.placaVeiculo));
       if (!veiculo) return romaneio;
       return {
         ...romaneio,
@@ -642,7 +647,7 @@ export default function Romaneios() {
         modeloVeiculo: veiculo.modelo ?? romaneio.modeloVeiculo ?? "",
       };
     });
-  }, [sourceRomaneios, veiculos]);
+  }, [sourceRomaneios, veiculosById, veiculosByPlate]);
 
   const resolveRegisteredVehicle = (
     documento: Pick<PdfResponse["documento"], "veiculoCodigo" | "placaVeiculo">,
@@ -789,48 +794,98 @@ export default function Romaneios() {
     });
   };
 
+  const romaneioMetricsById = useMemo(() => {
+    const metrics = new Map<string, {
+      total: number;
+      valorLebrinha: number;
+      valorClientes: number;
+      faltaPagar: number;
+      foiPago: number;
+      valorTotalResumo: number;
+      hasPendingReceberCliente: boolean;
+      searchText: string;
+    }>();
+
+    for (const romaneio of romaneios) {
+      let total = 0;
+      let valorLebrinha = 0;
+      let valorClientes = 0;
+      let faltaPagar = 0;
+      let foiPago = 0;
+      let valorTotalResumo = 0;
+      let hasPendingReceberCliente = false;
+      const searchParts: unknown[] = [
+        romaneio.romaneios,
+        romaneio.notasFiscais,
+        romaneio.placaVeiculo,
+        romaneio.modeloVeiculo,
+        romaneio.transportadoraNome,
+      ];
+
+      for (const item of romaneio.produtos) {
+        const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
+        const valor = Number(item.valorTotal || 0);
+        total += valor;
+        if (tipo !== "Vasilhame") valorTotalResumo += valor;
+        if (tipo === "Receber c/ Cliente") {
+          valorClientes += valor;
+          if (item.pagoCliente === true) foiPago += valor;
+          else {
+            faltaPagar += valor;
+            hasPendingReceberCliente = true;
+          }
+        } else {
+          valorLebrinha += valor;
+        }
+
+        const cliente = clientesById.get(item.clienteId ?? romaneio.clienteId);
+        const produto = produtosById.get(item.produtoId);
+        searchParts.push(
+          cliente?.nomeFantasia,
+          cliente?.codigoInterno,
+          produto?.nome,
+          produto?.codigoInterno,
+          item.notaFiscal,
+          item.romaneio,
+          tipo,
+        );
+      }
+
+      metrics.set(romaneio.id, {
+        total,
+        valorLebrinha,
+        valorClientes,
+        faltaPagar,
+        foiPago,
+        valorTotalResumo,
+        hasPendingReceberCliente,
+        searchText: normalized(searchParts.join(" ")),
+      });
+    }
+
+    return metrics;
+  }, [clientesById, produtosById, romaneios]);
+
   const filtered = useMemo(() => {
     const query = normalized(search);
     return [...romaneios]
       .filter((romaneio) => {
-        if (query) {
-          const text = [
-            romaneio.romaneios,
-            romaneio.notasFiscais,
-            romaneio.placaVeiculo,
-            romaneio.transportadoraNome,
-            ...romaneio.produtos.flatMap((item) => [
-              clienteById(item.clienteId ?? romaneio.clienteId)?.nomeFantasia,
-              produtoById(item.produtoId)?.nome,
-              item.notaFiscal,
-              item.romaneio,
-              item.tipoManifesto,
-            ]),
-          ].join(" ");
-          if (!normalized(text).includes(query)) return false;
-        }
+        const metrics = romaneioMetricsById.get(romaneio.id);
+        if (query && !metrics?.searchText.includes(query)) return false;
         if (columnFilters.romaneio && (romaneio.romaneios || "Sem número") !== columnFilters.romaneio) return false;
         if (columnFilters.dataInicio && romaneio.dataManifesto < columnFilters.dataInicio) return false;
         if (columnFilters.dataFim && romaneio.dataManifesto > columnFilters.dataFim) return false;
         if (columnFilters.veiculo && romaneioVehicleLabel(romaneio) !== columnFilters.veiculo) return false;
-        const valorLebrinhaRomaneio = romaneio.produtos.reduce((sum, item) => {
-          const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
-          return tipo === "Receber c/ Cliente" ? sum : sum + item.valorTotal;
-        }, 0);
-        const valorClientesRomaneio = romaneio.produtos.reduce((sum, item) => {
-          const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
-          return tipo === "Receber c/ Cliente" ? sum + item.valorTotal : sum;
-        }, 0);
-        if (columnFilters.valorLebrinha && formatBRL(valorLebrinhaRomaneio) !== columnFilters.valorLebrinha) return false;
-        if (columnFilters.valorClientes && formatBRL(valorClientesRomaneio) !== columnFilters.valorClientes) return false;
-        if (columnFilters.valorTotal && formatBRL(romaneioTotal(romaneio)) !== columnFilters.valorTotal) return false;
+        if (columnFilters.valorLebrinha && formatBRL(metrics?.valorLebrinha ?? 0) !== columnFilters.valorLebrinha) return false;
+        if (columnFilters.valorClientes && formatBRL(metrics?.valorClientes ?? 0) !== columnFilters.valorClientes) return false;
+        if (columnFilters.valorTotal && formatBRL(metrics?.total ?? 0) !== columnFilters.valorTotal) return false;
         return true;
       })
       .sort((a, b) =>
         b.dataManifesto.localeCompare(a.dataManifesto) ||
         b.createdAt.localeCompare(a.createdAt),
       );
-  }, [clientes, columnFilters, produtos, romaneios, search]);
+  }, [columnFilters, romaneioMetricsById, romaneios, search]);
 
   const reportPlateOptions = useMemo(() => Array.from(new Set(
     romaneios.map((item) => formatPlate(item.placaVeiculo || "")).filter(Boolean),
@@ -873,13 +928,13 @@ export default function Romaneios() {
   const preClosingTotals = useMemo(() => {
     return filtered.reduce(
       (totals, romaneio) => {
-        totals.aReceber += preFechamentoValorClientes(romaneio);
+        totals.aReceber += romaneioMetricsById.get(romaneio.id)?.faltaPagar ?? 0;
         totals.gastos += preFechamentoGastos(romaneio);
         return totals;
       },
       { aReceber: 0, gastos: 0 },
     );
-  }, [filtered]);
+  }, [filtered, romaneioMetricsById]);
 
   const preClosingTotalCaixa = preClosingTotals.aReceber - preClosingTotals.gastos;
 
@@ -1055,46 +1110,28 @@ export default function Romaneios() {
     let valorTotal = 0;
 
     filtered.forEach((romaneio) => {
-      romaneio.produtos.forEach((item) => {
-        const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
-        const valor = Number(item.valorTotal || 0);
+      const metrics = romaneioMetricsById.get(romaneio.id);
+      if (!metrics) return;
+      valorCliente += metrics.valorClientes;
+      valorLebrinha += metrics.valorLebrinha;
+      faltaPagar += metrics.faltaPagar;
+      foiPago += metrics.foiPago;
 
-        if (tipo === "Receber c/ Cliente") {
-          valorCliente += valor;
-          if (item.pagoCliente === true) foiPago += valor;
-          else faltaPagar += valor;
-        } else {
-          valorLebrinha += valor;
-        }
-
-        // Valor Total: Cliente + cobrança Lebrinha + Bonificação Lebrinha.
-        // Vasilhames ficam fora dessa soma.
-        if (
-          tipo === "Receber c/ Cliente" ||
-          tipo === "Acertar c/ Lebrinha" ||
-          tipo === "Bonificação - Lebrinha"
-        ) {
-          valorTotal += valor;
-        }
-      });
+      // Valor Total do resumo não considera Vasilhame. A métrica já foi
+      // calculada em uma única passagem pelos itens para evitar um novo scan.
+      valorTotal += metrics.valorTotalResumo;
     });
 
     return { valorCliente, valorLebrinha, faltaPagar, foiPago, valorTotal };
-  }, [filtered]);
+  }, [filtered, romaneioMetricsById]);
 
   const columnFilterOptions = (key: RomaneioFilterKey) => {
     let values: string[] = [];
     if (key === "romaneio") values = romaneios.map((item) => item.romaneios || "Sem número");
     if (key === "veiculo") values = romaneios.map(romaneioVehicleLabel);
-    if (key === "valorLebrinha") values = romaneios.map((romaneio) => formatBRL(romaneio.produtos.reduce((sum, item) => {
-      const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
-      return tipo === "Receber c/ Cliente" ? sum : sum + item.valorTotal;
-    }, 0)));
-    if (key === "valorClientes") values = romaneios.map((romaneio) => formatBRL(romaneio.produtos.reduce((sum, item) => {
-      const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
-      return tipo === "Receber c/ Cliente" ? sum + item.valorTotal : sum;
-    }, 0)));
-    if (key === "valorTotal") values = romaneios.map((item) => formatBRL(romaneioTotal(item)));
+    if (key === "valorLebrinha") values = romaneios.map((romaneio) => formatBRL(romaneioMetricsById.get(romaneio.id)?.valorLebrinha ?? 0));
+    if (key === "valorClientes") values = romaneios.map((romaneio) => formatBRL(romaneioMetricsById.get(romaneio.id)?.valorClientes ?? 0));
+    if (key === "valorTotal") values = romaneios.map((romaneio) => formatBRL(romaneioMetricsById.get(romaneio.id)?.total ?? 0));
     return Array.from(new Set(values))
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
@@ -2556,19 +2593,11 @@ export default function Romaneios() {
                 </thead>
                 <tbody>
                   {visibleRomaneios.map((romaneio) => {
-                    const total = romaneio.produtos.reduce((sum, item) => sum + item.valorTotal, 0);
-                    const hasPendingReceberCliente = romaneio.produtos.some((item) => {
-                      const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
-                      return tipo === "Receber c/ Cliente" && item.pagoCliente !== true;
-                    });
-                    const valorLebrinhaRomaneio = romaneio.produtos.reduce((sum, item) => {
-                      const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
-                      return tipo === "Receber c/ Cliente" ? sum : sum + item.valorTotal;
-                    }, 0);
-                    const valorClientesRomaneio = romaneio.produtos.reduce((sum, item) => {
-                      const tipo = item.tipoManifesto ?? romaneio.tipoManifesto;
-                      return tipo === "Receber c/ Cliente" ? sum + item.valorTotal : sum;
-                    }, 0);
+                    const metrics = romaneioMetricsById.get(romaneio.id);
+                    const total = metrics?.total ?? 0;
+                    const hasPendingReceberCliente = metrics?.hasPendingReceberCliente ?? false;
+                    const valorLebrinhaRomaneio = metrics?.valorLebrinha ?? 0;
+                    const valorClientesRomaneio = metrics?.valorClientes ?? 0;
                     return (
                       <tr key={romaneio.id} className="border-t transition-colors hover:bg-muted/20">
                         <td className="w-10 px-2 py-3 text-center">

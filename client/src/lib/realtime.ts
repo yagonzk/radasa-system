@@ -19,6 +19,10 @@ let retryTimer: number | null = null;
 let retryAttempt = 0;
 let consumers = 0;
 let stopped = true;
+let changeFlushTimer: number | null = null;
+const pendingResources = new Set<string>();
+let pendingChange: RealtimeChange | null = null;
+const REALTIME_COALESCE_MS = 300;
 
 function status(value: RealtimeStatus) {
   window.dispatchEvent(new CustomEvent<RealtimeStatus>(REALTIME_STATUS_EVENT, { detail: value }));
@@ -39,12 +43,15 @@ function resourceEventName(resource: string) {
   return `radasa-api-change:${resource}`;
 }
 
-function applyChange(change: RealtimeChange) {
-  if (change.sourceClientId && change.sourceClientId === getRealtimeClientId()) return;
-  const resources = Array.from(new Set((change.resources || []).filter(Boolean)));
+function flushChanges() {
+  changeFlushTimer = null;
+  if (!pendingResources.size || !pendingChange) return;
+  const resources = [...pendingResources];
+  pendingResources.clear();
+  const change = { ...pendingChange, resources };
+  pendingChange = null;
 
   for (const resource of resources) {
-    invalidateResourceCache(resource);
     window.dispatchEvent(
       new CustomEvent(resourceEventName(resource), {
         detail: { source: "realtime" },
@@ -53,10 +60,26 @@ function applyChange(change: RealtimeChange) {
   }
 
   window.dispatchEvent(
-    new CustomEvent<RealtimeChange>(REALTIME_CHANGE_EVENT, {
-      detail: { ...change, resources },
-    }),
+    new CustomEvent<RealtimeChange>(REALTIME_CHANGE_EVENT, { detail: change }),
   );
+}
+
+function applyChange(change: RealtimeChange) {
+  if (change.sourceClientId && change.sourceClientId === getRealtimeClientId()) return;
+  const resources = Array.from(new Set((change.resources || []).filter(Boolean)));
+  if (!resources.length) return;
+
+  // Invalida imediatamente, mas agrupa rajadas de escrita (importação em massa,
+  // pagamentos em lote etc.) em um único refetch por recurso. Sem isso, 20 PATCHes
+  // podiam fazer outro PC recalcular Dashboard/Financeiro/Fiscal 20 vezes seguidas.
+  for (const resource of resources) {
+    invalidateResourceCache(resource);
+    pendingResources.add(resource);
+  }
+  pendingChange = change;
+  if (changeFlushTimer === null) {
+    changeFlushTimer = window.setTimeout(flushChanges, REALTIME_COALESCE_MS);
+  }
 }
 
 function scheduleReconnect() {
@@ -131,6 +154,12 @@ export function startRealtimeSync() {
       window.clearTimeout(retryTimer);
       retryTimer = null;
     }
+    if (changeFlushTimer !== null) {
+      window.clearTimeout(changeFlushTimer);
+      changeFlushTimer = null;
+    }
+    pendingResources.clear();
+    pendingChange = null;
     if (socket) {
       try { socket.close(1000, "Sessão encerrada."); } catch { /* noop */ }
       socket = null;

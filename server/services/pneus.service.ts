@@ -9,7 +9,7 @@ const serialize = (p: any) => {
   const { codigoBarras: _codigoBarras, qrCode: _qrCode, notaFiscalUrl: _notaFiscalUrl, ...rest } = p;
   return {
   ...rest,
-  notaFiscalStored: Boolean(p.notaFiscalUrl),
+  notaFiscalStored: p.notaFiscalStored ?? Boolean(p.notaFiscalUrl ?? p.notaFiscalNome),
   valorCompra: number(p.valorCompra), sulcoInicial: p.sulcoInicial == null ? null : number(p.sulcoInicial),
   sulcoAtual: p.sulcoAtual == null ? null : number(p.sulcoAtual), kmAtual: number(p.kmAtual),
   proximoRodizioKm: p.proximoRodizioKm == null ? null : number(p.proximoRodizioKm),
@@ -53,8 +53,8 @@ function data(input: any, fallbackNumeroFogo?: string) {
 }
 
 export const pneusService = {
-  async list() { return (await prisma.pneu.findMany({ where: { deletedAt: null }, include, orderBy: [{ status: "asc" }, { numeroFogo: "asc" }] })).map(serialize); },
-  async get(id: string) { const p = await prisma.pneu.findFirst({ where: { id, deletedAt: null }, include }); if (!p) throw new AppError(404, "Pneu não encontrado."); return serialize(p); },
+  async list() { return (await prisma.pneu.findMany({ where: { deletedAt: null }, include, omit: { notaFiscalUrl: true, codigoBarras: true, qrCode: true }, orderBy: [{ status: "asc" }, { numeroFogo: "asc" }] })).map(serialize); },
+  async get(id: string) { const p = await prisma.pneu.findFirst({ where: { id, deletedAt: null }, include, omit: { notaFiscalUrl: true, codigoBarras: true, qrCode: true } }); if (!p) throw new AppError(404, "Pneu não encontrado."); return serialize(p); },
   async create(input: any) {
     const prepared = data(input);
     const exists = await prisma.pneu.findUnique({ where: { numeroFogo: prepared.numeroFogo } });

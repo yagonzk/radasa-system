@@ -56,25 +56,6 @@ function buildVehicleLookups(vehicles: VehicleMetadata[]) {
   };
 }
 
-function enrichManifestoVehicle<T extends {
-  veiculoCodigo?: string | null;
-  placaVeiculo?: string | null;
-  modeloVeiculo?: string | null;
-}>(item: T, lookups: ReturnType<typeof buildVehicleLookups>) {
-  const vehicle =
-    (item.veiculoCodigo ? lookups.byId.get(item.veiculoCodigo) : undefined) ??
-    lookups.byPlate.get(normalizeKeyPart(item.placaVeiculo));
-
-  if (!vehicle) return item;
-
-  return {
-    ...item,
-    veiculoCodigo: vehicle.id,
-    placaVeiculo: formatPlate(vehicle.placa),
-    modeloVeiculo: vehicle.modelo ?? item.modeloVeiculo ?? "",
-  };
-}
-
 function uniqueSorted(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) =>
     left.localeCompare(right, "pt-BR", { numeric: true }),
@@ -132,6 +113,63 @@ export function buildManifestoDedupeKey(input: ManifestoDedupeInput) {
   ].join(":");
 }
 
+function manifestoDedupeCandidateWhere(input: ManifestoDedupeInput, excludeId?: string) {
+  const key = buildManifestoDedupeKey(input);
+  const base = excludeId ? { id: { not: excludeId } } : {};
+
+  if (key.startsWith("ROMANEIOS:")) {
+    const romaneios = key.slice("ROMANEIOS:".length).split("|").filter(Boolean);
+    if (romaneios.length) {
+      const data = dateKey(input.dataManifesto);
+      return {
+        ...base,
+        OR: [
+          // A data mantém compatibilidade com números legados que possam ter
+          // pontuação diferente; os contains capturam duplicatas mesmo se a
+          // data tiver sido corrigida posteriormente.
+          ...(data ? [{ dataManifesto: parseDateOnly(data) }] : []),
+          ...romaneios.flatMap((romaneio) => [
+            { romaneios: { contains: romaneio, mode: "insensitive" as const } },
+            { produtos: { some: { romaneio: { contains: romaneio, mode: "insensitive" as const } } } },
+          ]),
+        ],
+      };
+    }
+  }
+
+  const data = dateKey(input.dataManifesto);
+  if (data) {
+    // Para chaves por NF/conteúdo, comparar somente registros da mesma data já
+    // reduz a busca de todo o histórico para um conjunto pequeno sem arriscar
+    // falso negativo por diferenças antigas de formatação da placa.
+    return { ...base, dataManifesto: parseDateOnly(data) };
+  }
+
+  // Fallback raro para registros sem número e sem data. Mantém compatibilidade
+  // com dados legados, ainda com a comparação lógica definitiva abaixo.
+  return base;
+}
+
+const manifestoDedupeSelect = {
+  id: true,
+  clienteId: true,
+  dataManifesto: true,
+  placaVeiculo: true,
+  romaneios: true,
+  notasFiscais: true,
+  produtos: {
+    select: {
+      produtoId: true,
+      clienteId: true,
+      romaneio: true,
+      notaFiscal: true,
+      serieNf: true,
+      quantidade: true,
+      valorTotal: true,
+    },
+  },
+} as const;
+
 async function assertManifestoIsUnique(
   tx: any,
   input: ManifestoDedupeInput,
@@ -139,29 +177,13 @@ async function assertManifestoIsUnique(
 ) {
   const dedupeKey = buildManifestoDedupeKey(input);
 
-  // A transação Serializable que envolve esta leitura impede duas gravações
-  // concorrentes com a mesma chave lógica.
+  // A transação Serializable continua protegendo concorrência, mas a validação
+  // deixa de varrer todos os romaneios/produtos históricos a cada gravação.
+  // Primeiro o banco reduz os candidatos por número/data; depois a mesma chave
+  // lógica faz a confirmação exata para preservar a regra de duplicidade.
   const existing = await tx.manifesto.findMany({
-    where: excludeId ? { id: { not: excludeId } } : undefined,
-    select: {
-      id: true,
-      clienteId: true,
-      dataManifesto: true,
-      placaVeiculo: true,
-      romaneios: true,
-      notasFiscais: true,
-      produtos: {
-        select: {
-          produtoId: true,
-          clienteId: true,
-          romaneio: true,
-          notaFiscal: true,
-          serieNf: true,
-          quantidade: true,
-          valorTotal: true,
-        },
-      },
-    },
+    where: manifestoDedupeCandidateWhere(input, excludeId),
+    select: manifestoDedupeSelect,
   });
 
   const duplicate = existing.find(
@@ -266,6 +288,44 @@ const nested = (items: any[], fallbackClientId: string) => {
   }));
 };
 
+const manifestoListSelect = {
+  id: true,
+  clienteId: true,
+  dataManifesto: true,
+  tipoManifesto: true,
+  transportadoraCodigo: true,
+  transportadoraNome: true,
+  veiculoCodigo: true,
+  placaVeiculo: true,
+  modeloVeiculo: true,
+  romaneios: true,
+  notasFiscais: true,
+  preFechamentoComissao: true,
+  preFechamentoPedagio: true,
+  preFechamentoAbastecimento: true,
+  preFechamentoComissaoPaga: true,
+  preFechamentoPedagioPago: true,
+  preFechamentoAbastecimentoPago: true,
+  createdAt: true,
+  produtos: {
+    orderBy: { id: "asc" as const },
+    select: {
+      id: true,
+      produtoId: true,
+      clienteId: true,
+      romaneio: true,
+      notaFiscal: true,
+      serieNf: true,
+      instrucaoCobranca: true,
+      quantidade: true,
+      valorUnitario: true,
+      valorTotal: true,
+      tipoManifesto: true,
+      pagoCliente: true,
+    },
+  },
+} as const;
+
 export const manifestosService = {
   async list(query?: Record<string, unknown>) {
     // Listagem principal: evita reler toda a tabela de veículos aqui. O frontend
@@ -276,8 +336,7 @@ export const manifestosService = {
     const [items, withPdf] = await Promise.all([
       prisma.manifesto.findMany({
         where,
-        include,
-        omit: { pdfUrl: true },
+        select: manifestoListSelect,
         orderBy: [{ dataManifesto: "desc" }, { createdAt: "desc" }],
       }),
       prisma.manifesto.findMany({
@@ -295,14 +354,11 @@ export const manifestosService = {
   },
 
   async get(id: string) {
-    const [item, vehicles] = await Promise.all([
-      prisma.manifesto.findUnique({ where: { id }, include }),
-      prisma.veiculo.findMany({
-        select: { id: true, placa: true, modelo: true },
-      }),
-    ]);
+    // O romaneio já persiste placa/modelo no momento da gravação. Buscar toda a
+    // frota aqui fazia um simples download de PDF depender de uma consulta extra.
+    const item = await prisma.manifesto.findUnique({ where: { id }, include });
     if (!item) throw new AppError(404, "Romaneio não encontrado.");
-    return serialize(enrichManifestoVehicle(item, buildVehicleLookups(vehicles)));
+    return serialize(item);
   },
 
   async create(input: any) {
@@ -311,7 +367,7 @@ export const manifestosService = {
     const item = await serializableTransaction(async (tx) => {
       await assertManifestoIsUnique(tx, { ...input, clienteId });
       return tx.manifesto.create({
-        include,
+        select: manifestoListSelect,
         data: {
           id: input.id,
           clienteId,
@@ -330,7 +386,7 @@ export const manifestosService = {
         },
       });
     });
-    return serialize(item);
+    return serialize({ ...item, pdfStored: Boolean(input.pdfUrl) });
   },
 
   async createSpreadsheetItem(input: any) {
@@ -431,40 +487,15 @@ export const manifestosService = {
   async createMany(inputs: any[]) {
     if (!Array.isArray(inputs) || !inputs.length) return { imported: [], failed: [] };
 
-    // Em romaneios importados do PDF a chave normalmente é o próprio número do
-    // romaneio. Nesse caminho rápido não carregamos todos os itens históricos do
-    // banco a cada lote. Só usamos a consulta completa no raro fallback sem número.
-    const incomingKeys = inputs.map((input) => buildManifestoDedupeKey(input));
-    const onlyRomaneioKeys = incomingKeys.every((key) => key.startsWith("ROMANEIOS:"));
-    let knownKeys: Set<string>;
-
-    if (onlyRomaneioKeys) {
-      const existing = await prisma.manifesto.findMany({ select: { romaneios: true } });
-      knownKeys = new Set(existing.map((item) => buildManifestoDedupeKey(item)));
-    } else {
-      const existing = await prisma.manifesto.findMany({
-        select: {
-          id: true,
-          clienteId: true,
-          dataManifesto: true,
-          placaVeiculo: true,
-          romaneios: true,
-          notasFiscais: true,
-          produtos: {
-            select: {
-              produtoId: true,
-              clienteId: true,
-              romaneio: true,
-              notaFiscal: true,
-              serieNf: true,
-              quantidade: true,
-              valorTotal: true,
-            },
-          },
-        },
-      });
-      knownKeys = new Set(existing.map((item) => buildManifestoDedupeKey(item)));
-    }
+    // Busca apenas candidatos que podem conflitar com os itens deste lote. Antes
+    // esta etapa carregava todos os romaneios do banco (e, no fallback, todos os
+    // produtos históricos), fazendo o custo crescer junto com o histórico.
+    const candidateWheres = inputs.map((input) => manifestoDedupeCandidateWhere(input));
+    const existing = await prisma.manifesto.findMany({
+      where: candidateWheres.length === 1 ? candidateWheres[0] : { OR: candidateWheres },
+      select: manifestoDedupeSelect,
+    });
+    const knownKeys = new Set(existing.map((item) => buildManifestoDedupeKey(item)));
     const accepted: Array<{ index: number; input: any; clienteId: string; key: string }> = [];
     const failed: Array<{ index: number; message: string }> = [];
 
@@ -555,7 +586,10 @@ export const manifestosService = {
   },
 
   async update(id: string, input: any) {
-    const current = await prisma.manifesto.findUnique({ where: { id } });
+    const [current, currentWithPdf] = await Promise.all([
+      prisma.manifesto.findUnique({ where: { id }, select: { id: true, clienteId: true } }),
+      prisma.manifesto.findFirst({ where: { id, pdfUrl: { not: null } }, select: { id: true } }),
+    ]);
     if (!current) throw new AppError(404, "Romaneio não encontrado.");
     const clienteId = input.clienteId || input.produtos?.[0]?.clienteId || current.clienteId;
     const item = await serializableTransaction(async (tx) => {
@@ -563,12 +597,12 @@ export const manifestosService = {
       await tx.manifestoProduto.deleteMany({ where: { manifestoId: id } });
       return tx.manifesto.update({
         where: { id },
-        include,
+        select: manifestoListSelect,
         data: {
           clienteId,
           dataManifesto: parseDateOnly(input.dataManifesto),
           tipoManifesto: tipoToDb(input.tipoManifesto),
-          pdfUrl: input.pdfUrl === undefined ? current.pdfUrl : (input.pdfUrl || null),
+          ...(input.pdfUrl !== undefined ? { pdfUrl: input.pdfUrl || null } : {}),
           transportadoraCodigo: input.transportadoraCodigo || "",
           transportadoraNome: input.transportadoraNome || "",
           veiculoCodigo: input.veiculoCodigo || "",
@@ -580,7 +614,8 @@ export const manifestosService = {
         },
       });
     });
-    return serialize(item);
+    const pdfStored = input.pdfUrl !== undefined ? Boolean(input.pdfUrl) : Boolean(currentWithPdf);
+    return serialize({ ...item, pdfStored });
   },
 
   async removeMany(ids: string[]) {

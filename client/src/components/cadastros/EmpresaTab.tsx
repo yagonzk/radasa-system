@@ -150,6 +150,7 @@ export default function EmpresaTab() {
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
   const [consultingCnpj, setConsultingCnpj] = useState(false);
+  const [existingCertificate, setExistingCertificate] = useState(false);
   const certificateInputRef = useRef<HTMLInputElement>(null);
 
   const filteredItems = useMemo(() => {
@@ -181,6 +182,7 @@ export default function EmpresaTab() {
 
   const handleOpenCreate = () => {
     setEditingId(null);
+    setExistingCertificate(false);
     setForm(emptyForm);
     if (certificateInputRef.current) {
       certificateInputRef.current.value = "";
@@ -190,6 +192,7 @@ export default function EmpresaTab() {
 
   const handleOpenEdit = (item: Empresa) => {
     setEditingId(item.id);
+    setExistingCertificate(Boolean(item.certificadoConfigurado || item.certificadoArquivo));
     setForm({
       razaoSocial: item.razaoSocial || "",
       nomeFantasia: item.nomeFantasia || "",
@@ -206,7 +209,9 @@ export default function EmpresaTab() {
       bairro: item.bairro || "",
       cidade: item.cidade || "",
       uf: item.uf || "",
-      certificadoArquivo: item.certificadoArquivo || "",
+      // O backend não envia mais o PFX/P12 inteiro para o navegador. Um novo
+      // arquivo só é enviado se o usuário realmente selecionar outro certificado.
+      certificadoArquivo: "",
       certificadoSenha: "",
       certificadoValidade: item.certificadoValidade
         ? item.certificadoValidade.slice(0, 10)
@@ -335,7 +340,7 @@ export default function EmpresaTab() {
       return;
     }
 
-    const payload = {
+    const normalizedPayload = {
       ...form,
       cnpj,
       cep: onlyDigits(form.cep),
@@ -345,6 +350,9 @@ export default function EmpresaTab() {
       certificadoValidade:
         form.certificadoValidade || undefined,
     };
+    const payload = editingId && !form.certificadoArquivo
+      ? (({ certificadoArquivo: _certificadoArquivo, ...rest }) => rest)(normalizedPayload)
+      : normalizedPayload;
 
     setSaving(true);
 
@@ -438,13 +446,13 @@ export default function EmpresaTab() {
         <div className="flex items-center gap-2">
           <FileKey2
             className={`h-4 w-4 ${
-              item.certificadoArquivo
+              (item.certificadoConfigurado || item.certificadoArquivo)
                 ? "text-emerald-600"
                 : "text-muted-foreground"
             }`}
           />
           <span>
-            {item.certificadoArquivo
+            {(item.certificadoConfigurado || item.certificadoArquivo)
               ? "Configurado"
               : "Não configurado"}
           </span>
@@ -744,7 +752,11 @@ export default function EmpresaTab() {
                       </Button>
 
                       <span className="text-sm text-muted-foreground">
-                        {certificateName(form.certificadoArquivo)}
+                        {form.certificadoArquivo
+                          ? certificateName(form.certificadoArquivo)
+                          : existingCertificate
+                            ? "Certificado já configurado"
+                            : "Nenhum certificado"}
                       </span>
 
                       <input
@@ -797,8 +809,8 @@ export default function EmpresaTab() {
                   <div className="flex w-full items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2.5">
                     <ShieldCheck className="h-4 w-4 text-emerald-600" />
                     <span className="text-sm">
-                      {form.certificadoArquivo
-                        ? "Certificado anexado"
+                      {(form.certificadoArquivo || existingCertificate)
+                        ? "Certificado configurado"
                         : "Aguardando certificado"}
                     </span>
                   </div>

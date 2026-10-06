@@ -7,8 +7,8 @@ const serialize = (item: any) => {
   const { cnhPdfUrl, toxicologicoPdfUrl, ...safe } = item;
   return ({
   ...safe,
-  cnhPdfStored: Boolean(cnhPdfUrl),
-  toxicologicoPdfStored: Boolean(toxicologicoPdfUrl),
+  cnhPdfStored: item.cnhPdfStored ?? Boolean(cnhPdfUrl ?? item.cnhPdfNome),
+  toxicologicoPdfStored: item.toxicologicoPdfStored ?? Boolean(toxicologicoPdfUrl ?? item.toxicologicoPdfNome),
   salarioBase: number(item.salarioBase),
   dataNascimento: item.dataNascimento ? dateOnly(item.dataNascimento) : null,
   dataAdmissao: item.dataAdmissao ? dateOnly(item.dataAdmissao) : null,
@@ -41,11 +41,11 @@ function motoristaPdfFields(tipo: string) {
 
 export const motoristasService = {
   async list() {
-    return (await prisma.motorista.findMany({ orderBy: { createdAt: "desc" } })).map(serialize);
+    return (await prisma.motorista.findMany({ omit: { cnhPdfUrl: true, toxicologicoPdfUrl: true }, orderBy: { createdAt: "desc" } })).map(serialize);
   },
 
   async get(id: string) {
-    const item = await prisma.motorista.findUnique({ where: { id } });
+    const item = await prisma.motorista.findUnique({ where: { id }, omit: { cnhPdfUrl: true, toxicologicoPdfUrl: true } });
     if (!item) throw new AppError(404, "Motorista não encontrado.");
     return serialize(item);
   },
@@ -54,6 +54,7 @@ export const motoristasService = {
     const { createdAt, status = "ATIVO", ...raw } = data;
     const rest = normalizeDates(raw);
     const item = await prisma.motorista.create({
+      omit: { cnhPdfUrl: true, toxicologicoPdfUrl: true },
       data: {
         ...rest,
         status,
@@ -66,7 +67,11 @@ export const motoristasService = {
   async update(id: string, data: any) {
     const { createdAt, ...raw } = data;
     const rest = normalizeDates(raw);
-    const item = await prisma.motorista.update({ where: { id }, data: rest });
+    const item = await prisma.motorista.update({
+      where: { id },
+      omit: { cnhPdfUrl: true, toxicologicoPdfUrl: true },
+      data: rest,
+    });
     return serialize(item);
   },
 
@@ -76,6 +81,7 @@ export const motoristasService = {
     if (!exists) throw new AppError(404, "Motorista não encontrado.");
     const item = await prisma.motorista.update({
       where: { id },
+      omit: { cnhPdfUrl: true, toxicologicoPdfUrl: true },
       data: { [fields.nome]: file.originalname, [fields.url]: pdfDataUrl(file) },
     });
     return serialize(item);
@@ -83,7 +89,10 @@ export const motoristasService = {
 
   async getPdf(id: string, tipo: string) {
     const fields = motoristaPdfFields(tipo);
-    const item = await prisma.motorista.findUnique({ where: { id } });
+    const item = await prisma.motorista.findUnique({
+      where: { id },
+      select: { cnhPdfNome: true, cnhPdfUrl: true, toxicologicoPdfNome: true, toxicologicoPdfUrl: true },
+    });
     if (!item) throw new AppError(404, "Motorista não encontrado.");
     const dataUrl = String((item as any)[fields.url] ?? "");
     if (!dataUrl) throw new AppError(404, "Documento não cadastrado.");
@@ -95,7 +104,11 @@ export const motoristasService = {
     const fields = motoristaPdfFields(tipo);
     const exists = await prisma.motorista.findUnique({ where: { id }, select: { id: true } });
     if (!exists) throw new AppError(404, "Motorista não encontrado.");
-    const item = await prisma.motorista.update({ where: { id }, data: { [fields.nome]: "", [fields.url]: "" } });
+    const item = await prisma.motorista.update({
+      where: { id },
+      omit: { cnhPdfUrl: true, toxicologicoPdfUrl: true },
+      data: { [fields.nome]: "", [fields.url]: "" },
+    });
     return serialize(item);
   },
 

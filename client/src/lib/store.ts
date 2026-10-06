@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, getResourceCollection, invalidateResourceCache, peekResourceCollection } from "./api";
+import { api, getResourceCollection, getResourceRange, invalidateResourceCache, peekResourceCollection } from "./api";
 
 export type StatusMotorista = "ATIVO" | "FERIAS" | "DEMITIDO";
 export interface Motorista {
@@ -51,6 +51,7 @@ export interface Empresa {
   cidade?: string;
   uf?: string;
   certificadoArquivo?: string;
+  certificadoConfigurado?: boolean;
   certificadoValidade?: string;
   ativa: boolean;
   empresaPadrao: boolean;
@@ -307,6 +308,7 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string, opti
   const sourceId = useRef(generateId()).current;
   const optimistic = options?.optimistic !== false;
   const mutationRevision = useRef(0);
+  const rangeRevision = useRef(0);
   const activeRangeRef = useRef<{ from?: string; to?: string } | null>(null);
   const replaceLocalItem = useCallback((item: T) => {
     setItems(current => {
@@ -341,12 +343,16 @@ function useApiCrud<T extends Entity>(resource: string, entityName: string, opti
   const loadRange = useCallback(async (from?: string, to?: string) => {
     activeRangeRef.current = { from, to };
     const revisionAtStart = mutationRevision.current;
+    const rangeAtStart = ++rangeRevision.current;
     try {
-      const response = await api.get<unknown>(`/${resource}`, {
-        params: { from: from || undefined, to: to || undefined },
-      });
-      const collection = requireCollection<T>(response.data, entityName);
-      if (revisionAtStart === mutationRevision.current) setItems(collection);
+      const payload = await getResourceRange<unknown>(resource, from, to);
+      const collection = requireCollection<T>(payload, entityName);
+      // Se o usuário mudou o período enquanto a consulta anterior ainda estava
+      // no banco, somente a resposta mais nova pode substituir a tela.
+      if (
+        revisionAtStart === mutationRevision.current &&
+        rangeAtStart === rangeRevision.current
+      ) setItems(collection);
       return collection;
     } catch (error) {
       console.error(`Falha ao carregar período de ${entityName}.`, error);

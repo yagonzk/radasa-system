@@ -1,4 +1,4 @@
-﻿import { prisma } from "../lib/prisma.js";
+import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { runWithConcurrency } from "../utils/concurrency.js";
 import { parseDateOnly } from "../utils/date.js";
@@ -471,27 +471,29 @@ export const abastecimentosService = {
     });
 
     const itemIds = items.map((item) => item.id);
-    const documentState = itemIds.length
-      ? await prisma.abastecimento.findMany({
-          where: { id: { in: itemIds } },
-          select: { id: true, pdfUrl: true, xmlUrl: true },
-        })
-      : [];
+    // Nunca trazemos PDF/XML base64 apenas para descobrir se o arquivo existe.
+    // O PostgreSQL filtra por presença e devolve somente os IDs, evitando megabytes
+    // de I/O e memória no Worker em cada abertura de Abastecimentos/Dashboard.
+    const [withPdf, withXml] = itemIds.length
+      ? await Promise.all([
+          prisma.abastecimento.findMany({
+            where: { id: { in: itemIds }, pdfUrl: { not: null } },
+            select: { id: true },
+          }),
+          prisma.abastecimento.findMany({
+            where: { id: { in: itemIds }, xmlUrl: { not: null } },
+            select: { id: true },
+          }),
+        ])
+      : [[], []];
 
-    const documentsById = new Map(
-      documentState.map((item) => [
-        item.id,
-        {
-          pdfStored: Boolean(item.pdfUrl),
-          xmlStored: Boolean(item.xmlUrl),
-        },
-      ]),
-    );
+    const pdfIds = new Set(withPdf.map((item) => item.id));
+    const xmlIds = new Set(withXml.map((item) => item.id));
     return items.map((item) =>
       serialize({
         ...item,
-        pdfStored: documentsById.get(item.id)?.pdfStored ?? false,
-        xmlStored: documentsById.get(item.id)?.xmlStored ?? false,
+        pdfStored: pdfIds.has(item.id),
+        xmlStored: xmlIds.has(item.id),
       }),
     );
   },
