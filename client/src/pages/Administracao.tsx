@@ -10,7 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
-import Layout from "@/components/Layout";
+import AdminLayout from "@/components/admin/AdminLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -305,7 +305,7 @@ export default function Administracao() {
   };
 
   return (
-    <Layout>
+    <AdminLayout>
       <div className="space-y-5">
         <div>
           <h1 className="text-2xl font-bold">Administração e Segurança</h1>
@@ -500,6 +500,6 @@ export default function Administracao() {
           </Card>
         )}
       </div>
-    </Layout>
+    </AdminLayout>
   );
 }

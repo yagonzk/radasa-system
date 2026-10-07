@@ -42,6 +42,8 @@ const AgroLavouras = lazy(() => import("./pages/AgroLavouras"));
 const AgroCadastros = lazy(() => import("./pages/AgroCadastros"));
 const AgroRelatorios = lazy(() => import("./pages/AgroRelatorios"));
 const AgroInventario = lazy(() => import("./pages/AgroInventario"));
+const AdminHome = lazy(() => import("./pages/AdminHome"));
+const AdminCadastros = lazy(() => import("./pages/AdminCadastros"));
 
 const RouteFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center bg-background">
@@ -61,6 +63,11 @@ function Router() {
       <Route path="/agro/relatorios" component={AgroRelatorios} />
       <Route path="/agro/inventario" component={AgroInventario} />
       <Route path="/agro" component={AgroHome} />
+      <Route path="/admin/usuarios" component={Administracao} />
+      <Route path="/admin/aprovacoes" component={AprovacaoContas} />
+      <Route path="/admin/cadastros" component={AdminCadastros} />
+      <Route path="/admin/logs" component={Logs} />
+      <Route path="/admin" component={AdminHome} />
       <Route path="/" component={Dashboard} />
       <Route path="/demandas" component={Demandas} />
       <Route path="/cadastros" component={Cadastros} />
@@ -125,13 +132,18 @@ function SessionGate() {
   // O núcleo da plataforma não depende de uma licença operacional específica.
   // Assim o usuário continua conseguindo trocar de módulo, editar o perfil e,
   // no caso do ADMIN, renovar licenças mesmo se um ambiente estiver vencido.
-  const coreRoute =
-    location === "/modulos" ||
-    location === "/perfil" ||
-    location === "/alterar-senha" ||
+  const adminRoute =
+    location.startsWith("/admin") ||
     location.startsWith("/administracao") ||
     location.startsWith("/aprovacao-contas") ||
     location.startsWith("/logs");
+
+  if (adminRoute) return user.role === "ADMIN" ? <Router /> : <ModuleSelector />;
+
+  const coreRoute =
+    location === "/modulos" ||
+    location === "/perfil" ||
+    location === "/alterar-senha";
 
   if (coreRoute) return <Router />;
 

@@ -1,6 +1,6 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3, ArrowLeftRight } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3, ArrowLeftRight } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useEffect, useState } from "react";
@@ -56,16 +56,6 @@ const navGroups = [
       { label: "Localidades", href: "/cadastros/locais", icon: <BadgeDollarSign className="h-4 w-4" />, matchPaths: ["/cadastros/locais"] },
       { label: "Fornecedores", href: "/cadastros/fornecedores", icon: <BriefcaseBusiness className="h-4 w-4" />, matchPaths: ["/cadastros/fornecedores"] },
       { label: "Empresa", href: "/cadastros/empresa", icon: <BriefcaseBusiness className="h-4 w-4" />, matchPaths: ["/cadastros/empresa"] },
-    ],
-  },
-  {
-    label: "Administração",
-    icon: <Settings2 className="h-[18px] w-[18px]" />,
-    adminOnly: true,
-    items: [
-      { label: "Central administrativa", href: "/administracao", icon: <Settings2 className="h-4 w-4" />, matchPaths: ["/administracao"] },
-      { label: "Aprovação de contas", href: "/aprovacao-contas", icon: <ShieldCheck className="h-4 w-4" />, matchPaths: ["/aprovacao-contas"] },
-      { label: "Logs do sistema", href: "/logs", icon: <ScrollText className="h-4 w-4" />, matchPaths: ["/logs"] },
     ],
   },
 ] satisfies Array<{ label: string; icon: ReactNode; adminOnly?: boolean; items: NavItem[] }>;
@@ -216,7 +206,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <DropdownMenuItem asChild><Link href="/modulos" className="flex cursor-pointer items-center gap-2"><ArrowLeftRight className="h-4 w-4"/>Trocar módulo</Link></DropdownMenuItem>
                 <DropdownMenuItem asChild><Link href="/perfil" className="flex cursor-pointer items-center gap-2"><UserRound className="h-4 w-4"/>Meu perfil</Link></DropdownMenuItem>
                 <DropdownMenuItem asChild><Link href="/alterar-senha" className="flex cursor-pointer items-center gap-2"><KeyRound className="h-4 w-4"/>Alterar senha</Link></DropdownMenuItem>
-                {user?.role === "ADMIN" && <DropdownMenuItem asChild><Link href="/logs" className="flex cursor-pointer items-center gap-2"><ScrollText className="h-4 w-4"/>Ver logs</Link></DropdownMenuItem>}
+                
               </DropdownMenuContent>
             </DropdownMenu>
             <div className="min-w-0 flex-1">

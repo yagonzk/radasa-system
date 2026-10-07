@@ -10,6 +10,8 @@ function requestModule(req: Request) {
 }
 
 export const adminController = {
+  resumo: async (_req: Request, res: Response) => res.json(await service.resumo()),
+
   usuarios: async (_req: Request, res: Response) => res.json(await service.usuarios()),
 
   acesso: async (req: Request, res: Response) =>

@@ -7,6 +7,7 @@ import { adminController as controller } from "../controllers/admin.controller.j
 export const adminRoutes = Router();
 
 adminRoutes.use(authenticate, requireRole(UserRole.ADMIN));
+adminRoutes.get("/resumo", asyncHandler(controller.resumo));
 adminRoutes.get("/usuarios", asyncHandler(controller.usuarios));
 adminRoutes.put("/usuarios/:id/acesso", asyncHandler(controller.acesso));
 adminRoutes.put("/usuarios/:id/licencas/:module/dias", asyncHandler(controller.atualizarDiasLicenca));

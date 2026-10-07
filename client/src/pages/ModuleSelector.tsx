@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ArrowRight, Leaf, LogOut, RefreshCw, ShieldCheck, Truck, UserRound } from "lucide-react";
+import { ArrowRight, Leaf, LogOut, RefreshCw, Settings2, ShieldCheck, Truck, UserRound } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,34 @@ function ModuleCard({ module, onEnter }: { module: RadasaModule; onEnter: () => 
   );
 }
 
+function AdminModuleCard({ onEnter }: { onEnter: () => void }) {
+  return (
+    <Card className="overflow-hidden border-2 transition hover:border-primary/40 hover:shadow-md">
+      <CardContent className="p-0">
+        <div className="flex min-h-[260px] flex-col p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <Settings2 className="h-6 w-6" />
+            </div>
+            <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300">Somente ADMIN</Badge>
+          </div>
+          <div className="mt-5">
+            <h2 className="text-xl font-bold">Administração</h2>
+            <p className="mt-1.5 text-sm leading-6 text-muted-foreground">Usuários, licenças, logs, cadastros e informações gerais da plataforma.</p>
+          </div>
+          <div className="mt-5 rounded-xl border bg-muted/25 p-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acesso</div>
+            <div className="mt-1 text-sm font-semibold">Administrativo permanente</div>
+          </div>
+          <div className="mt-auto pt-5">
+            <Button className="w-full" onClick={onEnter}>Entrar em Administração<ArrowRight className="ml-2 h-4 w-4" /></Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ModuleSelector() {
   const { user, logout, refreshUser } = useAuth();
   const [, navigate] = useLocation();
@@ -73,7 +101,7 @@ export default function ModuleSelector() {
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold text-primary"><ShieldCheck className="h-4 w-4" /> Radasa System</div>
             <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Escolha onde deseja entrar</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Cada ambiente possui uma licença independente.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Transportes e Agro possuem licenças independentes. A Administração é exclusiva para administradores.</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => void refreshUser()}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
@@ -87,9 +115,10 @@ export default function ModuleSelector() {
           {user?.role === "ADMIN" && <Badge className="ml-2" variant="secondary">Administrador</Badge>}
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div className={cn("mt-6 grid gap-4 md:grid-cols-2", user?.role === "ADMIN" && "lg:grid-cols-3")}>
           <ModuleCard module="TRANSPORTES" onEnter={() => navigate("/")} />
           <ModuleCard module="AGRO" onEnter={() => navigate("/agro")} />
+          {user?.role === "ADMIN" && <AdminModuleCard onEnter={() => navigate("/admin")} />}
         </div>
 
         {!hasModuleAccess(user, "TRANSPORTES") && !hasModuleAccess(user, "AGRO") && (

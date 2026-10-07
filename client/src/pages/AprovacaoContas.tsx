@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import Layout from "@/components/Layout";
+import AdminLayout from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
@@ -103,7 +103,7 @@ export default function AprovacaoContas() {
 
   if (user?.role !== "ADMIN") {
     return (
-      <Layout>
+      <AdminLayout>
         <div className="mx-auto w-full max-w-3xl rounded-xl border bg-card p-5 text-center sm:p-8">
           <ShieldCheck className="mx-auto h-10 w-10 text-muted-foreground" />
           <h1 className="mt-4 text-xl font-bold">Acesso restrito</h1>
@@ -111,12 +111,12 @@ export default function AprovacaoContas() {
             Somente administradores podem aprovar novas contas.
           </p>
         </div>
-      </Layout>
+      </AdminLayout>
     );
   }
 
   return (
-    <Layout>
+    <AdminLayout>
       <div className="mx-auto w-full min-w-0 max-w-5xl space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -188,6 +188,6 @@ export default function AprovacaoContas() {
           )}
         </div>
       </div>
-    </Layout>
+    </AdminLayout>
   );
 }

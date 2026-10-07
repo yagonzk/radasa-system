@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, ScrollText, ShieldCheck } from "lucide-react";
 import { Link } from "wouter";
-import Layout from "@/components/Layout";
+import AdminLayout from "@/components/admin/AdminLayout";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -39,26 +39,26 @@ export default function Logs() {
 
   if (user?.role !== "ADMIN") {
     return (
-      <Layout>
+      <AdminLayout>
         <div className="mx-auto w-full max-w-3xl rounded-xl border bg-card p-5 text-center sm:p-8">
           <ShieldCheck className="mx-auto h-10 w-10 text-muted-foreground" />
           <h1 className="mt-4 text-xl font-bold">Acesso restrito</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Somente administradores podem visualizar os logs do sistema.
           </p>
-          <Link href="/" className="mt-5 inline-flex items-center gap-2 text-sm text-primary hover:underline">
+          <Link href="/admin" className="mt-5 inline-flex items-center gap-2 text-sm text-primary hover:underline">
             <ArrowLeft className="h-4 w-4" />
             Voltar para a visão geral
           </Link>
         </div>
-      </Layout>
+      </AdminLayout>
     );
   }
 
   return (
-    <Layout>
+    <AdminLayout>
       <div className="mx-auto w-full min-w-0 max-w-7xl">
-        <Link href="/" className="mb-5 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <Link href="/admin" className="mb-5 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
           Voltar
         </Link>
@@ -106,6 +106,6 @@ export default function Logs() {
           </div>
         </div>
       </div>
-    </Layout>
+    </AdminLayout>
   );
 }

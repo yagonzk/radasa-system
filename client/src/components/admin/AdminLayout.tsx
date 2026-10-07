@@ -1,90 +1,57 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
 import {
   ArrowLeftRight,
-  BarChart3,
   Boxes,
-  ClipboardList,
   KeyRound,
   LayoutDashboard,
-  Leaf,
   LogOut,
   Menu,
   Moon,
-  NotebookTabs,
-  Sprout,
+  ScrollText,
+  ShieldCheck,
   Sun,
   UserRound,
-  Warehouse,
+  Users,
   X,
 } from "lucide-react";
-import { useTheme } from "@/contexts/ThemeContext";
+import { Link, useLocation } from "wouter";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/api";
-import { getModuleLicense, moduleStatusLabel } from "@/lib/module-access";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
-interface AgroNavItem {
-  label: string;
-  href: string;
-  icon: ReactNode;
-}
-
-const agroNav: AgroNavItem[] = [
-  { label: "Dashboard", href: "/agro", icon: <LayoutDashboard className="h-[18px] w-[18px]" /> },
-  { label: "Estoque", href: "/agro/estoque", icon: <Warehouse className="h-[18px] w-[18px]" /> },
-  { label: "Movimentações", href: "/agro/movimentacoes", icon: <ClipboardList className="h-[18px] w-[18px]" /> },
-  { label: "Barracões", href: "/agro/inventario", icon: <Boxes className="h-[18px] w-[18px]" /> },
-  { label: "Lavouras", href: "/agro/lavouras", icon: <Sprout className="h-[18px] w-[18px]" /> },
-  { label: "Cadastros", href: "/agro/cadastros", icon: <NotebookTabs className="h-[18px] w-[18px]" /> },
-  { label: "Relatórios", href: "/agro/relatorios", icon: <BarChart3 className="h-[18px] w-[18px]" /> },
+const adminNav = [
+  { label: "Visão administrativa", href: "/admin", icon: <LayoutDashboard className="h-[18px] w-[18px]" /> },
+  { label: "Usuários e licenças", href: "/admin/usuarios", icon: <Users className="h-[18px] w-[18px]" /> },
+  { label: "Aprovação de contas", href: "/admin/aprovacoes", icon: <ShieldCheck className="h-[18px] w-[18px]" /> },
+  { label: "Cadastros e dados", href: "/admin/cadastros", icon: <Boxes className="h-[18px] w-[18px]" /> },
+  { label: "Logs e auditoria", href: "/admin/logs", icon: <ScrollText className="h-[18px] w-[18px]" /> },
 ];
 
-export default function AgroLayout({ children }: { children: ReactNode }) {
-  const [location, navigate] = useLocation();
+export default function AdminLayout({ children }: { children: ReactNode }) {
+  const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isDark = theme === "dark";
-  const license = getModuleLicense(user, "AGRO");
   const initials = useMemo(
-    () => user?.name?.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U",
+    () => user?.name?.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "A",
     [user?.name],
   );
 
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [location]);
+  useEffect(() => setMobileMenuOpen(false), [location]);
 
-  useEffect(() => {
-    let active = true;
-    api.get("/agro/status").catch(async (error) => {
-      if (!active) return;
-      if (error?.response?.status === 401 || error?.response?.status === 403) {
-        await refreshUser().catch(() => undefined);
-        navigate("/modulos");
-      }
-    });
-    return () => { active = false; };
-  }, [navigate, refreshUser]);
-
-  const isActive = (href: string) => href === "/agro" ? location === "/agro" : location.startsWith(href);
+  const isActive = (href: string) => href === "/admin" ? location === "/admin" : location.startsWith(href);
 
   const sidebar = (
     <>
       <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-5">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-          <Leaf className="h-5 w-5 text-primary-foreground" />
+          <ShieldCheck className="h-5 w-5 text-primary-foreground" />
         </div>
         <div className="min-w-0">
-          <span className="block truncate font-display text-[14px] font-bold leading-tight text-sidebar-foreground">Radasa Agro</span>
-          <span className="block truncate text-[10px] text-muted-foreground">Gestão agrícola</span>
+          <span className="block truncate font-display text-[14px] font-bold leading-tight text-sidebar-foreground">Radasa Admin</span>
+          <span className="block truncate text-[10px] text-muted-foreground">Gestão da plataforma</span>
         </div>
         <button
           type="button"
@@ -104,12 +71,12 @@ export default function AgroLayout({ children }: { children: ReactNode }) {
         >
           <ArrowLeftRight className="h-4 w-4 text-primary" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate">Agro</span>
+            <span className="block truncate">Administração</span>
             <span className="block text-[10px] font-normal text-muted-foreground">Trocar módulo</span>
           </span>
         </Link>
 
-        {agroNav.map((item) => {
+        {adminNav.map((item) => {
           const active = isActive(item.href);
           return (
             <Link
@@ -133,8 +100,8 @@ export default function AgroLayout({ children }: { children: ReactNode }) {
 
       <div className="border-t border-sidebar-border bg-sidebar px-4 py-4">
         <div className="mb-3 rounded-lg border border-sidebar-border bg-sidebar-accent/30 px-3 py-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Licença Agro</div>
-          <div className="mt-0.5 truncate text-[11px] font-semibold text-sidebar-foreground">{user?.role === "ADMIN" ? "Sem vencimento" : moduleStatusLabel(license)}</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Acesso administrativo</div>
+          <div className="mt-0.5 truncate text-[11px] font-semibold text-sidebar-foreground">Administrador • acesso permanente</div>
         </div>
         <div className="flex items-center gap-3">
           <DropdownMenu>
@@ -151,7 +118,6 @@ export default function AgroLayout({ children }: { children: ReactNode }) {
               <DropdownMenuItem asChild><Link href="/modulos" className="flex cursor-pointer items-center gap-2"><ArrowLeftRight className="h-4 w-4" />Trocar módulo</Link></DropdownMenuItem>
               <DropdownMenuItem asChild><Link href="/perfil" className="flex cursor-pointer items-center gap-2"><UserRound className="h-4 w-4" />Meu perfil</Link></DropdownMenuItem>
               <DropdownMenuItem asChild><Link href="/alterar-senha" className="flex cursor-pointer items-center gap-2"><KeyRound className="h-4 w-4" />Alterar senha</Link></DropdownMenuItem>
-              
             </DropdownMenuContent>
           </DropdownMenu>
           <div className="min-w-0 flex-1">
@@ -202,23 +168,23 @@ export default function AgroLayout({ children }: { children: ReactNode }) {
           </button>
           <div className="flex min-w-0 items-center gap-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-              <Leaf className="h-4 w-4 text-primary-foreground" />
+              <ShieldCheck className="h-4 w-4 text-primary-foreground" />
             </div>
             <div className="min-w-0">
-              <span className="block truncate font-display text-sm font-bold">Radasa Agro</span>
-              <span className="block truncate text-[10px] text-muted-foreground">Gestão agrícola</span>
+              <span className="block truncate font-display text-sm font-bold">Radasa Admin</span>
+              <span className="block truncate text-[10px] text-muted-foreground">Gestão da plataforma</span>
             </div>
           </div>
         </header>
 
-        <main data-radasa-agro-main className="min-h-0 min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 md:p-6 lg:p-6 xl:p-8">
+        <main data-radasa-admin-main className="min-h-0 min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 md:p-6 lg:p-6 xl:p-8">
           <div className="w-full min-w-0 max-w-full">{children}</div>
         </main>
 
         <footer className="flex items-center justify-between gap-3 border-t border-border/50 px-3 py-3 sm:px-4 md:px-6 xl:px-8">
           <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            <Boxes className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">Ambiente Agro separado do Transportes</span>
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Ambiente restrito a administradores</span>
           </div>
           <button
             type="button"
