@@ -13,6 +13,11 @@ agroRoutes.get("/locais", asyncHandler(agroController.locais));
 agroRoutes.post("/locais", asyncHandler(agroController.criarLocal));
 agroRoutes.put("/locais/:id", asyncHandler(agroController.atualizarLocal));
 
+agroRoutes.get("/posicoes", asyncHandler(agroController.posicoes));
+agroRoutes.post("/posicoes", asyncHandler(agroController.criarPosicao));
+agroRoutes.put("/posicoes/:id", asyncHandler(agroController.atualizarPosicao));
+agroRoutes.get("/mapa-barracao", asyncHandler(agroController.mapaBarracao));
+
 agroRoutes.get("/produtos", asyncHandler(agroController.produtos));
 agroRoutes.post("/produtos", asyncHandler(agroController.criarProduto));
 agroRoutes.put("/produtos/:id", asyncHandler(agroController.atualizarProduto));

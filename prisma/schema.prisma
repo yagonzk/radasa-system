@@ -297,9 +297,35 @@ model AgroEstoqueLocal {
   transferenciasOrigem AgroTransferencia[] @relation("AgroTransferenciaOrigem")
   transferenciasDestino AgroTransferencia[] @relation("AgroTransferenciaDestino")
   inventarios AgroInventario[]
+  posicoes AgroEstoquePosicao[]
 
   @@index([ativo, nome])
   @@map("agro_estoque_locais")
+}
+
+model AgroEstoquePosicao {
+  id          String   @id @default(cuid())
+  localId     String
+  codigo      String
+  nome        String   @default("")
+  setor       String   @default("")
+  tipo        String   @default("PRATELEIRA")
+  linha       Int
+  coluna      Int
+  observacoes String   @default("") @db.Text
+  ativo       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  local       AgroEstoqueLocal @relation(fields: [localId], references: [id], onDelete: Restrict)
+  movimentacoes AgroMovimentacao[]
+  transferenciasOrigem AgroTransferencia[] @relation("AgroTransferenciaPosicaoOrigem")
+  transferenciasDestino AgroTransferencia[] @relation("AgroTransferenciaPosicaoDestino")
+  inventarioItens AgroInventarioItem[]
+
+  @@unique([localId, codigo])
+  @@unique([localId, linha, coluna])
+  @@index([localId, ativo, linha, coluna])
+  @@map("agro_estoque_posicoes")
 }
 
 model AgroProduto {
@@ -363,10 +389,12 @@ model AgroMovimentacao {
   agroOperacaoId String?
   transferenciaId String?
   inventarioId String?
+  posicaoId String?
   createdAt     DateTime @default(now())
   produto       AgroProduto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
   lote          AgroLote? @relation(fields: [loteId], references: [id], onDelete: SetNull)
   local         AgroEstoqueLocal @relation(fields: [localId], references: [id], onDelete: Restrict)
+  posicao       AgroEstoquePosicao? @relation(fields: [posicaoId], references: [id], onDelete: SetNull)
   createdBy     User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
   agroOperacao  AgroOperacao? @relation(fields: [agroOperacaoId], references: [id], onDelete: SetNull)
   transferencia AgroTransferencia? @relation(fields: [transferenciaId], references: [id], onDelete: SetNull)
@@ -376,6 +404,7 @@ model AgroMovimentacao {
   @@index([produtoId, data])
   @@index([loteId, data])
   @@index([localId, data])
+  @@index([posicaoId, data])
   @@index([tipo, data])
   @@index([agroOperacaoId])
   @@index([transferenciaId])
@@ -389,6 +418,8 @@ model AgroTransferencia {
   loteId        String?
   localOrigemId String
   localDestinoId String
+  posicaoOrigemId String?
+  posicaoDestinoId String?
   quantidade    Decimal  @db.Decimal(16, 3)
   valorUnitario Decimal  @default(0) @db.Decimal(16, 4)
   data          DateTime @db.Date
@@ -401,6 +432,8 @@ model AgroTransferencia {
   lote          AgroLote? @relation(fields: [loteId], references: [id], onDelete: SetNull)
   localOrigem   AgroEstoqueLocal @relation("AgroTransferenciaOrigem", fields: [localOrigemId], references: [id], onDelete: Restrict)
   localDestino  AgroEstoqueLocal @relation("AgroTransferenciaDestino", fields: [localDestinoId], references: [id], onDelete: Restrict)
+  posicaoOrigem AgroEstoquePosicao? @relation("AgroTransferenciaPosicaoOrigem", fields: [posicaoOrigemId], references: [id], onDelete: SetNull)
+  posicaoDestino AgroEstoquePosicao? @relation("AgroTransferenciaPosicaoDestino", fields: [posicaoDestinoId], references: [id], onDelete: SetNull)
   createdBy     User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
   movimentacoes AgroMovimentacao[]
 
@@ -408,6 +441,8 @@ model AgroTransferencia {
   @@index([produtoId, data])
   @@index([localOrigemId, data])
   @@index([localDestinoId, data])
+  @@index([posicaoOrigemId, data])
+  @@index([posicaoDestinoId, data])
   @@map("agro_transferencias")
 }
 
@@ -437,6 +472,7 @@ model AgroInventarioItem {
   inventarioId   String
   produtoId      String
   loteId         String?
+  posicaoId      String?
   saldoSistema   Decimal  @default(0) @db.Decimal(16, 3)
   contagemFisica Decimal  @default(0) @db.Decimal(16, 3)
   diferenca      Decimal  @default(0) @db.Decimal(16, 3)
@@ -446,10 +482,12 @@ model AgroInventarioItem {
   inventario     AgroInventario @relation(fields: [inventarioId], references: [id], onDelete: Cascade)
   produto        AgroProduto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
   lote           AgroLote? @relation(fields: [loteId], references: [id], onDelete: SetNull)
+  posicao        AgroEstoquePosicao? @relation(fields: [posicaoId], references: [id], onDelete: SetNull)
 
-  @@unique([inventarioId, produtoId, loteId])
+  @@unique([inventarioId, produtoId, loteId, posicaoId])
   @@index([produtoId])
   @@index([loteId])
+  @@index([posicaoId])
   @@map("agro_inventario_itens")
 }
 

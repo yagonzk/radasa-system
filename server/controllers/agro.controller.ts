@@ -14,12 +14,17 @@ export const agroController = {
   criarLocal: async (req: Request, res: Response) => res.status(201).json(await agroEstoqueService.createLocal(req.body)),
   atualizarLocal: async (req: Request, res: Response) => res.json(await agroEstoqueService.updateLocal(requestParam(req.params.id), req.body)),
 
+  posicoes: async (req: Request, res: Response) => res.json(await agroEstoqueService.listPosicoes(String(req.query.localId ?? ""))),
+  criarPosicao: async (req: Request, res: Response) => res.status(201).json(await agroEstoqueService.createPosicao(req.body)),
+  atualizarPosicao: async (req: Request, res: Response) => res.json(await agroEstoqueService.updatePosicao(requestParam(req.params.id), req.body)),
+  mapaBarracao: async (req: Request, res: Response) => res.json(await agroEstoqueService.mapaBarracao(String(req.query.localId ?? ""))),
+
   produtos: async (_req: Request, res: Response) => res.json(await agroEstoqueService.listProdutos()),
   criarProduto: async (req: Request, res: Response) => res.status(201).json(await agroEstoqueService.createProduto(req.body)),
   atualizarProduto: async (req: Request, res: Response) => res.json(await agroEstoqueService.updateProduto(requestParam(req.params.id), req.body)),
   removerProduto: async (req: Request, res: Response) => res.json(await agroEstoqueService.removeProduto(requestParam(req.params.id))),
 
-  lotes: async (req: Request, res: Response) => res.json(await agroEstoqueService.listLotes(String(req.query.produtoId ?? ""), String(req.query.localId ?? ""))),
+  lotes: async (req: Request, res: Response) => res.json(await agroEstoqueService.listLotes(String(req.query.produtoId ?? ""), String(req.query.localId ?? ""), String(req.query.posicaoId ?? ""))),
   criarLote: async (req: Request, res: Response) => res.status(201).json(await agroEstoqueService.createLote(req.body)),
   atualizarLote: async (req: Request, res: Response) => res.json(await agroEstoqueService.updateLote(requestParam(req.params.id), req.body)),
   removerLote: async (req: Request, res: Response) => res.json(await agroEstoqueService.removeLote(requestParam(req.params.id))),

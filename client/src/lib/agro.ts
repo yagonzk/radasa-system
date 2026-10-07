@@ -35,6 +35,40 @@ export type AgroStockLocation = {
   updatedAt: string;
 };
 
+
+export type AgroStoragePosition = {
+  id: string;
+  localId: string;
+  codigo: string;
+  nome: string;
+  setor: string;
+  tipo: string;
+  linha: number;
+  coluna: number;
+  observacoes: string;
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+  local?: AgroStockLocation;
+};
+
+export type AgroPositionStockItem = {
+  produto: AgroProduct;
+  lote?: AgroLot | null;
+  quantidade: number;
+  custoMedio: number;
+  valorEstoque: number;
+};
+
+export type AgroStorageMapPosition = AgroStoragePosition & { itens: AgroPositionStockItem[] };
+export type AgroStorageMap = {
+  local: AgroStockLocation;
+  linhas: number;
+  colunas: number;
+  posicoes: AgroStorageMapPosition[];
+  semPosicao: AgroPositionStockItem[];
+};
+
 export type AgroLot = {
   id: string;
   produtoId: string;
@@ -69,6 +103,8 @@ export type AgroMovement = {
   inventarioId?: string | null;
   localId: string;
   local?: AgroStockLocation | null;
+  posicaoId?: string | null;
+  posicao?: AgroStoragePosition | null;
 };
 
 export function formatAgroNumber(value: number, maximumFractionDigits = 3) {
@@ -97,12 +133,12 @@ export function movementIsExit(type: AgroMovementType) {
 }
 
 export type AgroTransfer = {
-  id: string; produtoId: string; loteId: string | null; localOrigemId: string; localDestinoId: string; quantidade: number; valorUnitario: number; data: string; responsavel: string; documento: string; observacoes: string; createdAt: string;
-  produto: AgroProduct; lote?: AgroLot | null; localOrigem: AgroStockLocation; localDestino: AgroStockLocation;
+  id: string; produtoId: string; loteId: string | null; localOrigemId: string; localDestinoId: string; posicaoOrigemId?: string | null; posicaoDestinoId?: string | null; quantidade: number; valorUnitario: number; data: string; responsavel: string; documento: string; observacoes: string; createdAt: string;
+  produto: AgroProduct; lote?: AgroLot | null; localOrigem: AgroStockLocation; localDestino: AgroStockLocation; posicaoOrigem?: AgroStoragePosition | null; posicaoDestino?: AgroStoragePosition | null;
 };
 
 export type AgroInventoryStatus = "ABERTO" | "FINALIZADO" | "CANCELADO";
-export type AgroInventoryItem = { id: string; inventarioId: string; produtoId: string; loteId: string | null; saldoSistema: number; contagemFisica: number; diferenca: number; custoUnitario: number; produto: AgroProduct; lote?: AgroLot | null; };
+export type AgroInventoryItem = { id: string; inventarioId: string; produtoId: string; loteId: string | null; posicaoId?: string | null; saldoSistema: number; contagemFisica: number; diferenca: number; custoUnitario: number; produto: AgroProduct; lote?: AgroLot | null; posicao?: AgroStoragePosition | null; };
 export type AgroInventory = { id: string; localId: string; data: string; status: AgroInventoryStatus; descricao: string; observacoes: string; finalizadoEm: string | null; createdAt: string; updatedAt: string; local: AgroStockLocation; itens?: AgroInventoryItem[]; _count?: { itens: number }; };
 
 export type AgroReportGroup = { id: string; label: string; custo: number; quantidade: number; areaHa: number; custoPorHa: number; };

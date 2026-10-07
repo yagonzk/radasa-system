@@ -21,13 +21,20 @@ export function agroMovementDelta(tipo: string, quantidade: unknown) {
   return AGRO_MOVIMENTOS_ENTRADA.has(tipo) ? qty : -qty;
 }
 
-export async function currentAgroBalance(tx: any, produtoId: string, loteId?: string | null, localId?: string | null) {
+export async function currentAgroBalance(
+  tx: any,
+  produtoId: string,
+  loteId?: string | null,
+  localId?: string | null,
+  posicaoId?: string | null,
+) {
   const rows = await tx.agroMovimentacao.groupBy({
     by: ["tipo"],
     where: {
       produtoId,
       ...(loteId ? { loteId } : {}),
       ...(localId ? { localId } : {}),
+      ...(posicaoId !== undefined ? { posicaoId } : {}),
     },
     _sum: { quantidade: true },
   });

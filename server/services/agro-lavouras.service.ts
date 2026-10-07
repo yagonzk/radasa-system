@@ -118,19 +118,20 @@ async function ensureUniqueName(model: "agroFazenda" | "agroSafra" | "agroCultur
 
 
 function normalizeProducts(value: unknown) {
-  if (!Array.isArray(value)) return [] as Array<{ produtoId: string; loteId: string | null; quantidade: number; valorUnitario: number }>;
+  if (!Array.isArray(value)) return [] as Array<{ produtoId: string; loteId: string | null; posicaoId: string | null; quantidade: number; valorUnitario: number }>;
   if (value.length > 30) throw new AppError(400, "Informe no máximo 30 produtos por operação.");
   const seen = new Set<string>();
   return value.map((raw: any) => {
     const produtoId = clean(raw?.produtoId, 80);
     const loteId = clean(raw?.loteId, 80) || null;
+    const posicaoId = clean(raw?.posicaoId, 80) || null;
     if (!produtoId) throw new AppError(400, "Selecione o produto utilizado na operação.");
     const quantidade = decimal(raw?.quantidade, "uma quantidade de produto");
     const valorUnitario = decimal(raw?.valorUnitario ?? 0, "um valor unitário", true);
-    const key = `${produtoId}:${loteId ?? ""}`;
-    if (seen.has(key)) throw new AppError(400, "O mesmo produto/lote foi informado mais de uma vez na operação.");
+    const key = `${produtoId}:${loteId ?? ""}:${posicaoId ?? "SEM_POSICAO"}`;
+    if (seen.has(key)) throw new AppError(400, "O mesmo produto/lote/posição foi informado mais de uma vez na operação.");
     seen.add(key);
-    return { produtoId, loteId, quantidade, valorUnitario };
+    return { produtoId, loteId, posicaoId, quantidade, valorUnitario };
   });
 }
 
@@ -342,7 +343,7 @@ export const agroLavourasService = {
       where: clean(query.lavouraId) ? { lavouraId: clean(query.lavouraId) } : {},
       include: {
         lavoura: { include: { talhao: { include: { fazenda: true } }, safra: true, cultura: true } },
-        movimentacoes: { include: { produto: true, lote: true, local: true }, orderBy: { createdAt: "asc" } },
+        movimentacoes: { include: { produto: true, lote: true, local: true, posicao: true }, orderBy: { createdAt: "asc" } },
         createdBy: { select: { id: true, name: true, username: true } },
       },
       orderBy: [{ data: "desc" }, { createdAt: "desc" }],
@@ -373,18 +374,25 @@ export const agroLavourasService = {
           ? await tx.agroEstoqueLocal.findUnique({ where: { id: requestedLocalId } })
           : await getDefaultAgroLocation(tx);
         if (!local || !local.ativo) throw new AppError(409, "Selecione um local de estoque ativo para o consumo da operação.");
+        const positionIds = [...new Set(produtos.map((item) => item.posicaoId).filter((id): id is string => Boolean(id)))];
+        const positions = positionIds.length ? await tx.agroEstoquePosicao.findMany({ where: { id: { in: positionIds } } }) : [];
+        const positionsById = new Map<string, any>(positions.map((item: any) => [item.id, item]));
+        for (const positionId of positionIds) {
+          const position = positionsById.get(positionId);
+          if (!position || position.localId !== local.id) throw new AppError(400, "Uma das posições selecionadas não pertence ao barracão da operação.");
+          if (!position.ativo) throw new AppError(409, `A posição ${position.codigo} está inativa.`);
+        }
 
         const areaHa = data.areaHa === undefined || data.areaHa === "" ? number(lavoura.areaHa) : decimal(data.areaHa, "uma área", true);
         if (number(lavoura.areaHa) > 0 && areaHa > number(lavoura.areaHa) + 1e-9) throw new AppError(400, "A área da operação não pode ser maior que a área da lavoura.");
 
         const requiredByProduct = new Map<string, number>();
-        const requiredByLot = new Map<string, { produtoId: string; quantidade: number }>();
+        const requiredByStorage = new Map<string, { produtoId: string; loteId: string | null; posicaoId: string | null; quantidade: number }>();
         for (const item of produtos) {
           requiredByProduct.set(item.produtoId, (requiredByProduct.get(item.produtoId) ?? 0) + item.quantidade);
-          if (item.loteId) {
-            const prev = requiredByLot.get(item.loteId);
-            requiredByLot.set(item.loteId, { produtoId: item.produtoId, quantidade: (prev?.quantidade ?? 0) + item.quantidade });
-          }
+          const storageKey = `${item.produtoId}|${item.loteId ?? ""}|${item.posicaoId ?? "SEM_POSICAO"}`;
+          const prev = requiredByStorage.get(storageKey);
+          requiredByStorage.set(storageKey, { produtoId: item.produtoId, loteId: item.loteId, posicaoId: item.posicaoId, quantidade: (prev?.quantidade ?? 0) + item.quantidade });
         }
 
         const productIds = [...requiredByProduct.keys()].sort();
@@ -409,16 +417,16 @@ export const agroLavourasService = {
           if (product?.controlaLote && !item.loteId) throw new AppError(400, `Selecione o lote do produto ${product.nome}.`);
         }
 
-        for (const [produtoId, quantidade] of requiredByProduct) {
-          const product = productsById.get(produtoId);
-          const saldo = await currentAgroBalance(tx, produtoId, null, local.id);
-          if (saldo + 1e-9 < quantidade) throw new AppError(409, `Saldo insuficiente de ${product.nome} em ${local.nome}. Disponível: ${saldo.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} ${product.unidadeMedida}.`);
-        }
-        for (const [loteId, required] of requiredByLot) {
-          const lot = lotsById.get(loteId);
+        for (const required of requiredByStorage.values()) {
           const product = productsById.get(required.produtoId);
-          const saldo = await currentAgroBalance(tx, required.produtoId, loteId, local.id);
-          if (saldo + 1e-9 < required.quantidade) throw new AppError(409, `Saldo insuficiente no lote ${lot.codigo} de ${product.nome} em ${local.nome}. Disponível: ${saldo.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} ${product.unidadeMedida}.`);
+          const lot = required.loteId ? lotsById.get(required.loteId) : null;
+          const position = required.posicaoId ? positionsById.get(required.posicaoId) : null;
+          const saldo = await currentAgroBalance(tx, required.produtoId, required.loteId, local.id, required.posicaoId);
+          if (saldo + 1e-9 < required.quantidade) {
+            const where = position ? ` na posição ${position.codigo}` : " sem posição definida";
+            const lotLabel = lot ? ` · lote ${lot.codigo}` : "";
+            throw new AppError(409, `Saldo insuficiente de ${product.nome}${lotLabel}${where}. Disponível: ${saldo.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} ${product.unidadeMedida}.`);
+          }
         }
 
         const operation = await tx.agroOperacao.create({ data: {
@@ -438,6 +446,7 @@ export const agroLavourasService = {
           produtoId: item.produtoId,
           loteId: item.loteId,
           localId: local.id,
+          posicaoId: item.posicaoId,
           tipo: "SAIDA" as const,
           quantidade: item.quantidade,
           valorUnitario: custosMedios.get(item.produtoId) ?? 0,
@@ -459,7 +468,7 @@ export const agroLavourasService = {
           where: { id: operation.id },
           include: {
             lavoura: { include: { talhao: { include: { fazenda: true } }, safra: true, cultura: true } },
-            movimentacoes: { include: { produto: true, lote: true, local: true }, orderBy: { createdAt: "asc" } },
+            movimentacoes: { include: { produto: true, lote: true, local: true, posicao: true }, orderBy: { createdAt: "asc" } },
             createdBy: { select: { id: true, name: true, username: true } },
           },
         });
