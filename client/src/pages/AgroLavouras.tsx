@@ -11,12 +11,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
-import type { AgroCrop, AgroCropCycle, AgroCropCycleStatus, AgroFarm, AgroLot, AgroOperation, AgroOperationType, AgroPlot, AgroSeason, AgroStockRow } from "@/lib/agro";
+import type { AgroCrop, AgroCropCycle, AgroCropCycleStatus, AgroFarm, AgroLot, AgroOperation, AgroOperationType, AgroPlot, AgroSeason, AgroStockLocation, AgroStockRow } from "@/lib/agro";
 import { agroCropCycleStatusLabel, agroOperationLabel, formatAgroDate, formatAgroNumber } from "@/lib/agro";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyCropCycle = { talhaoId: "", safraId: "", culturaId: "", areaHa: "", status: "PLANEJADA" as AgroCropCycleStatus, dataPlantio: "", dataPrevisaoColheita: "", observacoes: "" };
-const emptyOperation = { lavouraId: "", tipo: "APLICACAO" as AgroOperationType, data: today(), areaHa: "", responsavel: "", documento: "", observacoes: "" };
+const emptyOperation = { lavouraId: "", tipo: "APLICACAO" as AgroOperationType, data: today(), areaHa: "", localId: "", responsavel: "", documento: "", observacoes: "" };
 type ProductUse = { key: number; produtoId: string; loteId: string; quantidade: string; valorUnitario: string };
 
 export default function AgroLavouras() {
@@ -28,6 +28,7 @@ export default function AgroLavouras() {
   const [cropCycles, setCropCycles] = useState<AgroCropCycle[]>([]);
   const [operations, setOperations] = useState<AgroOperation[]>([]);
   const [stock, setStock] = useState<AgroStockRow[]>([]);
+  const [locations, setLocations] = useState<AgroStockLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [seasonFilter, setSeasonFilter] = useState("TODAS");
@@ -47,7 +48,7 @@ export default function AgroLavouras() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [farmRes, plotRes, seasonRes, cropRes, cropCycleRes, operationRes, stockRes] = await Promise.all([
+      const [farmRes, plotRes, seasonRes, cropRes, cropCycleRes, operationRes, stockRes, localRes] = await Promise.all([
         api.get<AgroFarm[]>("/agro/fazendas"),
         api.get<AgroPlot[]>("/agro/talhoes"),
         api.get<AgroSeason[]>("/agro/safras"),
@@ -55,6 +56,7 @@ export default function AgroLavouras() {
         api.get<AgroCropCycle[]>("/agro/lavouras"),
         api.get<AgroOperation[]>("/agro/operacoes", { params: { take: 300 } }),
         api.get<AgroStockRow[]>("/agro/estoque"),
+        api.get<AgroStockLocation[]>("/agro/locais"),
       ]);
       setFarms(Array.isArray(farmRes.data) ? farmRes.data : []);
       setPlots(Array.isArray(plotRes.data) ? plotRes.data : []);
@@ -63,6 +65,7 @@ export default function AgroLavouras() {
       setCropCycles(Array.isArray(cropCycleRes.data) ? cropCycleRes.data : []);
       setOperations(Array.isArray(operationRes.data) ? operationRes.data : []);
       setStock(Array.isArray(stockRes.data) ? stockRes.data : []);
+      setLocations(Array.isArray(localRes.data) ? localRes.data : []);
     } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível carregar as lavouras."); }
     finally { if (!silent) setLoading(false); }
   }, []);
@@ -129,11 +132,19 @@ export default function AgroLavouras() {
     finally { setSavingCropCycle(false); }
   }
 
+  async function loadOperationStock(localId: string) {
+    if (!localId) return;
+    try { const response = await api.get<AgroStockRow[]>("/agro/estoque", { params: { localId } }); setStock(Array.isArray(response.data) ? response.data : []); }
+    catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível carregar o estoque do barracão."); }
+  }
+
   function newOperation(cropCycle?: AgroCropCycle) {
     const selected = cropCycle || cropCycles.find((c) => c.status !== "CONCLUIDA");
-    setOperationForm({ ...emptyOperation, data: today(), lavouraId: selected?.id || "", areaHa: selected ? String(selected.areaHa) : "" });
+    const local = locations.find((l) => l.ativo && l.principal) || locations.find((l) => l.ativo);
+    setOperationForm({ ...emptyOperation, data: today(), lavouraId: selected?.id || "", areaHa: selected ? String(selected.areaHa) : "", localId: local?.id || "" });
     setProductUses([]);
     setLotsByProduct({});
+    if (local) void loadOperationStock(local.id);
     setOperationOpen(true);
   }
 
@@ -148,13 +159,14 @@ export default function AgroLavouras() {
     const stockRow = stock.find((row) => row.produto.id === produtoId);
     if (!produtoId || !stockRow?.produto.controlaLote || lotsByProduct[produtoId]) return;
     try {
-      const response = await api.get<AgroLot[]>("/agro/lotes", { params: { produtoId } });
+      const response = await api.get<AgroLot[]>("/agro/lotes", { params: { produtoId, ...(operationForm.localId ? { localId: operationForm.localId } : {}) } });
       setLotsByProduct((current) => ({ ...current, [produtoId]: Array.isArray(response.data) ? response.data : [] }));
     } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível carregar os lotes do produto."); }
   }
 
   async function saveOperation() {
     if (!operationForm.lavouraId) return toast.error("Selecione a lavoura.");
+    if (!operationForm.localId && productUses.length) return toast.error("Selecione o barracão de origem dos produtos.");
     const areaHa = Number(String(operationForm.areaHa || 0).replace(",", "."));
     if (!Number.isFinite(areaHa) || areaHa < 0) return toast.error("Informe uma área válida.");
     const products = [] as Array<{ produtoId: string; loteId: string | null; quantidade: number; valorUnitario: number }>;
@@ -235,6 +247,7 @@ export default function AgroLavouras() {
             <Field label="Operação"><select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={operationForm.tipo} onChange={(e) => setOperationForm((f) => ({ ...f, tipo: e.target.value as AgroOperationType }))}>{(["PLANTIO", "ADUBACAO", "PULVERIZACAO", "APLICACAO", "MONITORAMENTO", "COLHEITA", "OUTROS"] as AgroOperationType[]).map((type) => <option key={type} value={type}>{agroOperationLabel(type)}</option>)}</select></Field>
             <Field label="Data"><Input type="date" max={today()} value={operationForm.data} onChange={(e) => setOperationForm((f) => ({ ...f, data: e.target.value }))} /></Field>
             <Field label="Área trabalhada (ha)"><Input type="number" min="0" step="0.001" value={operationForm.areaHa} onChange={(e) => setOperationForm((f) => ({ ...f, areaHa: e.target.value }))} /></Field>
+            <Field label="Barracão de origem"><select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={operationForm.localId} onChange={(e) => { const localId = e.target.value; setOperationForm((f) => ({ ...f, localId })); setProductUses([]); setLotsByProduct({}); void loadOperationStock(localId); }}><option value="">Selecione...</option>{locations.filter((l) => l.ativo).map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}</select></Field>
             <Field label="Responsável"><Input value={operationForm.responsavel} onChange={(e) => setOperationForm((f) => ({ ...f, responsavel: e.target.value }))} placeholder="Ex.: Elton" /></Field>
             <Field label="Documento / referência"><Input value={operationForm.documento} onChange={(e) => setOperationForm((f) => ({ ...f, documento: e.target.value }))} /></Field>
           </div>
@@ -252,7 +265,7 @@ export default function AgroLavouras() {
                   <div><Label className="text-xs">Produto</Label><select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={row.produtoId} onChange={(e) => void selectProduct(row.key, e.target.value)}><option value="">Selecione...</option>{activeStock.map((item) => <option key={item.produto.id} value={item.produto.id}>{item.produto.codigo} · {item.produto.nome} · saldo {formatAgroNumber(item.estoque)}</option>)}</select>{stockRow && <div className="mt-1 text-[11px] text-muted-foreground">Disponível: {formatAgroNumber(stockRow.estoque)} {stockRow.produto.unidadeMedida}</div>}</div>
                   <div><Label className="text-xs">Lote{stockRow?.produto.controlaLote ? " *" : ""}</Label><select disabled={!stockRow?.produto.controlaLote} className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm disabled:opacity-50" value={row.loteId} onChange={(e) => setProductUses((rows) => rows.map((item) => item.key === row.key ? { ...item, loteId: e.target.value } : item))}><option value="">Sem lote</option>{lots.filter((lot) => lot.ativo && (lot.saldo || 0) > 0).map((lot) => <option key={lot.id} value={lot.id}>{lot.codigo} · {formatAgroNumber(lot.saldo || 0)}</option>)}</select>{selectedLot && <div className="mt-1 text-[11px] text-muted-foreground">Saldo lote: {formatAgroNumber(selectedLot.saldo || 0)}</div>}</div>
                   <div><Label className="text-xs">Quantidade</Label><Input className="mt-1" type="number" min="0" step="0.001" value={row.quantidade} onChange={(e) => setProductUses((rows) => rows.map((item) => item.key === row.key ? { ...item, quantidade: e.target.value } : item))} /></div>
-                  <div><Label className="text-xs">Valor unit.</Label><Input className="mt-1" type="number" min="0" step="0.0001" value={row.valorUnitario} onChange={(e) => setProductUses((rows) => rows.map((item) => item.key === row.key ? { ...item, valorUnitario: e.target.value } : item))} /></div>
+                  <div><Label className="text-xs">Custo médio</Label><div className="mt-1 flex h-9 items-center rounded-md border bg-muted/30 px-3 text-sm">Automático</div></div>
                   <div className="flex items-end"><Button type="button" variant="ghost" size="icon" onClick={() => setProductUses((rows) => rows.filter((item) => item.key !== row.key))} title="Remover produto"><Trash2 className="h-4 w-4" /></Button></div>
                 </div>;
               })}

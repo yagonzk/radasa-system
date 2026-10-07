@@ -2,10 +2,10 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { created, dateOnly, number } from "../utils/serialize.js";
+import { calculateAgroAverageCosts, currentAgroBalance, getDefaultAgroLocation } from "./agro-stock-core.js";
 
 const STATUS_LAVOURA = new Set(["PLANEJADA", "EM_ANDAMENTO", "CONCLUIDA"]);
 const TIPOS_OPERACAO = new Set(["PLANTIO", "ADUBACAO", "PULVERIZACAO", "APLICACAO", "MONITORAMENTO", "COLHEITA", "OUTROS"]);
-const MOVIMENTOS_ENTRADA = new Set(["ENTRADA", "AJUSTE_ENTRADA"]);
 
 function clean(value: unknown, max = 500) {
   return String(value ?? "").trim().slice(0, max);
@@ -116,17 +116,6 @@ async function ensureUniqueName(model: "agroFazenda" | "agroSafra" | "agroCultur
   if (existing) throw new AppError(409, "Já existe um cadastro Agro com este nome.");
 }
 
-async function currentBalance(tx: any, produtoId: string, loteId?: string | null) {
-  const rows = await tx.agroMovimentacao.groupBy({
-    by: ["tipo"],
-    where: { produtoId, ...(loteId ? { loteId } : {}) },
-    _sum: { quantidade: true },
-  });
-  return rows.reduce((total: number, row: any) => {
-    const qty = number(row._sum.quantidade ?? 0);
-    return total + (MOVIMENTOS_ENTRADA.has(String(row.tipo)) ? qty : -qty);
-  }, 0);
-}
 
 function normalizeProducts(value: unknown) {
   if (!Array.isArray(value)) return [] as Array<{ produtoId: string; loteId: string | null; quantidade: number; valorUnitario: number }>;
@@ -353,7 +342,7 @@ export const agroLavourasService = {
       where: clean(query.lavouraId) ? { lavouraId: clean(query.lavouraId) } : {},
       include: {
         lavoura: { include: { talhao: { include: { fazenda: true } }, safra: true, cultura: true } },
-        movimentacoes: { include: { produto: true, lote: true }, orderBy: { createdAt: "asc" } },
+        movimentacoes: { include: { produto: true, lote: true, local: true }, orderBy: { createdAt: "asc" } },
         createdBy: { select: { id: true, name: true, username: true } },
       },
       orderBy: [{ data: "desc" }, { createdAt: "desc" }],
@@ -370,6 +359,7 @@ export const agroLavourasService = {
     const dataOperacao = parseDate(data.data ?? new Date().toISOString().slice(0, 10), "a data da operação") as Date;
     if (dateIsFuture(dataOperacao)) throw new AppError(400, "A operação agrícola não pode ter data futura.");
     const produtos = normalizeProducts(data.produtos);
+    const requestedLocalId = clean(data.localId, 80);
 
     try {
       const result = await prisma.$transaction(async (tx: any) => {
@@ -379,6 +369,10 @@ export const agroLavourasService = {
         });
         if (!lavoura) throw new AppError(404, "Lavoura não encontrada.");
         if (lavoura.status === "CONCLUIDA") throw new AppError(409, "Reabra a lavoura antes de registrar novas operações.");
+        const local = requestedLocalId
+          ? await tx.agroEstoqueLocal.findUnique({ where: { id: requestedLocalId } })
+          : await getDefaultAgroLocation(tx);
+        if (!local || !local.ativo) throw new AppError(409, "Selecione um local de estoque ativo para o consumo da operação.");
 
         const areaHa = data.areaHa === undefined || data.areaHa === "" ? number(lavoura.areaHa) : decimal(data.areaHa, "uma área", true);
         if (number(lavoura.areaHa) > 0 && areaHa > number(lavoura.areaHa) + 1e-9) throw new AppError(400, "A área da operação não pode ser maior que a área da lavoura.");
@@ -417,14 +411,14 @@ export const agroLavourasService = {
 
         for (const [produtoId, quantidade] of requiredByProduct) {
           const product = productsById.get(produtoId);
-          const saldo = await currentBalance(tx, produtoId);
-          if (saldo + 1e-9 < quantidade) throw new AppError(409, `Saldo insuficiente de ${product.nome}. Disponível: ${saldo.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} ${product.unidadeMedida}.`);
+          const saldo = await currentAgroBalance(tx, produtoId, null, local.id);
+          if (saldo + 1e-9 < quantidade) throw new AppError(409, `Saldo insuficiente de ${product.nome} em ${local.nome}. Disponível: ${saldo.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} ${product.unidadeMedida}.`);
         }
         for (const [loteId, required] of requiredByLot) {
           const lot = lotsById.get(loteId);
           const product = productsById.get(required.produtoId);
-          const saldo = await currentBalance(tx, required.produtoId, loteId);
-          if (saldo + 1e-9 < required.quantidade) throw new AppError(409, `Saldo insuficiente no lote ${lot.codigo} de ${product.nome}. Disponível: ${saldo.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} ${product.unidadeMedida}.`);
+          const saldo = await currentAgroBalance(tx, required.produtoId, loteId, local.id);
+          if (saldo + 1e-9 < required.quantidade) throw new AppError(409, `Saldo insuficiente no lote ${lot.codigo} de ${product.nome} em ${local.nome}. Disponível: ${saldo.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} ${product.unidadeMedida}.`);
         }
 
         const operation = await tx.agroOperacao.create({ data: {
@@ -439,22 +433,23 @@ export const agroLavourasService = {
         } });
 
         const destino = `${lavoura.talhao.fazenda.nome} · ${lavoura.talhao.nome} · ${lavoura.cultura.nome} · ${lavoura.safra.nome}`.slice(0, 220);
-        for (const item of produtos) {
-          await tx.agroMovimentacao.create({ data: {
-            produtoId: item.produtoId,
-            loteId: item.loteId,
-            tipo: "SAIDA",
-            quantidade: item.quantidade,
-            valorUnitario: item.valorUnitario,
-            data: dataOperacao,
-            responsavel: clean(data.responsavel, 160),
-            destino,
-            documento: clean(data.documento, 120),
-            observacoes: `Consumo automático na operação ${tipo}. ${clean(data.observacoes, 1_700)}`.trim(),
-            createdById: createdById || null,
-            agroOperacaoId: operation.id,
-          } });
-        }
+        const custosMedios = await calculateAgroAverageCosts(tx, productIds);
+        const movimentacoes = produtos.map((item) => ({
+          produtoId: item.produtoId,
+          loteId: item.loteId,
+          localId: local.id,
+          tipo: "SAIDA" as const,
+          quantidade: item.quantidade,
+          valorUnitario: custosMedios.get(item.produtoId) ?? 0,
+          data: dataOperacao,
+          responsavel: clean(data.responsavel, 160),
+          destino,
+          documento: clean(data.documento, 120),
+          observacoes: `Consumo automático na operação ${tipo}. ${clean(data.observacoes, 1_700)}`.trim(),
+          createdById: createdById || null,
+          agroOperacaoId: operation.id,
+        }));
+        if (movimentacoes.length) await tx.agroMovimentacao.createMany({ data: movimentacoes });
 
         if (tipo === "PLANTIO" && lavoura.status === "PLANEJADA") {
           await tx.agroLavoura.update({ where: { id: lavouraId }, data: { status: "EM_ANDAMENTO", ...(lavoura.dataPlantio ? {} : { dataPlantio: dataOperacao }) } });
@@ -464,7 +459,7 @@ export const agroLavourasService = {
           where: { id: operation.id },
           include: {
             lavoura: { include: { talhao: { include: { fazenda: true } }, safra: true, cultura: true } },
-            movimentacoes: { include: { produto: true, lote: true }, orderBy: { createdAt: "asc" } },
+            movimentacoes: { include: { produto: true, lote: true, local: true }, orderBy: { createdAt: "asc" } },
             createdBy: { select: { id: true, name: true, username: true } },
           },
         });

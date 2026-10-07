@@ -41,6 +41,7 @@ const AgroMovimentacoes = lazy(() => import("./pages/AgroMovimentacoes"));
 const AgroLavouras = lazy(() => import("./pages/AgroLavouras"));
 const AgroCadastros = lazy(() => import("./pages/AgroCadastros"));
 const AgroRelatorios = lazy(() => import("./pages/AgroRelatorios"));
+const AgroInventario = lazy(() => import("./pages/AgroInventario"));
 
 const RouteFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center bg-background">
@@ -58,6 +59,7 @@ function Router() {
       <Route path="/agro/lavouras" component={AgroLavouras} />
       <Route path="/agro/cadastros" component={AgroCadastros} />
       <Route path="/agro/relatorios" component={AgroRelatorios} />
+      <Route path="/agro/inventario" component={AgroInventario} />
       <Route path="/agro" component={AgroHome} />
       <Route path="/" component={Dashboard} />
       <Route path="/demandas" component={Demandas} />

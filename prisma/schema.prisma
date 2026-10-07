@@ -124,6 +124,8 @@ model User {
   moduleLicenses ModuleLicense[]
   agroMovimentacoes AgroMovimentacao[]
   agroOperacoes AgroOperacao[]
+  agroTransferencias AgroTransferencia[]
+  agroInventarios AgroInventario[]
 
   @@map("users")
 }
@@ -152,6 +154,16 @@ enum AgroTipoMovimentacao {
   SAIDA
   AJUSTE_ENTRADA
   AJUSTE_SAIDA
+  TRANSFERENCIA_ENTRADA
+  TRANSFERENCIA_SAIDA
+  INVENTARIO_ENTRADA
+  INVENTARIO_SAIDA
+}
+
+enum AgroStatusInventario {
+  ABERTO
+  FINALIZADO
+  CANCELADO
 }
 
 enum AgroStatusLavoura {
@@ -272,6 +284,24 @@ model AgroOperacao {
   @@map("agro_operacoes")
 }
 
+model AgroEstoqueLocal {
+  id          String   @id @default(cuid())
+  codigo      String   @unique
+  nome        String   @unique
+  descricao   String   @default("")
+  ativo       Boolean  @default(true)
+  principal   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  movimentacoes AgroMovimentacao[]
+  transferenciasOrigem AgroTransferencia[] @relation("AgroTransferenciaOrigem")
+  transferenciasDestino AgroTransferencia[] @relation("AgroTransferenciaDestino")
+  inventarios AgroInventario[]
+
+  @@index([ativo, nome])
+  @@map("agro_estoque_locais")
+}
+
 model AgroProduto {
   id             String   @id @default(cuid())
   codigo         String   @unique
@@ -287,6 +317,8 @@ model AgroProduto {
   updatedAt      DateTime @updatedAt
   lotes          AgroLote[]
   movimentacoes  AgroMovimentacao[]
+  transferencias AgroTransferencia[]
+  inventarioItens AgroInventarioItem[]
 
   @@index([nome])
   @@index([categoria, ativo])
@@ -305,6 +337,8 @@ model AgroLote {
   updatedAt     DateTime @updatedAt
   produto       AgroProduto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
   movimentacoes AgroMovimentacao[]
+  transferencias AgroTransferencia[]
+  inventarioItens AgroInventarioItem[]
 
   @@unique([produtoId, codigo])
   @@index([produtoId, ativo])
@@ -316,6 +350,7 @@ model AgroMovimentacao {
   id            String   @id @default(cuid())
   produtoId     String
   loteId        String?
+  localId       String
   tipo          AgroTipoMovimentacao
   quantidade    Decimal  @db.Decimal(16, 3)
   valorUnitario Decimal  @default(0) @db.Decimal(16, 4)
@@ -326,19 +361,98 @@ model AgroMovimentacao {
   observacoes   String   @default("") @db.Text
   createdById   String?
   agroOperacaoId String?
+  transferenciaId String?
+  inventarioId String?
   createdAt     DateTime @default(now())
   produto       AgroProduto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
   lote          AgroLote? @relation(fields: [loteId], references: [id], onDelete: SetNull)
+  local         AgroEstoqueLocal @relation(fields: [localId], references: [id], onDelete: Restrict)
   createdBy     User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
   agroOperacao  AgroOperacao? @relation(fields: [agroOperacaoId], references: [id], onDelete: SetNull)
+  transferencia AgroTransferencia? @relation(fields: [transferenciaId], references: [id], onDelete: SetNull)
+  inventario    AgroInventario? @relation(fields: [inventarioId], references: [id], onDelete: SetNull)
 
   @@index([data])
   @@index([produtoId, data])
   @@index([loteId, data])
+  @@index([localId, data])
   @@index([tipo, data])
   @@index([agroOperacaoId])
+  @@index([transferenciaId])
+  @@index([inventarioId])
   @@map("agro_movimentacoes")
 }
+
+model AgroTransferencia {
+  id            String   @id @default(cuid())
+  produtoId     String
+  loteId        String?
+  localOrigemId String
+  localDestinoId String
+  quantidade    Decimal  @db.Decimal(16, 3)
+  valorUnitario Decimal  @default(0) @db.Decimal(16, 4)
+  data          DateTime @db.Date
+  responsavel   String   @default("")
+  documento     String   @default("")
+  observacoes   String   @default("") @db.Text
+  createdById   String?
+  createdAt     DateTime @default(now())
+  produto       AgroProduto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  lote          AgroLote? @relation(fields: [loteId], references: [id], onDelete: SetNull)
+  localOrigem   AgroEstoqueLocal @relation("AgroTransferenciaOrigem", fields: [localOrigemId], references: [id], onDelete: Restrict)
+  localDestino  AgroEstoqueLocal @relation("AgroTransferenciaDestino", fields: [localDestinoId], references: [id], onDelete: Restrict)
+  createdBy     User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  movimentacoes AgroMovimentacao[]
+
+  @@index([data])
+  @@index([produtoId, data])
+  @@index([localOrigemId, data])
+  @@index([localDestinoId, data])
+  @@map("agro_transferencias")
+}
+
+model AgroInventario {
+  id          String   @id @default(cuid())
+  localId     String
+  data        DateTime @db.Date
+  status      AgroStatusInventario @default(ABERTO)
+  descricao   String   @default("")
+  observacoes String   @default("") @db.Text
+  createdById String?
+  finalizadoEm DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  local       AgroEstoqueLocal @relation(fields: [localId], references: [id], onDelete: Restrict)
+  createdBy   User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  itens       AgroInventarioItem[]
+  movimentacoes AgroMovimentacao[]
+
+  @@index([localId, data])
+  @@index([status, data])
+  @@map("agro_inventarios")
+}
+
+model AgroInventarioItem {
+  id             String   @id @default(cuid())
+  inventarioId   String
+  produtoId      String
+  loteId         String?
+  saldoSistema   Decimal  @default(0) @db.Decimal(16, 3)
+  contagemFisica Decimal  @default(0) @db.Decimal(16, 3)
+  diferenca      Decimal  @default(0) @db.Decimal(16, 3)
+  custoUnitario  Decimal  @default(0) @db.Decimal(16, 4)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  inventario     AgroInventario @relation(fields: [inventarioId], references: [id], onDelete: Cascade)
+  produto        AgroProduto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  lote           AgroLote? @relation(fields: [loteId], references: [id], onDelete: SetNull)
+
+  @@unique([inventarioId, produtoId, loteId])
+  @@index([produtoId])
+  @@index([loteId])
+  @@map("agro_inventario_itens")
+}
+
 
 
 model PasswordResetToken {

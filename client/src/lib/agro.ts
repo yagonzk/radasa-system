@@ -16,10 +16,23 @@ export type AgroProduct = {
 export type AgroStockRow = {
   produto: AgroProduct;
   estoque: number;
+  custoMedio: number;
+  valorEstoque: number;
   abaixoMinimo: boolean;
   semEstoque: boolean;
   lotesAtivos: number;
   proximaValidade: string | null;
+};
+
+export type AgroStockLocation = {
+  id: string;
+  codigo: string;
+  nome: string;
+  descricao: string;
+  ativo: boolean;
+  principal: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type AgroLot = {
@@ -33,7 +46,7 @@ export type AgroLot = {
   saldo?: number;
 };
 
-export type AgroMovementType = "ENTRADA" | "SAIDA" | "AJUSTE_ENTRADA" | "AJUSTE_SAIDA";
+export type AgroMovementType = "ENTRADA" | "SAIDA" | "AJUSTE_ENTRADA" | "AJUSTE_SAIDA" | "TRANSFERENCIA_ENTRADA" | "TRANSFERENCIA_SAIDA" | "INVENTARIO_ENTRADA" | "INVENTARIO_SAIDA";
 
 export type AgroMovement = {
   id: string;
@@ -52,6 +65,10 @@ export type AgroMovement = {
   lote?: AgroLot | null;
   createdBy?: { id: string; name: string; username: string } | null;
   agroOperacaoId?: string | null;
+  transferenciaId?: string | null;
+  inventarioId?: string | null;
+  localId: string;
+  local?: AgroStockLocation | null;
 };
 
 export function formatAgroNumber(value: number, maximumFractionDigits = 3) {
@@ -68,12 +85,37 @@ export function movementLabel(type: AgroMovementType) {
   if (type === "ENTRADA") return "Entrada";
   if (type === "SAIDA") return "Saída";
   if (type === "AJUSTE_ENTRADA") return "Ajuste +";
-  return "Ajuste -";
+  if (type === "AJUSTE_SAIDA") return "Ajuste -";
+  if (type === "TRANSFERENCIA_ENTRADA") return "Transferência +";
+  if (type === "TRANSFERENCIA_SAIDA") return "Transferência -";
+  if (type === "INVENTARIO_ENTRADA") return "Inventário +";
+  return "Inventário -";
 }
 
 export function movementIsExit(type: AgroMovementType) {
-  return type === "SAIDA" || type === "AJUSTE_SAIDA";
+  return type === "SAIDA" || type === "AJUSTE_SAIDA" || type === "TRANSFERENCIA_SAIDA" || type === "INVENTARIO_SAIDA";
 }
+
+export type AgroTransfer = {
+  id: string; produtoId: string; loteId: string | null; localOrigemId: string; localDestinoId: string; quantidade: number; valorUnitario: number; data: string; responsavel: string; documento: string; observacoes: string; createdAt: string;
+  produto: AgroProduct; lote?: AgroLot | null; localOrigem: AgroStockLocation; localDestino: AgroStockLocation;
+};
+
+export type AgroInventoryStatus = "ABERTO" | "FINALIZADO" | "CANCELADO";
+export type AgroInventoryItem = { id: string; inventarioId: string; produtoId: string; loteId: string | null; saldoSistema: number; contagemFisica: number; diferenca: number; custoUnitario: number; produto: AgroProduct; lote?: AgroLot | null; };
+export type AgroInventory = { id: string; localId: string; data: string; status: AgroInventoryStatus; descricao: string; observacoes: string; finalizadoEm: string | null; createdAt: string; updatedAt: string; local: AgroStockLocation; itens?: AgroInventoryItem[]; _count?: { itens: number }; };
+
+export type AgroReportGroup = { id: string; label: string; custo: number; quantidade: number; areaHa: number; custoPorHa: number; };
+export type AgroReport = {
+  periodo: { from: string; to: string };
+  resumo: { valorEstoqueAtual: number; entradasValor: number; consumoValor: number; ajustesValor: number; custoPorHa: number; areaHa: number; movimentacoes: number; operacoes: number };
+  estoque: Array<{ produto: AgroProduct; estoque: number; custoMedio: number; valorEstoque: number; abaixoMinimo: boolean; proximaValidade: string | null }>;
+  consumoPorProduto: AgroReportGroup[]; consumoPorFazenda: AgroReportGroup[]; consumoPorTalhao: AgroReportGroup[]; consumoPorSafra: AgroReportGroup[]; consumoPorCultura: AgroReportGroup[]; consumoPorOperacao: AgroReportGroup[];
+  mensal: Array<{ mes: string; entradas: number; consumo: number; ajustes: number }>;
+  consumos: Array<any>;
+};
+
+export function formatAgroCurrency(value: number) { return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
 
 export type AgroFarm = {
   id: string;

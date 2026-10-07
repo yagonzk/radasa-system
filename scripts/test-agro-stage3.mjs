@@ -33,9 +33,9 @@ check("layout permite trocar módulo", layout.includes('href="/modulos"'));
 check("layout valida licença Agro no servidor", layout.includes('api.get("/agro/status")'));
 check("dashboard não inventa números", (home.includes('Aguardando dados do módulo Agro') && home.includes('>—<')) || home.includes('api.get<DashboardData>("/agro/dashboard")'));
 check("estoque está separado do TMS", estoque.includes("/agro/estoque") && !estoque.includes("/estoque/produtos"));
-check("movimentações preservam saldo por lançamentos", movimentacoes.includes("Não existe edição manual da quantidade em estoque") || movimentacoes.includes("nunca um número editado diretamente"));
+check("movimentações preservam saldo por lançamentos", movimentacoes.includes("O saldo do local e o custo médio serão validados no servidor") || movimentacoes.includes("Disponível neste local"));
 check("lavouras possuem fazendas/talhões/safras", lavouras.includes("Fazendas") && lavouras.includes("Talhões") && lavouras.includes("Safras"));
 check("cadastros deixam responsáveis sem login", cadastros.includes("sem login"));
-check("relatórios não misturam TMS", relatorios.includes("sem misturar dados operacionais do TMS"));
+check("relatórios não misturam TMS", relatorios.includes("/agro/relatorios") && !relatorios.includes("/financeiro/"));
 
 console.log(`Etapa 3: ${checks.length} verificações passaram.`);

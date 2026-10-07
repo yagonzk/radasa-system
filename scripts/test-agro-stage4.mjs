@@ -34,7 +34,7 @@ check("realtime conhece Agro", worker.includes('agro/estoque') && worker.include
 check("tela Estoque não é placeholder", estoque.includes('Novo produto') && estoque.includes('/agro/estoque'));
 check("tela Estoque administra lotes", estoque.includes('/agro/lotes') && estoque.includes('Lotes ·'));
 check("tela Movimentações registra entradas e saídas", movimentos.includes('/agro/movimentacoes') && movimentos.includes('Registrar movimentação'));
-check("tela Movimentações mostra saldo disponível", movimentos.includes('Disponível:'));
+check("tela Movimentações mostra saldo disponível", movimentos.includes('Disponível:') || movimentos.includes('Disponível neste local:'));
 check("Dashboard Agro usa dados reais", dashboard.includes('/agro/dashboard') && !dashboard.includes('Aguardando dados do módulo Agro'));
 check("nenhum saldo é editado diretamente", !estoque.includes('setEstoque') && !service.includes('saldo: {'));
 

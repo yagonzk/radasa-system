@@ -41,6 +41,7 @@ const agroNav: AgroNavItem[] = [
   { label: "Dashboard", href: "/agro", icon: <LayoutDashboard className="h-[18px] w-[18px]" /> },
   { label: "Estoque", href: "/agro/estoque", icon: <Warehouse className="h-[18px] w-[18px]" /> },
   { label: "Movimentações", href: "/agro/movimentacoes", icon: <ClipboardList className="h-[18px] w-[18px]" /> },
+  { label: "Barracões", href: "/agro/inventario", icon: <Boxes className="h-[18px] w-[18px]" /> },
   { label: "Lavouras", href: "/agro/lavouras", icon: <Sprout className="h-[18px] w-[18px]" /> },
   { label: "Cadastros", href: "/agro/cadastros", icon: <NotebookTabs className="h-[18px] w-[18px]" /> },
   { label: "Relatórios", href: "/agro/relatorios", icon: <BarChart3 className="h-[18px] w-[18px]" /> },

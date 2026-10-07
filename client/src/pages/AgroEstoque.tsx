@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
-import type { AgroLot, AgroProduct, AgroStockRow } from "@/lib/agro";
-import { formatAgroDate, formatAgroNumber } from "@/lib/agro";
+import type { AgroLot, AgroProduct, AgroStockLocation, AgroStockRow } from "@/lib/agro";
+import { formatAgroCurrency, formatAgroDate, formatAgroNumber } from "@/lib/agro";
 
 const emptyProduct = {
   nome: "", categoria: "", fabricante: "", unidadeMedida: "UN", estoqueMinimo: "0", localizacao: "", controlaLote: false, ativo: true,
@@ -23,6 +23,8 @@ export default function AgroEstoque() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("TODAS");
   const [onlyLow, setOnlyLow] = useState(false);
+  const [locations, setLocations] = useState<AgroStockLocation[]>([]);
+  const [localId, setLocalId] = useState("");
 
   const [productOpen, setProductOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<AgroProduct | null>(null);
@@ -40,14 +42,18 @@ export default function AgroEstoque() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const response = await api.get<AgroStockRow[]>("/agro/estoque");
+      const [response, localRes] = await Promise.all([
+        api.get<AgroStockRow[]>("/agro/estoque", { params: localId ? { localId } : {} }),
+        api.get<AgroStockLocation[]>("/agro/locais"),
+      ]);
       setRows(Array.isArray(response.data) ? response.data : []);
+      setLocations(Array.isArray(localRes.data) ? localRes.data : []);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Não foi possível carregar o estoque Agro.");
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [localId]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
@@ -78,6 +84,7 @@ export default function AgroEstoque() {
     comSaldo: rows.filter((row) => row.produto.ativo && row.estoque > 0).length,
     baixos: rows.filter((row) => row.abaixoMinimo).length,
     lotes: rows.reduce((sum, row) => sum + row.lotesAtivos, 0),
+    valor: rows.reduce((sum, row) => sum + (row.valorEstoque || 0), 0),
   }), [rows]);
 
   function newProduct() {
@@ -130,11 +137,11 @@ export default function AgroEstoque() {
   const loadLots = useCallback(async (product: AgroProduct) => {
     setLotsLoading(true);
     try {
-      const response = await api.get<AgroLot[]>("/agro/lotes", { params: { produtoId: product.id } });
+      const response = await api.get<AgroLot[]>("/agro/lotes", { params: { produtoId: product.id, ...(localId ? { localId } : {}) } });
       setLots(Array.isArray(response.data) ? response.data : []);
     } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível carregar os lotes."); }
     finally { setLotsLoading(false); }
-  }, []);
+  }, [localId]);
 
   async function openLots(product: AgroProduct) {
     setLotProduct(product);
@@ -182,7 +189,7 @@ export default function AgroEstoque() {
             <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Estoque do barracão</h1>
             <p className="mt-2 text-sm text-muted-foreground">Saldo calculado exclusivamente pelas movimentações. Produtos e lotes ficam separados do TMS.</p>
           </div>
-          <Button onClick={newProduct}><Plus className="mr-2 h-4 w-4" />Novo produto</Button>
+          <div className="flex flex-wrap gap-2"><select className="h-9 rounded-md border bg-background px-3 text-sm" value={localId} onChange={(e) => setLocalId(e.target.value)}><option value="">Todos os locais</option>{locations.filter((l) => l.ativo).map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}</select><Button onClick={newProduct}><Plus className="mr-2 h-4 w-4" />Novo produto</Button></div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -190,7 +197,7 @@ export default function AgroEstoque() {
             ["Produtos ativos", totals.ativos, Boxes],
             ["Com saldo", totals.comSaldo, Archive],
             ["Abaixo do mínimo", totals.baixos, AlertTriangle],
-            ["Lotes ativos", totals.lotes, Layers3],
+            ["Valor em estoque", formatAgroCurrency(totals.valor), Layers3],
           ].map(([label, value, Icon]: any) => <Card key={label}><CardContent className="flex items-center justify-between p-4"><div><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 text-2xl font-bold">{value}</div></div><Icon className="h-5 w-5 text-primary" /></CardContent></Card>)}
         </div>
 
@@ -202,8 +209,8 @@ export default function AgroEstoque() {
 
         <div className="overflow-hidden rounded-xl border bg-card">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-sm">
-              <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Produto</th><th className="px-4 py-3">Categoria</th><th className="px-4 py-3 text-right">Saldo</th><th className="px-4 py-3 text-right">Mínimo</th><th className="px-4 py-3">Lotes</th><th className="px-4 py-3">Localização</th><th className="px-4 py-3">Situação</th><th className="px-4 py-3 text-right">Ações</th></tr></thead>
+            <table className="w-full min-w-[1160px] text-sm">
+              <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Produto</th><th className="px-4 py-3">Categoria</th><th className="px-4 py-3 text-right">Saldo</th><th className="px-4 py-3 text-right">Custo médio</th><th className="px-4 py-3 text-right">Valor estoque</th><th className="px-4 py-3 text-right">Mínimo</th><th className="px-4 py-3">Lotes</th><th className="px-4 py-3">Localização</th><th className="px-4 py-3">Situação</th><th className="px-4 py-3 text-right">Ações</th></tr></thead>
               <tbody className="divide-y">
                 {filtered.map((row) => {
                   const p = row.produto;
@@ -211,6 +218,8 @@ export default function AgroEstoque() {
                     <td className="px-4 py-3"><div className="font-semibold">{p.nome}</div><div className="text-xs text-muted-foreground">{p.codigo}{p.fabricante ? ` · ${p.fabricante}` : ""}</div></td>
                     <td className="px-4 py-3">{p.categoria || "—"}</td>
                     <td className="px-4 py-3 text-right font-semibold">{formatAgroNumber(row.estoque)} <span className="text-xs font-normal text-muted-foreground">{p.unidadeMedida}</span></td>
+                    <td className="px-4 py-3 text-right">{formatAgroCurrency(row.custoMedio || 0)}</td>
+                    <td className="px-4 py-3 text-right font-semibold">{formatAgroCurrency(row.valorEstoque || 0)}</td>
                     <td className="px-4 py-3 text-right">{formatAgroNumber(p.estoqueMinimo)} {p.unidadeMedida}</td>
                     <td className="px-4 py-3"><button type="button" className="text-left text-primary hover:underline" onClick={() => void openLots(p)}>{row.lotesAtivos} lote(s){row.proximaValidade && <span className="block text-xs text-muted-foreground"><CalendarClock className="mr-1 inline h-3 w-3" />{formatAgroDate(row.proximaValidade)}</span>}</button></td>
                     <td className="px-4 py-3">{p.localizacao || "—"}</td>
@@ -218,8 +227,8 @@ export default function AgroEstoque() {
                     <td className="px-4 py-3"><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" title="Lotes" onClick={() => void openLots(p)}><Layers3 className="h-4 w-4" /></Button><Button size="icon" variant="ghost" title="Editar" onClick={() => editProduct(p)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" className="text-destructive" title="Remover ou inativar" onClick={() => void removeProduct(p)}><Trash2 className="h-4 w-4" /></Button></div></td>
                   </tr>;
                 })}
-                {!loading && filtered.length === 0 && <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">Nenhum produto encontrado.</td></tr>}
-                {loading && <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">Carregando estoque...</td></tr>}
+                {!loading && filtered.length === 0 && <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">Nenhum produto encontrado.</td></tr>}
+                {loading && <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">Carregando estoque...</td></tr>}
               </tbody>
             </table>
           </div>

@@ -6,7 +6,12 @@ export const agroRoutes = Router();
 
 agroRoutes.get("/status", asyncHandler(agroController.status));
 agroRoutes.get("/dashboard", asyncHandler(agroController.dashboard));
+agroRoutes.get("/relatorios", asyncHandler(agroController.relatorios));
 agroRoutes.get("/estoque", asyncHandler(agroController.estoque));
+
+agroRoutes.get("/locais", asyncHandler(agroController.locais));
+agroRoutes.post("/locais", asyncHandler(agroController.criarLocal));
+agroRoutes.put("/locais/:id", asyncHandler(agroController.atualizarLocal));
 
 agroRoutes.get("/produtos", asyncHandler(agroController.produtos));
 agroRoutes.post("/produtos", asyncHandler(agroController.criarProduto));
@@ -20,6 +25,16 @@ agroRoutes.delete("/lotes/:id", asyncHandler(agroController.removerLote));
 
 agroRoutes.get("/movimentacoes", asyncHandler(agroController.movimentacoes));
 agroRoutes.post("/movimentacoes", asyncHandler(agroController.criarMovimentacao));
+
+agroRoutes.get("/transferencias", asyncHandler(agroController.transferencias));
+agroRoutes.post("/transferencias", asyncHandler(agroController.criarTransferencia));
+
+agroRoutes.get("/inventarios", asyncHandler(agroController.inventarios));
+agroRoutes.get("/inventarios/:id", asyncHandler(agroController.inventario));
+agroRoutes.post("/inventarios", asyncHandler(agroController.criarInventario));
+agroRoutes.put("/inventarios/:id/itens/:itemId", asyncHandler(agroController.atualizarItemInventario));
+agroRoutes.post("/inventarios/:id/finalizar", asyncHandler(agroController.finalizarInventario));
+agroRoutes.post("/inventarios/:id/cancelar", asyncHandler(agroController.cancelarInventario));
 
 
 agroRoutes.get("/fazendas", asyncHandler(agroController.fazendas));
