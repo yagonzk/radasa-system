@@ -98,11 +98,16 @@ function affectedResources(pathname: string) {
   if (root === "agro") {
     const section = parts[1] || "dashboard";
     resources.add(`agro/${section}`);
-    if (["produtos", "lotes", "movimentacoes"].includes(section)) {
+    if (["produtos", "lotes", "movimentacoes", "operacoes"].includes(section)) {
       resources.add("agro/estoque");
+      resources.add("agro/movimentacoes");
       resources.add("agro/dashboard");
     }
-    if (section === "movimentacoes") resources.add("agro/movimentacoes");
+    if (["fazendas", "talhoes", "safras", "culturas", "lavouras", "operacoes"].includes(section)) {
+      resources.add("agro/lavouras");
+      resources.add("agro/cadastros");
+      resources.add("agro/dashboard");
+    }
   }
 
   if (root === "estoque" && ["tipos", "subcategorias", "produtos"].includes(parts[1] || "")) {

@@ -20,3 +20,27 @@ agroRoutes.delete("/lotes/:id", asyncHandler(agroController.removerLote));
 
 agroRoutes.get("/movimentacoes", asyncHandler(agroController.movimentacoes));
 agroRoutes.post("/movimentacoes", asyncHandler(agroController.criarMovimentacao));
+
+
+agroRoutes.get("/fazendas", asyncHandler(agroController.fazendas));
+agroRoutes.post("/fazendas", asyncHandler(agroController.criarFazenda));
+agroRoutes.put("/fazendas/:id", asyncHandler(agroController.atualizarFazenda));
+
+agroRoutes.get("/talhoes", asyncHandler(agroController.talhoes));
+agroRoutes.post("/talhoes", asyncHandler(agroController.criarTalhao));
+agroRoutes.put("/talhoes/:id", asyncHandler(agroController.atualizarTalhao));
+
+agroRoutes.get("/safras", asyncHandler(agroController.safras));
+agroRoutes.post("/safras", asyncHandler(agroController.criarSafra));
+agroRoutes.put("/safras/:id", asyncHandler(agroController.atualizarSafra));
+
+agroRoutes.get("/culturas", asyncHandler(agroController.culturas));
+agroRoutes.post("/culturas", asyncHandler(agroController.criarCultura));
+agroRoutes.put("/culturas/:id", asyncHandler(agroController.atualizarCultura));
+
+agroRoutes.get("/lavouras", asyncHandler(agroController.lavouras));
+agroRoutes.post("/lavouras", asyncHandler(agroController.criarLavoura));
+agroRoutes.put("/lavouras/:id", asyncHandler(agroController.atualizarLavoura));
+
+agroRoutes.get("/operacoes", asyncHandler(agroController.operacoes));
+agroRoutes.post("/operacoes", asyncHandler(agroController.criarOperacao));

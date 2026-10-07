@@ -123,6 +123,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   moduleLicenses ModuleLicense[]
   agroMovimentacoes AgroMovimentacao[]
+  agroOperacoes AgroOperacao[]
 
   @@map("users")
 }
@@ -151,6 +152,124 @@ enum AgroTipoMovimentacao {
   SAIDA
   AJUSTE_ENTRADA
   AJUSTE_SAIDA
+}
+
+enum AgroStatusLavoura {
+  PLANEJADA
+  EM_ANDAMENTO
+  CONCLUIDA
+}
+
+enum AgroTipoOperacao {
+  PLANTIO
+  ADUBACAO
+  PULVERIZACAO
+  APLICACAO
+  MONITORAMENTO
+  COLHEITA
+  OUTROS
+}
+
+model AgroFazenda {
+  id          String   @id @default(cuid())
+  nome        String   @unique
+  cidade      String   @default("")
+  uf          String   @default("")
+  areaTotalHa Decimal  @default(0) @db.Decimal(16, 3)
+  observacoes String   @default("") @db.Text
+  ativo       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  talhoes     AgroTalhao[]
+
+  @@index([ativo, nome])
+  @@map("agro_fazendas")
+}
+
+model AgroTalhao {
+  id          String   @id @default(cuid())
+  fazendaId   String
+  nome        String
+  areaHa      Decimal  @default(0) @db.Decimal(16, 3)
+  observacoes String   @default("") @db.Text
+  ativo       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  fazenda     AgroFazenda @relation(fields: [fazendaId], references: [id], onDelete: Restrict)
+  lavouras    AgroLavoura[]
+
+  @@unique([fazendaId, nome])
+  @@index([fazendaId, ativo])
+  @@map("agro_talhoes")
+}
+
+model AgroSafra {
+  id         String   @id @default(cuid())
+  nome       String   @unique
+  dataInicio DateTime? @db.Date
+  dataFim    DateTime? @db.Date
+  ativo      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lavouras   AgroLavoura[]
+
+  @@index([ativo, nome])
+  @@map("agro_safras")
+}
+
+model AgroCultura {
+  id        String   @id @default(cuid())
+  nome      String   @unique
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lavouras  AgroLavoura[]
+
+  @@index([ativo, nome])
+  @@map("agro_culturas")
+}
+
+model AgroLavoura {
+  id                   String             @id @default(cuid())
+  talhaoId             String
+  safraId              String
+  culturaId            String
+  areaHa               Decimal            @default(0) @db.Decimal(16, 3)
+  status               AgroStatusLavoura  @default(PLANEJADA)
+  dataPlantio          DateTime?          @db.Date
+  dataPrevisaoColheita DateTime?          @db.Date
+  observacoes          String             @default("") @db.Text
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  talhao               AgroTalhao         @relation(fields: [talhaoId], references: [id], onDelete: Restrict)
+  safra                AgroSafra          @relation(fields: [safraId], references: [id], onDelete: Restrict)
+  cultura              AgroCultura        @relation(fields: [culturaId], references: [id], onDelete: Restrict)
+  operacoes             AgroOperacao[]
+
+  @@unique([talhaoId, safraId, culturaId])
+  @@index([safraId, status])
+  @@index([culturaId, status])
+  @@map("agro_lavouras")
+}
+
+model AgroOperacao {
+  id          String            @id @default(cuid())
+  lavouraId   String
+  tipo        AgroTipoOperacao
+  data        DateTime          @db.Date
+  areaHa      Decimal           @default(0) @db.Decimal(16, 3)
+  responsavel String            @default("")
+  documento   String            @default("")
+  observacoes String            @default("") @db.Text
+  createdById String?
+  createdAt   DateTime          @default(now())
+  lavoura     AgroLavoura       @relation(fields: [lavouraId], references: [id], onDelete: Restrict)
+  createdBy   User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  movimentacoes AgroMovimentacao[]
+
+  @@index([lavouraId, data])
+  @@index([tipo, data])
+  @@map("agro_operacoes")
 }
 
 model AgroProduto {
@@ -206,15 +325,18 @@ model AgroMovimentacao {
   documento     String   @default("")
   observacoes   String   @default("") @db.Text
   createdById   String?
+  agroOperacaoId String?
   createdAt     DateTime @default(now())
   produto       AgroProduto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
   lote          AgroLote? @relation(fields: [loteId], references: [id], onDelete: SetNull)
   createdBy     User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  agroOperacao  AgroOperacao? @relation(fields: [agroOperacaoId], references: [id], onDelete: SetNull)
 
   @@index([data])
   @@index([produtoId, data])
   @@index([loteId, data])
   @@index([tipo, data])
+  @@index([agroOperacaoId])
   @@map("agro_movimentacoes")
 }
 

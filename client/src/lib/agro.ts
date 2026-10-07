@@ -51,6 +51,7 @@ export type AgroMovement = {
   produto: AgroProduct;
   lote?: AgroLot | null;
   createdBy?: { id: string; name: string; username: string } | null;
+  agroOperacaoId?: string | null;
 };
 
 export function formatAgroNumber(value: number, maximumFractionDigits = 3) {
@@ -72,4 +73,103 @@ export function movementLabel(type: AgroMovementType) {
 
 export function movementIsExit(type: AgroMovementType) {
   return type === "SAIDA" || type === "AJUSTE_SAIDA";
+}
+
+export type AgroFarm = {
+  id: string;
+  nome: string;
+  cidade: string;
+  uf: string;
+  areaTotalHa: number;
+  observacoes: string;
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { talhoes: number };
+};
+
+export type AgroPlot = {
+  id: string;
+  fazendaId: string;
+  nome: string;
+  areaHa: number;
+  observacoes: string;
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+  fazenda?: AgroFarm;
+  _count?: { lavouras: number };
+};
+
+export type AgroSeason = {
+  id: string;
+  nome: string;
+  dataInicio: string | null;
+  dataFim: string | null;
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { lavouras: number };
+};
+
+export type AgroCrop = {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { lavouras: number };
+};
+
+export type AgroCropCycleStatus = "PLANEJADA" | "EM_ANDAMENTO" | "CONCLUIDA";
+
+export type AgroCropCycle = {
+  id: string;
+  talhaoId: string;
+  safraId: string;
+  culturaId: string;
+  areaHa: number;
+  status: AgroCropCycleStatus;
+  dataPlantio: string | null;
+  dataPrevisaoColheita: string | null;
+  observacoes: string;
+  createdAt: string;
+  updatedAt: string;
+  talhao: AgroPlot;
+  safra: AgroSeason;
+  cultura: AgroCrop;
+  _count?: { operacoes: number };
+};
+
+export type AgroOperationType = "PLANTIO" | "ADUBACAO" | "PULVERIZACAO" | "APLICACAO" | "MONITORAMENTO" | "COLHEITA" | "OUTROS";
+
+export type AgroOperation = {
+  id: string;
+  lavouraId: string;
+  tipo: AgroOperationType;
+  data: string;
+  areaHa: number;
+  responsavel: string;
+  documento: string;
+  observacoes: string;
+  createdAt: string;
+  lavoura: AgroCropCycle;
+  movimentacoes: AgroMovement[];
+  createdBy?: { id: string; name: string; username: string } | null;
+};
+
+export function agroCropCycleStatusLabel(status: AgroCropCycleStatus) {
+  if (status === "PLANEJADA") return "Planejada";
+  if (status === "EM_ANDAMENTO") return "Em andamento";
+  return "Concluída";
+}
+
+export function agroOperationLabel(type: AgroOperationType) {
+  if (type === "PLANTIO") return "Plantio";
+  if (type === "ADUBACAO") return "Adubação";
+  if (type === "PULVERIZACAO") return "Pulverização";
+  if (type === "APLICACAO") return "Aplicação";
+  if (type === "MONITORAMENTO") return "Monitoramento";
+  if (type === "COLHEITA") return "Colheita";
+  return "Outros";
 }

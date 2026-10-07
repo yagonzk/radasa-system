@@ -375,7 +375,7 @@ export const agroEstoqueService = {
     const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const next60 = new Date(todayStart.getTime() + 60 * 86_400_000);
-    const [estoque, saidasMes, lotesVencendo, recent] = await Promise.all([
+    const [estoque, saidasMes, lotesVencendo, recent, lavourasEmAndamento, operacoesMes] = await Promise.all([
       this.listEstoque(),
       prisma.agroMovimentacao.count({ where: { data: { gte: monthStart }, tipo: { in: ["SAIDA", "AJUSTE_SAIDA"] } } }),
       prisma.agroLote.count({ where: { ativo: true, validade: { gte: todayStart, lte: next60 } } }),
@@ -384,6 +384,8 @@ export const agroEstoqueService = {
         orderBy: [{ data: "desc" }, { createdAt: "desc" }],
         take: 8,
       }),
+      prisma.agroLavoura.count({ where: { status: "EM_ANDAMENTO" } }),
+      prisma.agroOperacao.count({ where: { data: { gte: monthStart } } }),
     ]);
     const ativos = estoque.filter((row: any) => row.produto.ativo);
     return {
@@ -392,6 +394,8 @@ export const agroEstoqueService = {
       estoqueBaixo: ativos.filter((row: any) => row.abaixoMinimo).length,
       saidasMes,
       lotesVencendo,
+      lavourasEmAndamento,
+      operacoesMes,
       recent: recent.map(movementDto),
     };
   },

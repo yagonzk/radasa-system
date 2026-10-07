@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ArrowRight, BarChart3, Boxes, ClipboardList, Leaf, PackageCheck, Sprout, TriangleAlert, Warehouse } from "lucide-react";
+import { ArrowRight, BarChart3, Boxes, ClipboardList, Leaf, PackageCheck, Sprout, Tractor, TriangleAlert, Warehouse } from "lucide-react";
 import AgroLayout from "@/components/agro/AgroLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { api } from "@/lib/api";
@@ -21,6 +21,8 @@ type DashboardData = {
   estoqueBaixo: number;
   saidasMes: number;
   lotesVencendo: number;
+  lavourasEmAndamento: number;
+  operacoesMes: number;
   recent: AgroMovement[];
 };
 
@@ -54,6 +56,8 @@ export default function AgroHome() {
     { label: "Estoque baixo", value: data?.estoqueBaixo ?? 0, detail: "abaixo do mínimo definido", icon: TriangleAlert },
     { label: "Saídas do mês", value: data?.saidasMes ?? 0, detail: "movimentações de saída", icon: PackageCheck },
     { label: "Lotes a vencer", value: data?.lotesVencendo ?? 0, detail: "próximos 60 dias", icon: Warehouse },
+    { label: "Lavouras em andamento", value: data?.lavourasEmAndamento ?? 0, detail: "ciclos agrícolas ativos", icon: Sprout },
+    { label: "Operações no mês", value: data?.operacoesMes ?? 0, detail: "atividades registradas", icon: Tractor },
   ];
 
   return (
@@ -62,10 +66,10 @@ export default function AgroHome() {
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary"><Leaf className="h-4 w-4" />Radasa Agro</div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Dashboard Agro</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Visão rápida do estoque agrícola. Lavouras serão conectadas na próxima etapa.</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Visão rápida do estoque e das lavouras, com atualização automática entre os computadores conectados.</p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           {stats.map(({ label, value, detail, icon: Icon }) => (
             <Card key={label} className="border-border/70"><CardContent className="flex items-center justify-between gap-4 p-5"><div><div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div><div className="mt-2 text-2xl font-bold">{loading && !data ? "—" : value}</div><div className="mt-1 text-xs text-muted-foreground">{detail}</div></div><Icon className="h-5 w-5 text-primary" /></CardContent></Card>
           ))}
@@ -94,7 +98,7 @@ export default function AgroHome() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-dashed bg-muted/20 p-4"><div className="flex items-start gap-3"><Boxes className="mt-0.5 h-5 w-5 text-primary" /><div><div className="text-sm font-semibold">Etapa 4: estoque funcional</div><p className="mt-1 text-sm leading-6 text-muted-foreground">Produtos, lotes e movimentações já usam tabelas exclusivas do Agro. O saldo é derivado do histórico e não pode ser alterado diretamente.</p></div></div></div>
+        <div className="rounded-xl border border-dashed bg-muted/20 p-4"><div className="flex items-start gap-3"><Boxes className="mt-0.5 h-5 w-5 text-primary" /><div><div className="text-sm font-semibold">Estoque + lavouras integrados</div><p className="mt-1 text-sm leading-6 text-muted-foreground">Produtos utilizados em operações agrícolas podem gerar saídas de estoque automaticamente, preservando o histórico da lavoura e da movimentação.</p></div></div></div>
       </div>
     </AgroLayout>
   );
