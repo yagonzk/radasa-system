@@ -31,6 +31,7 @@ const Financeiro = lazy(() => import("./pages/Financeiro"));
 const Manutencao = lazy(() => import("./pages/Manutencao"));
 const BIGerencial = lazy(() => import("./pages/BIGerencial"));
 const Administracao = lazy(() => import("./pages/Administracao"));
+const AdminUsuarioDetalhe = lazy(() => import("./pages/AdminUsuarioDetalhe"));
 const CiotGerar = lazy(() => import("./pages/CiotGerar"));
 const CiotGerados = lazy(() => import("./pages/CiotGerados"));
 const CiotConfiguracao = lazy(() => import("./pages/CiotConfiguracao"));
@@ -44,6 +45,7 @@ const AgroRelatorios = lazy(() => import("./pages/AgroRelatorios"));
 const AgroInventario = lazy(() => import("./pages/AgroInventario"));
 const AdminHome = lazy(() => import("./pages/AdminHome"));
 const AdminCadastros = lazy(() => import("./pages/AdminCadastros"));
+const AdminConfiguracoes = lazy(() => import("./pages/AdminConfiguracoes"));
 
 const RouteFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center bg-background">
@@ -63,9 +65,11 @@ function Router() {
       <Route path="/agro/relatorios" component={AgroRelatorios} />
       <Route path="/agro/inventario" component={AgroInventario} />
       <Route path="/agro" component={AgroHome} />
+      <Route path="/admin/usuarios/:id" component={AdminUsuarioDetalhe} />
       <Route path="/admin/usuarios" component={Administracao} />
       <Route path="/admin/aprovacoes" component={AprovacaoContas} />
       <Route path="/admin/cadastros" component={AdminCadastros} />
+      <Route path="/admin/configuracoes" component={AdminConfiguracoes} />
       <Route path="/admin/logs" component={Logs} />
       <Route path="/admin" component={AdminHome} />
       <Route path="/" component={Dashboard} />

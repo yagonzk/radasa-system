@@ -13,7 +13,7 @@ const schema = read("prisma/schema.prisma");
 const migration = read("prisma/migrations/20261007100000_add_module_licenses_stage1/migration.sql");
 const service = read("server/services/module-license.service.ts");
 const routes = read("server/routes/admin.routes.ts");
-const adminPage = read("client/src/pages/Administracao.tsx");
+const adminPage = read("client/src/pages/Administracao.tsx") + read("client/src/pages/AdminUsuarioDetalhe.tsx");
 const auth = read("server/services/auth.service.ts");
 
 assert(schema.includes("model ModuleLicense"), "ModuleLicense existe no schema Prisma");

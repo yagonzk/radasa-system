@@ -8,6 +8,7 @@ import {
   Menu,
   Moon,
   ScrollText,
+  Settings2,
   ShieldCheck,
   Sun,
   UserRound,
@@ -25,6 +26,7 @@ const adminNav = [
   { label: "Usuários e licenças", href: "/admin/usuarios", icon: <Users className="h-[18px] w-[18px]" /> },
   { label: "Aprovação de contas", href: "/admin/aprovacoes", icon: <ShieldCheck className="h-[18px] w-[18px]" /> },
   { label: "Cadastros e dados", href: "/admin/cadastros", icon: <Boxes className="h-[18px] w-[18px]" /> },
+  { label: "Configurações", href: "/admin/configuracoes", icon: <Settings2 className="h-[18px] w-[18px]" /> },
   { label: "Logs e auditoria", href: "/admin/logs", icon: <ScrollText className="h-[18px] w-[18px]" /> },
 ];
 

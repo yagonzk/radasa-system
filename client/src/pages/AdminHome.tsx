@@ -6,6 +6,7 @@ import {
   Leaf,
   RefreshCw,
   ScrollText,
+  Settings2,
   ShieldCheck,
   Truck,
   Users,
@@ -198,6 +199,7 @@ export default function AdminHome() {
               <Link href="/admin/usuarios" className="flex items-center justify-between rounded-lg border px-3 py-3 text-sm font-medium hover:bg-accent"><span className="flex items-center gap-2"><Users className="h-4 w-4" /> Usuários e licenças</span><ArrowRight className="h-4 w-4" /></Link>
               <Link href="/admin/aprovacoes" className="flex items-center justify-between rounded-lg border px-3 py-3 text-sm font-medium hover:bg-accent"><span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Aprovar contas</span><ArrowRight className="h-4 w-4" /></Link>
               <Link href="/admin/cadastros" className="flex items-center justify-between rounded-lg border px-3 py-3 text-sm font-medium hover:bg-accent"><span className="flex items-center gap-2"><Boxes className="h-4 w-4" /> Cadastros e dados</span><ArrowRight className="h-4 w-4" /></Link>
+              <Link href="/admin/configuracoes" className="flex items-center justify-between rounded-lg border px-3 py-3 text-sm font-medium hover:bg-accent"><span className="flex items-center gap-2"><Settings2 className="h-4 w-4" /> Configurações do sistema</span><ArrowRight className="h-4 w-4" /></Link>
               <Link href="/admin/logs" className="flex items-center justify-between rounded-lg border px-3 py-3 text-sm font-medium hover:bg-accent"><span className="flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Logs e auditoria</span><ArrowRight className="h-4 w-4" /></Link>
             </CardContent>
           </Card>
