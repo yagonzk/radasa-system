@@ -1,1 +1,32 @@
-import type{Request,Response}from"express";import{adminService as s}from"../services/admin.service.js";const id=(r:Request)=>Array.isArray(r.params.id)?r.params.id[0]:r.params.id;export const adminController={usuarios:async(_r:Request,res:Response)=>res.json(await s.usuarios()),acesso:async(r:Request,res:Response)=>res.json(await s.atualizarAcesso(id(r),r.body)),configuracoes:async(_r:Request,res:Response)=>res.json(await s.configuracoes()),salvarConfiguracao:async(r:Request,res:Response)=>res.json(await s.salvarConfiguracao(String(r.body.chave||""),r.body.valor)),logs:async(_r:Request,res:Response)=>res.json(await s.logs())};
+import type { Request, Response } from "express";
+import { adminService as service } from "../services/admin.service.js";
+
+function requestId(req: Request) {
+  return Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+}
+
+function requestModule(req: Request) {
+  return Array.isArray(req.params.module) ? req.params.module[0] : req.params.module;
+}
+
+export const adminController = {
+  usuarios: async (_req: Request, res: Response) => res.json(await service.usuarios()),
+
+  acesso: async (req: Request, res: Response) =>
+    res.json(await service.atualizarAcesso(requestId(req), req.body)),
+
+  atualizarDiasLicenca: async (req: Request, res: Response) =>
+    res.json(await service.atualizarDiasLicenca(
+      requestId(req),
+      requestModule(req),
+      req.body?.remainingDays,
+      req.user!.id,
+    )),
+
+  configuracoes: async (_req: Request, res: Response) => res.json(await service.configuracoes()),
+
+  salvarConfiguracao: async (req: Request, res: Response) =>
+    res.json(await service.salvarConfiguracao(String(req.body.chave || ""), req.body.valor)),
+
+  logs: async (_req: Request, res: Response) => res.json(await service.logs()),
+};

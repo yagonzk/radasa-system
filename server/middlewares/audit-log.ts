@@ -80,6 +80,8 @@ function describe(method: string, path: string, body?: unknown) {
 
 export const auditMutations: RequestHandler = (req, res, next) => {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
+  // A alteração de licença grava uma auditoria rica com antes/depois dentro da própria transação.
+  if (req.originalUrl.includes("/admin/usuarios/") && req.originalUrl.includes("/licencas/")) return next();
   res.on("finish", () => {
     if (!req.user || res.statusCode >= 400 || req.path.includes("/auth/login") || req.path.includes("/auth/register")) return;
     const auditTask = prisma.auditLog.create({

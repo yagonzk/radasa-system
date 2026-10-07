@@ -6,6 +6,7 @@ import { AppError } from "../utils/app-error.js";
 import { emailService } from "./email.service.js";
 import { logger } from "../config/logger.js";
 import { hashPassword, verifyPassword } from "./password-hash.service.js";
+import { userLicenseSummaries } from "./module-license.service.js";
 
 function publicUser(user: {
   id: string;
@@ -18,6 +19,16 @@ function publicUser(user: {
   role: "ADMIN" | "GERENTE" | "BORRACHARIA" | "MANUTENCAO" | "VISUALIZACAO" | "USER";
   motoristaId?: string | null;
   permissoes?: unknown;
+  moduleLicenses?: Array<{
+    id: string;
+    userId: string;
+    module: string;
+    active: boolean;
+    unlimited: boolean;
+    expiresAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
 }) {
   return {
     id: user.id,
@@ -30,6 +41,7 @@ function publicUser(user: {
     role: user.role,
     motoristaId: user.motoristaId ?? null,
     permissoes: user.permissoes ?? {},
+    licenses: userLicenseSummaries(user.role, user.moduleLicenses ?? []),
   };
 }
 
@@ -66,6 +78,7 @@ export const authService = {
           { username: normalizedIdentifier },
         ],
       },
+      include: { moduleLicenses: true },
     });
 
     if (!user || !(await verifyPassword(password, user.passwordHash))) {
@@ -258,6 +271,7 @@ export const authService = {
 
     const user = await prisma.user.update({
       where: { id: userId },
+      include: { moduleLicenses: true },
       data: {
         name: input.name.trim(),
         email,
@@ -280,7 +294,7 @@ export const authService = {
   },
 
   async me(userId: string) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({ where: { id: userId }, include: { moduleLicenses: true } });
     if (!user || !user.active) throw new AppError(401, "Usuário não encontrado ou inativo.");
     return publicUser(user);
   },

@@ -3,6 +3,16 @@ import { api, setAccessToken } from "@/lib/api";
 import { migrateLegacyLocalStorage } from "@/lib/legacyMigration";
 import { startRealtimeSync } from "@/lib/realtime";
 
+
+export type ModuleLicenseSummary = {
+  module: "TRANSPORTES" | "AGRO";
+  status: "ATIVA" | "VENCIDA" | "SUSPENSA" | "NAO_CONTRATADO" | "ILIMITADA";
+  active: boolean;
+  unlimited: boolean;
+  expiresAt: string | null;
+  remainingDays: number | null;
+};
+
 export type AuthUser = {
   id: string;
   name: string;
@@ -14,6 +24,7 @@ export type AuthUser = {
   role: "ADMIN" | "GERENTE" | "BORRACHARIA" | "MANUTENCAO" | "VISUALIZACAO" | "USER";
   motoristaId?: string | null;
   permissoes?: Record<string, boolean>;
+  licenses?: ModuleLicenseSummary[];
 };
 
 type AuthResponse = { token: string; user: AuthUser };

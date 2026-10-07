@@ -1,1 +1,15 @@
-import{Router}from"express";import{UserRole}from"@prisma/client";import{authenticate,requireRole}from"../middlewares/auth.js";import{asyncHandler}from"../utils/async-handler.js";import{adminController as c}from"../controllers/admin.controller.js";export const adminRoutes=Router();adminRoutes.use(authenticate,requireRole(UserRole.ADMIN));adminRoutes.get("/usuarios",asyncHandler(c.usuarios));adminRoutes.put("/usuarios/:id/acesso",asyncHandler(c.acesso));adminRoutes.get("/configuracoes",asyncHandler(c.configuracoes));adminRoutes.put("/configuracoes",asyncHandler(c.salvarConfiguracao));adminRoutes.get("/logs",asyncHandler(c.logs));
+import { Router } from "express";
+import { UserRole } from "@prisma/client";
+import { authenticate, requireRole } from "../middlewares/auth.js";
+import { asyncHandler } from "../utils/async-handler.js";
+import { adminController as controller } from "../controllers/admin.controller.js";
+
+export const adminRoutes = Router();
+
+adminRoutes.use(authenticate, requireRole(UserRole.ADMIN));
+adminRoutes.get("/usuarios", asyncHandler(controller.usuarios));
+adminRoutes.put("/usuarios/:id/acesso", asyncHandler(controller.acesso));
+adminRoutes.put("/usuarios/:id/licencas/:module/dias", asyncHandler(controller.atualizarDiasLicenca));
+adminRoutes.get("/configuracoes", asyncHandler(controller.configuracoes));
+adminRoutes.put("/configuracoes", asyncHandler(controller.salvarConfiguracao));
+adminRoutes.get("/logs", asyncHandler(controller.logs));
