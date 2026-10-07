@@ -35,6 +35,8 @@ import { dashboardRoutes } from "./dashboard.routes.js";
 import { biRoutes } from "./bi.routes.js";
 import { adminRoutes } from "./admin.routes.js";
 import { sefazDfeRoutes } from "./sefaz-dfe.routes.js";
+import { agroRoutes } from "./agro.routes.js";
+import { requireModuleLicense } from "../middlewares/module-license.js";
 
 export const apiRoutes = Router();
 apiRoutes.get("/health", (_req, res) => res.json({ status: "ok" }));
@@ -43,15 +45,25 @@ apiRoutes.use("/usuarios", usuariosRoutes);
 apiRoutes.use(authenticateIfRequired);
 apiRoutes.use(permissionGate);
 apiRoutes.use(auditMutations);
-apiRoutes.use("/bootstrap", bootstrapRoutes);
+
+// Rotas do núcleo da plataforma continuam acessíveis independentemente de uma
+// licença operacional específica. A conta ADMIN é ilimitada por definição.
 apiRoutes.use("/logs", logsRoutes);
+apiRoutes.use("/admin", adminRoutes);
+
+// Cada ambiente possui sua própria licença. Agro já nasce isolado, mesmo antes
+// de receber as APIs funcionais de estoque/lavoura nas próximas etapas.
+apiRoutes.use("/agro", requireModuleLicense("AGRO"), agroRoutes);
+
+// Todas as APIs legadas abaixo pertencem ao ambiente Transportes.
+apiRoutes.use(requireModuleLicense("TRANSPORTES"));
+apiRoutes.use("/bootstrap", bootstrapRoutes);
 apiRoutes.use("/demandas", demandasRoutes);
 apiRoutes.use("/financeiro", financeiroRoutes);
 apiRoutes.use("/centros-custo", centrosCustoRoutes);
 apiRoutes.use("/manutencao", manutencaoRoutes);
 apiRoutes.use("/dashboard", dashboardRoutes);
 apiRoutes.use("/bi", biRoutes);
-apiRoutes.use("/admin", adminRoutes);
 apiRoutes.use("/migration", migrationRoutes);
 apiRoutes.use("/motoristas", motoristasRoutes);
 apiRoutes.use("/chapas", chapasRoutes);

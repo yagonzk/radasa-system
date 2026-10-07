@@ -35,6 +35,7 @@ export default function Auth() {
     try {
       await login(loginData.identifier, loginData.password);
       toast.success("Login realizado com sucesso.");
+      navigate("/modulos");
     } catch (error) {
       toast.error(getApiMessage(error, "Não foi possível entrar."));
     } finally {

@@ -1,10 +1,11 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
-import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3 } from "lucide-react";
+import { Truck, Users, LayoutDashboard, Moon, Sun, ClipboardList, HandCoins, LogOut, KeyRound, ScrollText, Fuel, Boxes, FileBadge2, ChevronDown, ChevronRight, UserRound, Settings2, BadgeDollarSign, ShieldCheck, Menu, X, BriefcaseBusiness, WalletCards, ListTodo, BarChart3, ArrowLeftRight } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { hasModuleAccess } from "@/lib/module-access";
 
 interface NavItem {
   label: string;
@@ -77,6 +78,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(navGroups.map(group => [group.label, group.items.some(item => item.matchPaths.some(path => location.startsWith(path)))])));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isDark = theme === "dark";
+  const transportEnabled = hasModuleAccess(user, "TRANSPORTES");
   const configuredPermissions = user?.permissoes && Object.keys(user.permissoes).length > 0;
   const permissionFor = (href: string) => href.startsWith("/demandas") ? "demandas" : href.startsWith("/romaneios") ? "romaneios" : href.startsWith("/viagens") || href.startsWith("/pedagios") ? "viagens" : href.startsWith("/abastecimentos") ? "abastecimentos" : href.startsWith("/manutencao") || href.startsWith("/pneus") ? "frota" : href.startsWith("/financeiro") || href.startsWith("/fechamentos") || href.startsWith("/holerite") ? "financeiro" : href.startsWith("/ciot") || href.startsWith("/fiscal") ? "fiscal" : href.startsWith("/comercial") ? "comercial" : href.startsWith("/bi") ? "bi" : href.startsWith("/cadastros") || href.startsWith("/estoque") ? "cadastros" : href.startsWith("/portal-motorista") ? "portal_motorista" : href.startsWith("/alertas") ? "dashboard" : "dashboard";
   const canAccessItem = (item: NavItem) => user?.role === "ADMIN" || !configuredPermissions || user?.permissoes?.[permissionFor(item.href)] === true;
@@ -131,7 +133,16 @@ export default function Layout({ children }: { children: ReactNode }) {
 
         {/* Nav */}
         <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {canAccessStandalone("demandas") && <Link
+          <Link
+            href="/modulos"
+            onClick={() => setMobileMenuOpen(false)}
+            className="mb-3 flex items-center gap-3 rounded-lg border border-sidebar-border px-3 py-2.5 text-[12px] font-semibold text-sidebar-foreground transition hover:bg-sidebar-accent/60"
+          >
+            <ArrowLeftRight className="h-4 w-4 text-primary" />
+            <span className="min-w-0 flex-1"><span className="block truncate">Transportes</span><span className="block text-[10px] font-normal text-muted-foreground">Trocar módulo</span></span>
+          </Link>
+
+          {transportEnabled && canAccessStandalone("demandas") && <Link
             href="/demandas"
             onClick={() => setMobileMenuOpen(false)}
             className={cn(
@@ -144,7 +155,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             {location.startsWith("/demandas") && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
           </Link>}
 
-          {canAccessStandalone("dashboard") && <Link
+          {transportEnabled && canAccessStandalone("dashboard") && <Link
             href="/"
             onClick={() => setMobileMenuOpen(false)}
             className={cn(
@@ -157,7 +168,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             {location === "/" && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
           </Link>}
 
-          {navGroups.map(group => ({ ...group, items: group.items.filter(canAccessItem) })).filter(group => group.items.length > 0 && (!group.adminOnly || user?.role === "ADMIN")).map(group => {
+          {transportEnabled && navGroups.map(group => ({ ...group, items: group.items.filter(canAccessItem) })).filter(group => group.items.length > 0 && (!group.adminOnly || user?.role === "ADMIN")).map(group => {
             const groupActive = group.items.some(isActive);
             const open = openGroups[group.label] ?? false;
             return (
@@ -202,6 +213,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <button type="button" className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-xs font-bold text-primary-foreground transition hover:ring-2 hover:ring-primary/30" aria-label="Abrir opções do perfil">{user?.fotoPerfil ? <img src={user.fotoPerfil} alt="Foto de perfil" className="h-full w-full object-cover" /> : initials}</button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-48">
+                <DropdownMenuItem asChild><Link href="/modulos" className="flex cursor-pointer items-center gap-2"><ArrowLeftRight className="h-4 w-4"/>Trocar módulo</Link></DropdownMenuItem>
                 <DropdownMenuItem asChild><Link href="/perfil" className="flex cursor-pointer items-center gap-2"><UserRound className="h-4 w-4"/>Meu perfil</Link></DropdownMenuItem>
                 <DropdownMenuItem asChild><Link href="/alterar-senha" className="flex cursor-pointer items-center gap-2"><KeyRound className="h-4 w-4"/>Alterar senha</Link></DropdownMenuItem>
                 {user?.role === "ADMIN" && <DropdownMenuItem asChild><Link href="/logs" className="flex cursor-pointer items-center gap-2"><ScrollText className="h-4 w-4"/>Ver logs</Link></DropdownMenuItem>}

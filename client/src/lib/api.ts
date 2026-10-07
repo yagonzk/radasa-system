@@ -62,6 +62,9 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && typeof window !== "undefined") {
       window.dispatchEvent(new Event("radasa:unauthorized"));
     }
+    if (error.response?.status === 403 && error.response?.data?.details?.code === "MODULE_LICENSE_BLOCKED" && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("radasa:module-license-blocked", { detail: error.response.data.details }));
+    }
 
     // Somente GET é repetido automaticamente. Escritas nunca são repetidas,
     // evitando duplicar um Acerto de Viagem quando a primeira request terminou

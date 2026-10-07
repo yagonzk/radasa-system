@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, setAccessToken } from "@/lib/api";
 import { migrateLegacyLocalStorage } from "@/lib/legacyMigration";
-import { startRealtimeSync } from "@/lib/realtime";
+import { REALTIME_CHANGE_EVENT, startRealtimeSync } from "@/lib/realtime";
 
 
 export type ModuleLicenseSummary = {
@@ -39,10 +39,19 @@ type AuthContextValue = {
   login: (identifier: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<string>;
   updateProfile: (input: UpdateProfileInput) => Promise<AuthUser>;
+  refreshUser: () => Promise<AuthUser | null>;
   logout: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+function canUseTransportes(user: AuthUser) {
+  if (user.role === "ADMIN") return true;
+  const license = user.licenses?.find((item) => item.module === "TRANSPORTES");
+  if (!license || !license.active) return false;
+  if (license.unlimited || license.status === "ILIMITADA") return true;
+  return license.status === "ATIVA" && !!license.expiresAt && new Date(license.expiresAt).getTime() > Date.now();
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -51,7 +60,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const finishAuthentication = useCallback(async (data: AuthResponse) => {
     setAccessToken(data.token);
     setUser(data.user);
-    await migrateLegacyLocalStorage();
+    // A migração legada usa APIs do TMS. Não a executamos quando a conta possui
+    // apenas Agro, evitando requests bloqueadas logo após o login.
+    if (canUseTransportes(data.user)) await migrateLegacyLocalStorage();
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    try {
+      const { data } = await api.get<AuthUser>("/auth/me");
+      setUser(data);
+      return data;
+    } catch (error: any) {
+      if (error?.response?.status === 401) {
+        setAccessToken(null);
+        setUser(null);
+        return null;
+      }
+      throw error;
+    }
   }, []);
 
   useEffect(() => {
@@ -66,9 +92,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id]);
 
   useEffect(() => {
+    if (!user) return;
+    let timer: number | undefined;
+    const refreshSoon = () => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => { void refreshUser().catch(() => undefined); }, 150);
+    };
+    const onBlocked = () => refreshSoon();
+    const onRealtime = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: string }>).detail;
+      if (String(detail?.path || "").includes("/licencas/")) refreshSoon();
+    };
+    window.addEventListener("radasa:module-license-blocked", onBlocked);
+    window.addEventListener(REALTIME_CHANGE_EVENT, onRealtime);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener("radasa:module-license-blocked", onBlocked);
+      window.removeEventListener(REALTIME_CHANGE_EVENT, onRealtime);
+    };
+  }, [user?.id, refreshUser]);
+
+  useEffect(() => {
     let active = true;
     api.get<AuthUser>("/auth/me")
-      .then(async ({ data }) => { if (!active) return; setUser(data); await migrateLegacyLocalStorage(); })
+      .then(async ({ data }) => { if (!active) return; setUser(data); if (canUseTransportes(data)) await migrateLegacyLocalStorage(); })
       .catch(() => { setAccessToken(null); if (active) setUser(null); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -92,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => { setAccessToken(null); setUser(null); };
 
-  return <AuthContext.Provider value={{ user, loading, login, register, updateProfile, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, login, register, updateProfile, refreshUser, logout }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

@@ -11,6 +11,7 @@ import ChangePassword from "./pages/ChangePassword";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import { LoaderCircle } from "lucide-react";
+import { hasModuleAccess } from "./lib/module-access";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Demandas = lazy(() => import("./pages/Demandas"));
@@ -33,6 +34,8 @@ const Administracao = lazy(() => import("./pages/Administracao"));
 const CiotGerar = lazy(() => import("./pages/CiotGerar"));
 const CiotGerados = lazy(() => import("./pages/CiotGerados"));
 const CiotConfiguracao = lazy(() => import("./pages/CiotConfiguracao"));
+const ModuleSelector = lazy(() => import("./pages/ModuleSelector"));
+const AgroHome = lazy(() => import("./pages/AgroHome"));
 
 const RouteFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center bg-background">
@@ -44,6 +47,8 @@ function Router() {
   return (
     <Suspense fallback={<RouteFallback />}>
       <Switch>
+      <Route path="/modulos" component={ModuleSelector} />
+      <Route path="/agro" component={AgroHome} />
       <Route path="/" component={Dashboard} />
       <Route path="/demandas" component={Demandas} />
       <Route path="/cadastros" component={Cadastros} />
@@ -103,7 +108,26 @@ function SessionGate() {
     return <PublicAuthRouter />;
   }
 
-  return user ? <Router /> : <PublicAuthRouter />;
+  if (!user) return <PublicAuthRouter />;
+
+  // O núcleo da plataforma não depende de uma licença operacional específica.
+  // Assim o usuário continua conseguindo trocar de módulo, editar o perfil e,
+  // no caso do ADMIN, renovar licenças mesmo se um ambiente estiver vencido.
+  const coreRoute =
+    location === "/modulos" ||
+    location === "/perfil" ||
+    location === "/alterar-senha" ||
+    location.startsWith("/administracao") ||
+    location.startsWith("/aprovacao-contas") ||
+    location.startsWith("/logs");
+
+  if (coreRoute) return <Router />;
+
+  if (location.startsWith("/agro")) {
+    return hasModuleAccess(user, "AGRO") ? <Router /> : <ModuleSelector />;
+  }
+
+  return hasModuleAccess(user, "TRANSPORTES") ? <Router /> : <ModuleSelector />;
 }
 
 function App() {

@@ -97,6 +97,47 @@ export function userLicenseSummaries(role: string, rows: LicenseRow[], now = new
   return LICENSE_MODULES.map((module) => licenseSummary(module, byModule.get(module), now));
 }
 
+
+
+function moduleDisplayName(module: LicenseModule) {
+  return module === "TRANSPORTES" ? "Transportes" : "Agro";
+}
+
+export async function assertUserModuleAccess(userId: string, role: string, module: LicenseModule) {
+  if (role === "ADMIN") {
+    return {
+      module,
+      status: "ILIMITADA" as LicenseStatus,
+      active: true,
+      unlimited: true,
+      expiresAt: null,
+      remainingDays: null,
+    };
+  }
+
+  const row = await prisma.moduleLicense.findUnique({
+    where: { userId_module: { userId, module } },
+  });
+  const summary = licenseSummary(module, row);
+
+  if (summary.status === "ATIVA" || summary.status === "ILIMITADA") return summary;
+
+  const label = moduleDisplayName(module);
+  const message = summary.status === "VENCIDA"
+    ? `A licença do módulo ${label} está vencida.`
+    : summary.status === "SUSPENSA"
+      ? `A licença do módulo ${label} está suspensa.`
+      : `O módulo ${label} não está contratado para esta conta.`;
+
+  throw new AppError(403, message, {
+    code: "MODULE_LICENSE_BLOCKED",
+    module,
+    status: summary.status,
+    remainingDays: summary.remainingDays,
+    expiresAt: summary.expiresAt,
+  });
+}
+
 export async function getUserLicenseSummaries(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
