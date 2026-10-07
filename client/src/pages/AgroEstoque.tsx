@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
-import { AgroLot, AgroProduct, AgroStockRow, formatAgroDate, formatAgroNumber } from "@/lib/agro";
+import type { AgroLot, AgroProduct, AgroStockRow } from "@/lib/agro";
+import { formatAgroDate, formatAgroNumber } from "@/lib/agro";
 
 const emptyProduct = {
   nome: "", categoria: "", fabricante: "", unidadeMedida: "UN", estoqueMinimo: "0", localizacao: "", controlaLote: false, ativo: true,

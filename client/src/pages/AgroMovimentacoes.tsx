@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, ClipboardList, History, PlusMinus, Search } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, ClipboardList, History, Search, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import AgroLayout from "@/components/agro/AgroLayout";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
-import { AgroLot, AgroMovement, AgroMovementType, AgroStockRow, formatAgroDate, formatAgroNumber, movementIsExit, movementLabel } from "@/lib/agro";
+import type { AgroLot, AgroMovement, AgroMovementType, AgroStockRow } from "@/lib/agro";
+import { formatAgroDate, formatAgroNumber, movementIsExit, movementLabel } from "@/lib/agro";
 
 function today() { return new Date().toISOString().slice(0, 10); }
 const emptyForm = { tipo: "ENTRADA" as AgroMovementType, produtoId: "", loteId: "", quantidade: "", valorUnitario: "0", data: today(), responsavel: "", destino: "", documento: "", observacoes: "" };
@@ -117,11 +118,11 @@ export default function AgroMovimentacoes() {
       <div className="space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Agro / Movimentações</p><h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Movimentações de estoque</h1><p className="mt-2 text-sm text-muted-foreground">Toda alteração de saldo fica registrada. Não existe edição manual da quantidade em estoque.</p></div>
-          <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => openMovement("ENTRADA")}><ArrowDownToLine className="mr-2 h-4 w-4" />Entrada</Button><Button variant="outline" onClick={() => openMovement("SAIDA")}><ArrowUpFromLine className="mr-2 h-4 w-4" />Saída</Button><Button onClick={() => openMovement("AJUSTE_ENTRADA")}><PlusMinus className="mr-2 h-4 w-4" />Ajuste</Button></div>
+          <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => openMovement("ENTRADA")}><ArrowDownToLine className="mr-2 h-4 w-4" />Entrada</Button><Button variant="outline" onClick={() => openMovement("SAIDA")}><ArrowUpFromLine className="mr-2 h-4 w-4" />Saída</Button><Button onClick={() => openMovement("AJUSTE_ENTRADA")}><SlidersHorizontal className="mr-2 h-4 w-4" />Ajuste</Button></div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[["Entradas no mês", stats.entradas, ArrowDownToLine], ["Saídas no mês", stats.saidas, ArrowUpFromLine], ["Ajustes no mês", stats.ajustes, PlusMinus], ["Histórico carregado", stats.total, History]].map(([label, value, Icon]: any) => <Card key={label}><CardContent className="flex items-center justify-between p-4"><div><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 text-2xl font-bold">{value}</div></div><Icon className="h-5 w-5 text-primary" /></CardContent></Card>)}
+          {[["Entradas no mês", stats.entradas, ArrowDownToLine], ["Saídas no mês", stats.saidas, ArrowUpFromLine], ["Ajustes no mês", stats.ajustes, SlidersHorizontal], ["Histórico carregado", stats.total, History]].map(([label, value, Icon]: any) => <Card key={label}><CardContent className="flex items-center justify-between p-4"><div><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 text-2xl font-bold">{value}</div></div><Icon className="h-5 w-5 text-primary" /></CardContent></Card>)}
         </div>
 
         <div className="flex flex-col gap-2 rounded-xl border bg-card p-3 md:flex-row">

@@ -5,7 +5,8 @@ import AgroLayout from "@/components/agro/AgroLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
-import { AgroMovement, formatAgroDate, formatAgroNumber, movementIsExit, movementLabel } from "@/lib/agro";
+import type { AgroMovement } from "@/lib/agro";
+import { formatAgroDate, formatAgroNumber, movementIsExit, movementLabel } from "@/lib/agro";
 
 const quickLinks = [
   { title: "Estoque", description: "Produtos, lotes, saldos e alertas do barracão.", href: "/agro/estoque", icon: Warehouse },
