@@ -12,7 +12,6 @@ interface NavItem {
   href: string;
   icon: ReactNode;
   matchPaths: string[];
-  adminOnly?: boolean;
 }
 
 const navGroups = [
@@ -58,7 +57,7 @@ const navGroups = [
       { label: "Empresa", href: "/cadastros/empresa", icon: <BriefcaseBusiness className="h-4 w-4" />, matchPaths: ["/cadastros/empresa"] },
     ],
   },
-] satisfies Array<{ label: string; icon: ReactNode; adminOnly?: boolean; items: NavItem[] }>;
+] satisfies Array<{ label: string; icon: ReactNode; items: NavItem[] }>;
 
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -158,7 +157,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             {location === "/" && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
           </Link>}
 
-          {transportEnabled && navGroups.map(group => ({ ...group, items: group.items.filter(canAccessItem) })).filter(group => group.items.length > 0 && (!group.adminOnly || user?.role === "ADMIN")).map(group => {
+          {transportEnabled && navGroups.map(group => ({ ...group, items: group.items.filter(canAccessItem) })).filter(group => group.items.length > 0).map(group => {
             const groupActive = group.items.some(isActive);
             const open = openGroups[group.label] ?? false;
             return (
