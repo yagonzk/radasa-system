@@ -36,6 +36,11 @@ const CiotGerados = lazy(() => import("./pages/CiotGerados"));
 const CiotConfiguracao = lazy(() => import("./pages/CiotConfiguracao"));
 const ModuleSelector = lazy(() => import("./pages/ModuleSelector"));
 const AgroHome = lazy(() => import("./pages/AgroHome"));
+const AgroEstoque = lazy(() => import("./pages/AgroEstoque"));
+const AgroMovimentacoes = lazy(() => import("./pages/AgroMovimentacoes"));
+const AgroLavouras = lazy(() => import("./pages/AgroLavouras"));
+const AgroCadastros = lazy(() => import("./pages/AgroCadastros"));
+const AgroRelatorios = lazy(() => import("./pages/AgroRelatorios"));
 
 const RouteFallback = () => (
   <div className="flex min-h-[40vh] items-center justify-center bg-background">
@@ -48,6 +53,11 @@ function Router() {
     <Suspense fallback={<RouteFallback />}>
       <Switch>
       <Route path="/modulos" component={ModuleSelector} />
+      <Route path="/agro/estoque" component={AgroEstoque} />
+      <Route path="/agro/movimentacoes" component={AgroMovimentacoes} />
+      <Route path="/agro/lavouras" component={AgroLavouras} />
+      <Route path="/agro/cadastros" component={AgroCadastros} />
+      <Route path="/agro/relatorios" component={AgroRelatorios} />
       <Route path="/agro" component={AgroHome} />
       <Route path="/" component={Dashboard} />
       <Route path="/demandas" component={Demandas} />
