@@ -89,10 +89,21 @@ function affectedResources(pathname: string) {
     usuarios: "usuarios",
     sefaz: "fiscal",
     cte: "ciots",
+    agro: "agro",
   };
 
   const primary = direct[root];
   if (primary) resources.add(primary);
+
+  if (root === "agro") {
+    const section = parts[1] || "dashboard";
+    resources.add(`agro/${section}`);
+    if (["produtos", "lotes", "movimentacoes"].includes(section)) {
+      resources.add("agro/estoque");
+      resources.add("agro/dashboard");
+    }
+    if (section === "movimentacoes") resources.add("agro/movimentacoes");
+  }
 
   if (root === "estoque" && ["tipos", "subcategorias", "produtos"].includes(parts[1] || "")) {
     resources.add(`estoque/${parts[1]}`);

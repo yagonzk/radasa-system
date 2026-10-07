@@ -122,6 +122,7 @@ model User {
   auditLogs    AuditLog[]
   passwordResetTokens PasswordResetToken[]
   moduleLicenses ModuleLicense[]
+  agroMovimentacoes AgroMovimentacao[]
 
   @@map("users")
 }
@@ -141,6 +142,80 @@ model ModuleLicense {
   @@unique([userId, module])
   @@index([module, active, expiresAt])
   @@map("module_licenses")
+}
+
+
+
+enum AgroTipoMovimentacao {
+  ENTRADA
+  SAIDA
+  AJUSTE_ENTRADA
+  AJUSTE_SAIDA
+}
+
+model AgroProduto {
+  id             String   @id @default(cuid())
+  codigo         String   @unique
+  nome           String
+  categoria      String   @default("")
+  fabricante     String   @default("")
+  unidadeMedida  String   @default("UN")
+  estoqueMinimo  Decimal  @default(0) @db.Decimal(16, 3)
+  localizacao    String   @default("")
+  controlaLote   Boolean  @default(false)
+  ativo          Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lotes          AgroLote[]
+  movimentacoes  AgroMovimentacao[]
+
+  @@index([nome])
+  @@index([categoria, ativo])
+  @@map("agro_produtos")
+}
+
+model AgroLote {
+  id            String   @id @default(cuid())
+  produtoId     String
+  codigo        String
+  validade      DateTime? @db.Date
+  localizacao   String   @default("")
+  observacoes   String   @default("") @db.Text
+  ativo         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  produto       AgroProduto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  movimentacoes AgroMovimentacao[]
+
+  @@unique([produtoId, codigo])
+  @@index([produtoId, ativo])
+  @@index([validade])
+  @@map("agro_lotes")
+}
+
+model AgroMovimentacao {
+  id            String   @id @default(cuid())
+  produtoId     String
+  loteId        String?
+  tipo          AgroTipoMovimentacao
+  quantidade    Decimal  @db.Decimal(16, 3)
+  valorUnitario Decimal  @default(0) @db.Decimal(16, 4)
+  data          DateTime @db.Date
+  responsavel   String   @default("")
+  destino       String   @default("")
+  documento     String   @default("")
+  observacoes   String   @default("") @db.Text
+  createdById   String?
+  createdAt     DateTime @default(now())
+  produto       AgroProduto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  lote          AgroLote? @relation(fields: [loteId], references: [id], onDelete: SetNull)
+  createdBy     User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([data])
+  @@index([produtoId, data])
+  @@index([loteId, data])
+  @@index([tipo, data])
+  @@map("agro_movimentacoes")
 }
 
 

@@ -4,7 +4,7 @@ import { logger } from "../config/logger.js";
 import { requestParam } from "../utils/request-param.js";
 
 const labels: Record<string, string> = {
-  motoristas: "motorista", chapas: "chapa", clientes: "cliente", empresa: "empresa", produtos: "produto",
+  motoristas: "motorista", chapas: "chapa", clientes: "cliente", empresa: "empresa", produtos: "produto", agro: "registro Agro",
   locais: "local", veiculos: "veículo", viagens: "viagem", fechamentos: "holerite",
   manifestos: "romaneio", romaneios: "romaneio", abastecimentos: "abastecimento", pneus: "pneu", estoque: "movimentação de almoxarifado", usuarios: "usuário", comercial: "registro comercial", admin: "configuração administrativa", "portal-motorista": "registro do motorista",
 };
