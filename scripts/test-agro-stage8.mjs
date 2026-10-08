@@ -33,8 +33,8 @@ check(service.includes('(posicaoOrigem?.id || null) === (posicaoDestino?.id || n
 check(service.includes('currentAgroBalance(tx, produtoId, loteId, origemId, posicaoOrigem ? posicaoOrigem.id : null)'), 'transferência valida saldo exato da posição de origem');
 check(types.includes('export type AgroStorageMapPosition') && types.includes('semPosicao: AgroPositionStockItem[]'), 'frontend possui tipos do mapa físico');
 check(stock.includes('Mapa do barracão') && stock.includes('gridColumnStart: position.coluna'), 'Estoque renderiza o mapa por linha/coluna');
-check(stock.includes('position.itens.slice(0, 2)') && stock.includes('selectedPosition.itens.map'), 'um quadrado suporta e detalha vários produtos/lotes');
-check(stock.includes('Estoque sem posição definida'), 'mapa sinaliza estoque legado sem localização inventada');
+check(stock.includes('position.itens.map') && stock.includes('selectedPosition.itens.map') && stock.includes('TooltipContent'), 'um pallet suporta e detalha vários produtos/lotes');
+check(stock.includes('Estoque sem pallet definido'), 'mapa sinaliza estoque legado sem localização inventada');
 check(movements.includes('Posição física') && movements.includes('posicaoId: form.posicaoId || null'), 'movimentação manual seleciona e grava posição');
 check(inventory.includes('Posição de origem') && inventory.includes('Posição de destino'), 'transferência permite mover estoque entre posições');
 check(inventory.includes('item.posicao?.codigo || "Sem posição"'), 'inventário é conferido por posição física');
