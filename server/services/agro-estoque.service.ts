@@ -183,8 +183,8 @@ export const agroEstoqueService = {
       lotIds.length ? prisma.agroLote.findMany({ where: { id: { in: lotIds } } }) : Promise.resolve([]),
       productIds.length ? calculateAgroAverageCosts(prisma, productIds) : Promise.resolve(new Map<string, number>()),
     ]);
-    const productMap = new Map(products.map((item: any) => [item.id, item]));
-    const lotMap = new Map(lots.map((item: any) => [item.id, item]));
+    const productMap = new Map<string, any>(products.map((item: any): [string, any] => [String(item.id), item]));
+    const lotMap = new Map<string, any>(lots.map((item: any): [string, any] => [String(item.id), item]));
     const balances = new Map<string, number>();
     for (const row of groups as any[]) {
       const key = `${row.posicaoId || "SEM_POSICAO"}|${row.produtoId}|${row.loteId || ""}`;
