@@ -34,4 +34,14 @@ assert.equal(dados.cnhCategoria, 'AD');
 assert.equal(avisos.length, 0);
 assert.equal(parse({cpf:'529.982.247-26',cnhEmissao:'31/02/2024',nome:'CNH DIGITAL'}).dados.cpf,undefined);
 assert.equal(parse({cpf:'529.982.247-26',cnhEmissao:'31/02/2024',nome:'CNH DIGITAL'}).dados.cnhEmissao,undefined);
-console.log('CNH parser: 12 verificações passaram.');
+// Casos de regressão: leitura de um campo numérico com espaços e categoria em duas letras.
+const separated = parse({
+  cpf: '4d CPF\n5 2 9 . 9 8 2 . 2 4 7 - 2 5',
+  cnhCategoria: '9 CAT HAB\nA D',
+});
+assert.equal(separated.dados.cpf, '52998224725');
+assert.equal(separated.dados.cnhCategoria, 'AD');
+const invalid = parse({ cpf: '4d CPF\n529.982.247-26', cnhCategoria: 'CAT HAB\nAD' });
+assert.equal(invalid.dados.cpf, undefined);
+assert.ok(invalid.avisos.some(aviso => aviso.includes('4d')));
+console.log('CNH parser: 16 verificações passaram.');
