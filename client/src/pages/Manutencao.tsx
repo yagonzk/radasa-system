@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
 import { useEstoqueProdutos, useFornecedores, useVeiculos } from "@/lib/store";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -102,6 +102,10 @@ export default function Manutencao() {
   const [selectedOsIds, setSelectedOsIds] = useState<Set<string>>(new Set());
   const [bulkCompleting, setBulkCompleting] = useState(false);
   const [query, setQuery] = useState("");
+  const [osStatusFilter, setOsStatusFilter] = useState<"TODAS" | "PENDENTES" | "CONCLUIDAS">("TODAS");
+  const [orderView, setOrderView] = useState<"RESUMIDA" | "DETALHADA">("RESUMIDA");
+  const [orderPage, setOrderPage] = useState(1);
+  const ordersPerPage = 12;
   const [columnFilters, setColumnFilters] = useState<MaintenanceColumnFilters>({});
   const [activeColumnFilter, setActiveColumnFilter] = useState<string | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState("");
@@ -162,7 +166,21 @@ export default function Manutencao() {
     () => filterMaintenanceOrders(ordens, placa, query, columnFilters),
     [ordens, query, columnFilters, veiculos],
   );
-  const selectableFilteredOsIds = useMemo(() => selectableMaintenanceIds(filteredOrdens), [filteredOrdens]);
+  const displayedOrdens = useMemo(() => filteredOrdens.filter((os) => {
+    if (osStatusFilter === "CONCLUIDAS") return os.status === "CONCLUIDA";
+    if (osStatusFilter === "PENDENTES") return os.status !== "CONCLUIDA" && os.status !== "CANCELADA";
+    return true;
+  }), [filteredOrdens, osStatusFilter]);
+  const totalOrderPages = Math.max(1, Math.ceil(displayedOrdens.length / ordersPerPage));
+  const currentOrderPage = Math.min(orderPage, totalOrderPages);
+  const pageOrdens = useMemo(() => displayedOrdens.slice((currentOrderPage - 1) * ordersPerPage, currentOrderPage * ordersPerPage), [displayedOrdens, currentOrderPage]);
+  useEffect(() => { setOrderPage(1); }, [query, columnFilters, osStatusFilter, tab]);
+  const statusCounts = useMemo(() => ({
+    all: ordens.length,
+    pending: ordens.filter((os) => os.status !== "CONCLUIDA" && os.status !== "CANCELADA").length,
+    done: ordens.filter((os) => os.status === "CONCLUIDA").length,
+  }), [ordens]);
+  const selectableFilteredOsIds = useMemo(() => selectableMaintenanceIds(displayedOrdens), [displayedOrdens]);
   const allFilteredSelected = selectableFilteredOsIds.length > 0 && selectableFilteredOsIds.every((id) => selectedOsIds.has(id));
 
   useEffect(() => {
@@ -184,7 +202,7 @@ export default function Manutencao() {
   };
 
   const toggleAllFilteredOs = () => {
-    setSelectedOsIds((current) => toggleAllMaintenanceSelection(current, filteredOrdens));
+    setSelectedOsIds((current) => toggleAllMaintenanceSelection(current, displayedOrdens));
   };
 
   const concluirSelecionadas = async () => {
@@ -260,6 +278,12 @@ export default function Manutencao() {
       toast.error(error?.response?.data?.message ?? "Não foi possível excluir a OS.");
     }
   };
+
+  const addItem = (tipo: OsItem["tipo"]) => setOsForm((form) => ({ ...form, itens: [...form.itens, { ...newItem(), tipo }] }));
+  const addFrequentService = (descricao: string, categoria: string) => setOsForm((form) => ({
+    ...form,
+    itens: [...form.itens, { ...newItem(), descricao, categoria }],
+  }));
 
   const updateItem = (index: number, patch: Partial<OsItem>) => {
     setOsForm((current) => ({ ...current, itens: current.itens.map((item, i) => i === index ? { ...item, ...patch } : item) }));
@@ -394,28 +418,78 @@ export default function Manutencao() {
     }
   };
 
-  return <Layout><div className="space-y-6 p-4 md:p-6">
+  return <Layout><div className="space-y-5 p-4 md:p-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold">Frota e Manutenção</h1><p className="text-sm text-muted-foreground">Ordens de serviço completas, preventivas, documentos, fornecedores e custos da frota.</p></div>
-      <Button onClick={() => abrir(tab === "OS" ? "OS" : tab === "PLANOS" ? "PLANO" : "DOC")}><Plus className="mr-2 h-4 w-4" />Novo {tab === "OS" ? "OS" : tab === "PLANOS" ? "plano" : "documento"}</Button>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight">Manutenção</h1>
+        <p className="text-sm text-muted-foreground">Ordens de serviço, preventivas e documentos da frota em um só lugar.</p>
+      </div>
+      <Button className="min-h-10" onClick={() => abrir(tab === "OS" ? "OS" : tab === "PLANOS" ? "PLANO" : "DOC")}>
+        <Plus className="mr-2 h-4 w-4" />{tab === "OS" ? "Nova manutenção" : tab === "PLANOS" ? "Novo plano preventivo" : "Novo documento"}
+      </Button>
     </div>
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {[[Wrench, "OS abertas", dash.osAbertas || 0], [ClipboardList, "Planos ativos", dash.planosAtivos || 0], [AlertTriangle, "Alertas", dash.alertas?.length || 0], [FileText, "Custo manutenção", money(dash.custoTotal || 0)]].map(([Icon, label, value]: any) => <Card key={label}><CardContent className="p-4"><div className="flex justify-between text-xs text-muted-foreground"><span>{label}</span><Icon className="h-4 w-4" /></div><div className="mt-2 text-xl font-bold">{value}</div></CardContent></Card>)}
+      {[
+        { icon: Wrench, name: "Ordens pendentes", value: statusCounts.pending, help: "OS ainda não concluídas" },
+        { icon: CheckCircle2, name: "OS concluídas", value: statusCounts.done, help: "No histórico carregado" },
+        { icon: ClipboardList, name: "Planos preventivos", value: dash.planosAtivos || 0, help: "Planos ativos" },
+        { icon: FileText, name: "Custos de manutenção", value: money(dash.custoTotal || 0), help: "Conforme painel de manutenção" },
+      ].map(({ icon: Icon, name, value, help }) => <Card key={name} className="border-border/70"><CardContent className="flex items-start justify-between gap-3 p-4">
+        <div><p className="text-xs font-medium text-muted-foreground">{name}</p><p className="mt-2 text-xl font-bold tabular-nums">{value}</p><p className="mt-1 text-[11px] text-muted-foreground">{help}</p></div>
+        <span className="rounded-lg bg-muted p-2"><Icon className="h-4 w-4 text-muted-foreground" /></span>
+      </CardContent></Card>)}
     </div>
 
-    {dash.alertas?.length > 0 && <Card><CardHeader><CardTitle className="text-base">Alertas da frota</CardTitle></CardHeader><CardContent className="grid gap-2 md:grid-cols-2">{dash.alertas.slice(0, 8).map((a: any, i: number) => <div key={i} className="rounded-lg border p-3"><div className="font-medium">{placa(a.veiculoId)} · {a.titulo}</div><div className="text-xs text-muted-foreground">{a.detalhe}</div></div>)}</CardContent></Card>}
+    {dash.alertas?.length > 0 && <details className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3">
+      <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium"><AlertTriangle className="h-4 w-4 text-amber-500" />{dash.alertas.length} alerta(s) de manutenção <span className="ml-auto text-xs text-muted-foreground">Mostrar detalhes</span></summary>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">{dash.alertas.slice(0, 8).map((a: any, i: number) => <div key={i} className="rounded-lg border bg-background p-3 text-sm"><span className="font-medium">{placa(a.veiculoId)}</span><span className="ml-2 text-muted-foreground">{a.titulo || "Alerta"} · {a.detalhe || "Verifique este alerta"}</span></div>)}</div>
+    </details>}
 
-    <div className="flex gap-2 border-b">{[["OS", "Ordens de Serviço"], ["PLANOS", "Preventivas"], ["DOCS", "Documentos"]].map(([key, label]) => <Button key={key} variant={tab === key ? "default" : "ghost"} onClick={() => setTab(key as any)}>{label}</Button>)}</div>
+    <nav className="flex flex-wrap gap-1 rounded-lg border bg-muted/30 p-1" aria-label="Seções de manutenção">
+      {[["OS", "Ordens de serviço"], ["PLANOS", "Preventivas"], ["DOCS", "Documentos"]].map(([key, label]) =>
+        <Button key={key} size="sm" variant={tab === key ? "secondary" : "ghost"} className={tab === key ? "shadow-sm" : "text-muted-foreground"} onClick={() => setTab(key as typeof tab)}>{label}</Button>
+      )}
+    </nav>
 
-    {tab === "OS" && <div className="flex flex-wrap items-center gap-3">
-      <div className="relative min-w-[260px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Pesquisar OS, placa, fornecedor, serviço..." /></div>
-      {(query || Object.values(columnFilters).some(Boolean)) && <Button variant="outline" onClick={() => { setQuery(""); setColumnFilters({}); }}>Limpar filtros</Button>}
-      <Button variant="outline" onClick={toggleAllFilteredOs} disabled={!selectableFilteredOsIds.length || bulkCompleting}>{allFilteredSelected ? "Desmarcar todas" : "Selecionar todas"}</Button>
-      {selectedOsIds.size > 0 && <Button onClick={() => void concluirSelecionadas()} disabled={bulkCompleting}><CheckCircle2 className="mr-2 h-4 w-4" />{bulkCompleting ? "Concluindo..." : `Marcar como concluída${selectedOsIds.size > 1 ? "s" : ""} (${selectedOsIds.size})`}</Button>}
+    {tab === "OS" && <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[230px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar placa, OS, fornecedor ou serviço..." aria-label="Pesquisar manutenções" /></div>
+        <Button size="sm" variant="outline" onClick={() => setOrderView(orderView === "RESUMIDA" ? "DETALHADA" : "RESUMIDA")}>{orderView === "RESUMIDA" ? "Tabela detalhada" : "Visão simplificada"}</Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          { id: "TODAS", label: "Todas", count: statusCounts.all },
+          { id: "PENDENTES", label: "Pendentes", count: statusCounts.pending },
+          { id: "CONCLUIDAS", label: "Concluídas", count: statusCounts.done },
+        ].map((option) => <Button key={option.id} size="sm" variant={osStatusFilter === option.id ? "default" : "outline"} onClick={() => setOsStatusFilter(option.id as typeof osStatusFilter)}>{option.label} <span className="ml-1 text-xs opacity-70">{option.count}</span></Button>)}
+        {(query || Object.values(columnFilters).some(Boolean)) && <Button size="sm" variant="ghost" onClick={() => { setQuery(""); setColumnFilters({}); }}>Limpar busca e filtros</Button>}
+        <span className="ml-auto text-xs text-muted-foreground">{displayedOrdens.length} OS encontrada(s)</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" onClick={toggleAllFilteredOs} disabled={!selectableFilteredOsIds.length || bulkCompleting}>{allFilteredSelected ? "Desmarcar pendentes" : `Selecionar pendentes (${selectableFilteredOsIds.length})`}</Button>
+        {selectedOsIds.size > 0 && <Button size="sm" onClick={() => void concluirSelecionadas()} disabled={bulkCompleting}><CheckCircle2 className="mr-1.5 h-4 w-4" />{bulkCompleting ? "Concluindo..." : `Concluir selecionadas (${selectedOsIds.size})`}</Button>}
+      </div>
     </div>}
 
-    <Card><CardContent className="overflow-x-auto p-4">
+    {tab === "OS" && orderView === "RESUMIDA" && <section aria-label="Ordens de serviço" className="grid gap-3 lg:grid-cols-2">
+      {pageOrdens.map((os) => {
+        const selectable = os.status !== "CONCLUIDA" && os.status !== "CANCELADA";
+        return <Card key={os.id} className="border-border/70 transition-colors hover:border-primary/40"><CardContent className="space-y-3 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="font-semibold">{os.numero}</span><Badge variant={os.status === "CONCLUIDA" ? "default" : "secondary"}>{statusLabel(os.status)}</Badge></div><p className="mt-0.5 text-xs text-muted-foreground">{dateBr(os.dataAbertura)} · {tipoLabel(os.tipo)}{os.numeroFornecedor ? ` · Oficina ${os.numeroFornecedor}` : ""}</p></div>
+            <Checkbox aria-label={`Selecionar ${os.numero}`} checked={selectedOsIds.has(os.id)} disabled={!selectable || bulkCompleting} onCheckedChange={(checked) => toggleOsSelection(os.id, checked === true)} />
+          </div>
+          <div><div className="text-sm font-semibold">{placa(os.veiculoId)} <span className="font-normal text-muted-foreground">· {os.fornecedor || "Sem oficina informada"}</span></div><p className="mt-1 line-clamp-2 text-sm">{os.descricao || "Sem descrição"}</p></div>
+          <div className="flex flex-wrap items-end justify-between gap-2 border-t pt-3"><div><p className="text-[11px] text-muted-foreground">Valor da OS</p><p className="font-semibold tabular-nums">{money(os.valorTotal)}</p><p className="text-[11px] text-muted-foreground">{os.itensCount || 0} item(ns) · {os.notasCount || 0} NF · {os.anexosCount || 0} anexo(s)</p></div>
+            <div className="flex items-center gap-1"><Button size="sm" variant="outline" onClick={() => void openDetail(os.id)} disabled={detailLoading}><Eye className="mr-1.5 h-4 w-4" />Detalhes</Button><Button size="icon" variant="ghost" title="Editar OS" aria-label={`Editar ${os.numero}`} onClick={() => void openEdit(os.id)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" title="Excluir OS" aria-label={`Excluir ${os.numero}`} onClick={() => void removeOs(os)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div>
+          </div>
+        </CardContent></Card>;
+      })}
+      {pageOrdens.length === 0 && <div className="col-span-full rounded-xl border border-dashed px-5 py-12 text-center"><Wrench className="mx-auto mb-2 h-6 w-6 text-muted-foreground" /><p className="font-medium">Nenhuma manutenção encontrada</p><p className="mt-1 text-sm text-muted-foreground">Tente alterar os filtros ou cadastre uma nova OS.</p></div>}
+    </section>}
+
+    {(tab !== "OS" || orderView === "DETALHADA") && <Card><CardContent className="overflow-x-auto p-4">
       {tab === "OS" && <table className="w-full min-w-[1250px] table-fixed text-sm">
         <colgroup><col className="w-[52px]" /><col className="w-[120px]" /><col className="w-[110px]" /><col className="w-[120px]" /><col className="w-[170px]" /><col className="w-[120px]" /><col className="w-[260px]" /><col className="w-[160px]" /><col className="w-[140px]" /><col className="w-[120px]" /><col className="w-[132px]" /></colgroup>
         <thead><tr className="border-b text-muted-foreground">
@@ -447,7 +521,7 @@ export default function Manutencao() {
           })}
           <th className="px-4 py-3 text-right align-middle font-medium text-muted-foreground">Ações</th>
         </tr></thead>
-        <tbody>{filteredOrdens.length ? filteredOrdens.map((x) => { const selectable = x.status !== "CONCLUIDA" && x.status !== "CANCELADA"; return <tr className={`border-b transition-colors hover:bg-muted/20 ${selectedOsIds.has(x.id) ? "bg-primary/5" : ""}`} key={x.id}>
+        <tbody>{pageOrdens.length ? pageOrdens.map((x) => { const selectable = x.status !== "CONCLUIDA" && x.status !== "CANCELADA"; return <tr className={`border-b transition-colors hover:bg-muted/20 ${selectedOsIds.has(x.id) ? "bg-primary/5" : ""}`} key={x.id}>
           <td className="px-4 py-3 text-center align-middle"><Checkbox aria-label={`Selecionar ${x.numero}`} checked={selectedOsIds.has(x.id)} disabled={!selectable || bulkCompleting} onCheckedChange={(checked) => toggleOsSelection(x.id, checked === true)} /></td>
           <td className="px-4 py-3 align-middle font-medium"><div className="truncate">{x.numero}</div>{x.numeroFornecedor && <div className="truncate text-xs text-muted-foreground">OS forn. {x.numeroFornecedor}</div>}</td>
           <td className="whitespace-nowrap px-4 py-3 align-middle">{dateBr(x.dataAbertura)}</td>
@@ -463,28 +537,35 @@ export default function Manutencao() {
       </table>}
       {tab === "PLANOS" && <table className="w-full min-w-[700px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Veículo</th><th>Serviço</th><th>Intervalo</th><th>Próximo KM</th><th>Próxima data</th><th /></tr></thead><tbody>{planos.map((x) => <tr className="border-b" key={x.id}><td className="py-3">{placa(x.veiculoId)}</td><td className="font-medium">{x.nome}</td><td>{x.intervaloKm ? `${x.intervaloKm} km` : "—"}</td><td>{x.proximoKm ?? "—"}</td><td>{dateBr(x.proximaData)}</td><td className="text-right"><Button size="icon" variant="ghost" onClick={async () => { await api.delete(`/manutencao/planos/${x.id}`); await load(); }}><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table>}
       {tab === "DOCS" && <table className="w-full min-w-[650px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Veículo</th><th>Documento</th><th>Número</th><th>Validade</th><th /></tr></thead><tbody>{docs.map((x) => <tr className="border-b" key={x.id}><td className="py-3">{placa(x.veiculoId)}</td><td className="font-medium">{x.tipo}</td><td>{x.numero || "—"}</td><td>{dateBr(x.validade)}</td><td className="text-right"><Button size="icon" variant="ghost" onClick={async () => { await api.delete(`/manutencao/documentos/${x.id}`); await load(); }}><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table>}
-    </CardContent></Card>
+    </CardContent></Card>}
+
+    {tab === "OS" && displayedOrdens.length > ordersPerPage && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm"><span className="text-muted-foreground">Mostrando {(currentOrderPage - 1) * ordersPerPage + 1}–{Math.min(currentOrderPage * ordersPerPage, displayedOrdens.length)} de {displayedOrdens.length}</span><div className="flex gap-2"><Button size="sm" variant="outline" disabled={currentOrderPage <= 1} onClick={() => setOrderPage((n) => Math.max(1, n - 1))}>Anterior</Button><span className="self-center text-xs">{currentOrderPage} / {totalOrderPages}</span><Button size="sm" variant="outline" disabled={currentOrderPage >= totalOrderPages} onClick={() => setOrderPage((n) => n + 1)}>Próxima</Button></div></div>}
 
     <Dialog open={modal === "OS"} onOpenChange={(open) => !open && setModal("")}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
-        <DialogHeader><DialogTitle>{editingOsId ? "Editar Ordem de Serviço" : "Nova Ordem de Serviço"}</DialogTitle></DialogHeader>
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-4xl">
+        <DialogHeader><DialogTitle>{editingOsId ? "Editar manutenção" : "Registrar manutenção"}</DialogTitle><p className="text-sm text-muted-foreground">Preencha o essencial primeiro. Os demais campos são opcionais.</p></DialogHeader>
         <div className="space-y-6">
-          <section className="space-y-3"><div><h3 className="font-semibold">Identificação da OS</h3><p className="text-xs text-muted-foreground">Dados da manutenção e da ordem emitida pela oficina, quando houver.</p></div>
+          <div className="rounded-xl border bg-muted/20 p-4 sm:p-5">
+            <div className="mb-4 flex items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">1</span><div><h3 className="font-semibold">Dados principais</h3><p className="text-xs text-muted-foreground">Comece pelo veículo e pelo motivo da manutenção.</p></div></div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="lg:col-span-2"><Label>Veículo *</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={osForm.veiculoId} onChange={(e) => setOsForm({ ...osForm, veiculoId: e.target.value })}><option value="">Selecione</option>{veiculos.map((v) => <option key={v.id} value={v.id}>{v.placa} {v.modelo ? `· ${v.modelo}` : ""}</option>)}</select></div>
-              <div><Label>Tipo</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={osForm.tipo} onChange={(e) => setOsForm({ ...osForm, tipo: e.target.value })}><option value="PREVENTIVA">Preventiva</option><option value="CORRETIVA">Corretiva</option><option value="EMERGENCIAL">Emergencial</option><option value="OUTRA">Outra</option></select></div>
-              <div><Label>Data de abertura</Label><Input className="mt-1" type="date" value={osForm.dataAbertura} onChange={(e) => setOsForm({ ...osForm, dataAbertura: e.target.value })} /></div>
-              <div><Label>Nº OS da oficina</Label><Input className="mt-1" placeholder="Ex.: 465" value={osForm.numeroFornecedor} onChange={(e) => setOsForm({ ...osForm, numeroFornecedor: e.target.value })} /></div>
-              <div className="lg:col-span-2"><Label>Fornecedor / Oficina</Label><Popover open={supplierOpen} onOpenChange={setSupplierOpen}><PopoverTrigger asChild><Button type="button" variant="outline" role="combobox" aria-expanded={supplierOpen} className="mt-1 h-10 w-full justify-between px-3 font-normal"><span className="truncate text-left">{selectedSupplier ? `${selectedSupplier.nomeFantasia || selectedSupplier.razaoSocial}${selectedSupplier.cidade ? ` · ${selectedSupplier.cidade}/${selectedSupplier.uf}` : ""}` : "Selecione um fornecedor cadastrado"}</span><ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" /></Button></PopoverTrigger><PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0"><Command><CommandInput placeholder="Pesquisar fornecedor ou oficina..." autoFocus /><CommandList><CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty><CommandItem value="sem fornecedor oficina" onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: "" })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${!osForm.fornecedorId ? "opacity-100" : "opacity-0"}`} /><span>Sem fornecedor / oficina</span></CommandItem>{activeSuppliers.map((f) => { const label = `${f.nomeFantasia || f.razaoSocial}${f.cidade ? ` · ${f.cidade}/${f.uf}` : ""}`; return <CommandItem key={f.id} value={`${f.nomeFantasia || ""} ${f.razaoSocial || ""} ${f.cidade || ""} ${f.uf || ""}`} onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: f.id })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${osForm.fornecedorId === f.id ? "opacity-100" : "opacity-0"}`} /><span className="truncate">{label}</span></CommandItem>; })}</CommandList></Command></PopoverContent></Popover><p className="mt-1 text-xs text-muted-foreground">Cadastre oficinas e prestadores em Cadastros → Fornecedores.</p></div>
-              <div><Label>Responsável</Label><Input className="mt-1" placeholder="Motorista ou responsável" value={osForm.responsavel} onChange={(e) => setOsForm({ ...osForm, responsavel: e.target.value })} /></div>
-              <div><Label>KM de entrada</Label><Input className="mt-1" type="number" min="0" value={osForm.kmAbertura} onChange={(e) => setOsForm({ ...osForm, kmAbertura: e.target.value })} /></div>
+              <div className="sm:col-span-2"><Label>Veículo *</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={osForm.veiculoId} onChange={(e) => setOsForm({ ...osForm, veiculoId: e.target.value })}><option value="">Selecione o veículo</option>{veiculos.map((v) => <option key={v.id} value={v.id}>{v.placa} {v.modelo ? `· ${v.modelo}` : ""}</option>)}</select></div>
+              <div><Label>Tipo de manutenção</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={osForm.tipo} onChange={(e) => setOsForm({ ...osForm, tipo: e.target.value })}><option value="PREVENTIVA">Preventiva</option><option value="CORRETIVA">Corretiva</option><option value="EMERGENCIAL">Emergencial</option><option value="OUTRA">Outra</option></select></div>
+              <div><Label>Data</Label><Input className="mt-1" type="date" value={osForm.dataAbertura} onChange={(e) => setOsForm({ ...osForm, dataAbertura: e.target.value })} /></div>
+              <div className="sm:col-span-2"><Label>Oficina / fornecedor</Label>
+                <Popover open={supplierOpen} onOpenChange={setSupplierOpen}><PopoverTrigger asChild><Button type="button" variant="outline" role="combobox" aria-expanded={supplierOpen} className="mt-1 h-10 w-full justify-between px-3 font-normal"><span className="truncate text-left">{selectedSupplier ? `${selectedSupplier.nomeFantasia || selectedSupplier.razaoSocial}${selectedSupplier.cidade ? ` · ${selectedSupplier.cidade}/${selectedSupplier.uf}` : ""}` : "Sem fornecedor selecionado"}</span><ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" /></Button></PopoverTrigger><PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0"><Command><CommandInput placeholder="Pesquisar oficina..." /><CommandList><CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty><CommandItem value="sem fornecedor oficina" onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: "" })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${!osForm.fornecedorId ? "opacity-100" : "opacity-0"}`} />Sem fornecedor</CommandItem>{activeSuppliers.map((f) => <CommandItem key={f.id} value={`${f.nomeFantasia || ""} ${f.razaoSocial || ""} ${f.cidade || ""} ${f.uf || ""}`} onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: f.id })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${osForm.fornecedorId === f.id ? "opacity-100" : "opacity-0"}`} /><span className="truncate">{f.nomeFantasia || f.razaoSocial}</span></CommandItem>)}</CommandList></Command></PopoverContent></Popover>
+              </div>
+              <div className="sm:col-span-2"><Label>Problema ou motivo da manutenção</Label><Textarea className="mt-1 min-h-20" placeholder="Ex.: Vazamento no radiador, troca de óleo, revisão..." value={osForm.descricao} onChange={(e) => setOsForm({ ...osForm, descricao: e.target.value })} /></div>
             </div>
-          </section>
+          </div>
 
-          <section className="grid gap-3 md:grid-cols-2"><div><Label>Problema relatado / motivo</Label><Textarea className="mt-1 min-h-28" placeholder="Descreva o defeito, sintoma ou motivo da manutenção." value={osForm.descricao} onChange={(e) => setOsForm({ ...osForm, descricao: e.target.value })} /></div><div><Label>Serviço realizado</Label><Textarea className="mt-1 min-h-28" placeholder="Pode ser preenchido na abertura ou ao concluir a OS." value={osForm.servicoRealizado} onChange={(e) => setOsForm({ ...osForm, servicoRealizado: e.target.value })} /></div></section>
-
-          <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Serviços e peças</h3><p className="text-xs text-muted-foreground">Inclua quantos itens forem necessários. Peças do Almoxarifado fazem baixa automática.</p></div><Button type="button" variant="outline" onClick={() => setOsForm((f) => ({ ...f, itens: [...f.itens, newItem()] }))}><Plus className="mr-1 h-4 w-4" />Adicionar item</Button></div>
-            {osForm.itens.length === 0 ? <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Nenhum item adicionado. Adicione os serviços, peças ou outros itens que compõem a OS.</div> : <div className="space-y-2">{osForm.itens.map((item, index) => <div key={index} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12">
+          <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">2. Serviços, peças e valores</h3><p className="text-xs text-muted-foreground">Adicione apenas o que foi feito. Peças do Almoxarifado fazem baixa automática.</p></div><div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={() => addItem("SERVICO")}><Plus className="mr-1 h-4 w-4" />Serviço</Button><Button type="button" size="sm" variant="outline" onClick={() => addItem("PECA")}><Plus className="mr-1 h-4 w-4" />Peça</Button><Button type="button" size="sm" variant="ghost" onClick={() => addItem("OUTRO")}><Plus className="mr-1 h-4 w-4" />Outro</Button></div></div>
+            <div className="flex flex-wrap items-center gap-2"><span className="text-xs text-muted-foreground">Serviços frequentes:</span>{[
+              ["Troca de óleo", "LUBRIFICACAO"],
+              ["Revisão preventiva", "PREVENTIVA_PROGRAMADA"],
+              ["Serviço de freios", "FREIOS"],
+              ["Serviço de pneus", "PNEUS_RODAS"],
+            ].map(([descricao, categoria]) => <Button key={categoria} size="sm" variant="secondary" className="h-7 text-xs" type="button" onClick={() => addFrequentService(descricao, categoria)}>{descricao}</Button>)}</div>
+            {osForm.itens.length === 0 ? <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Nenhum serviço ou peça lançado. Selecione + Serviço ou + Peça acima para começar.</div> : <div className="space-y-2">{osForm.itens.map((item, index) => <div key={index} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12">
               <div className="sm:col-span-2"><Label>Tipo</Label><select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={item.tipo} onChange={(e) => updateItem(index, { tipo: e.target.value as OsItem["tipo"], produtoId: e.target.value === "PECA" ? item.produtoId : null })}><option value="SERVICO">Serviço</option><option value="PECA">Peça</option><option value="OUTRO">Outro</option></select></div>
               <div className="sm:col-span-3"><Label>{item.tipo === "PECA" ? "Descrição / peça" : "Descrição"}</Label><Input className="mt-1 h-9" value={item.descricao} onChange={(e) => updateItem(index, { descricao: e.target.value })} placeholder={item.tipo === "SERVICO" ? "Ex.: Troca do reparador" : "Ex.: Flexível do freio"} /></div>
               <div className="sm:col-span-2"><div className="flex items-center gap-1"><Label>Categoria</Label><Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-5 w-5 rounded-full" aria-label="Ver exemplos da categoria"><CircleHelp className="h-4 w-4" /></Button></PopoverTrigger><PopoverContent className="w-80 text-sm"><div className="font-semibold">{maintenanceCategoryLabel(item.categoria)}</div><p className="mt-1 text-muted-foreground">{maintenanceCategoryExamples(item.categoria)}</p></PopoverContent></Popover></div><select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={item.categoria || ""} onChange={(e) => updateItem(index, { categoria: e.target.value })}><option value="">Selecione a categoria</option>{MANUTENCAO_CATEGORIAS.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></div>
@@ -495,15 +576,30 @@ export default function Manutencao() {
             </div>)}</div>}
           </section>
 
-          <section className="space-y-3"><div><h3 className="font-semibold">Custos</h3><p className="text-xs text-muted-foreground">Os valores dos itens acima entram automaticamente no total da OS.</p></div><div className="grid gap-3 sm:grid-cols-2"><div><Label>Desconto</Label><Input className="mt-1" type="number" min="0" step="0.01" value={osForm.desconto} onChange={(e) => setOsForm({ ...osForm, desconto: e.target.value })} /></div><div className="rounded-lg border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">Total da OS</div><div className="mt-1 text-lg font-bold">{money(formTotal)}</div></div></div></section>
+          <section className="space-y-3"><div><h3 className="font-semibold">Resumo dos custos</h3><p className="text-xs text-muted-foreground">O total é calculado automaticamente pelos itens informados.</p></div><div className="grid gap-3 sm:grid-cols-2"><div><Label>Desconto</Label><Input className="mt-1" type="number" min="0" step="0.01" value={osForm.desconto} onChange={(e) => setOsForm({ ...osForm, desconto: e.target.value })} /></div><div className="rounded-lg border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">Total da OS</div><div className="mt-1 text-lg font-bold">{money(formTotal)}</div></div></div></section>
 
+          <details className="rounded-xl border p-4" key={`extra-${editingOsId || "new"}`} defaultOpen={Boolean(editingOsId)}>
+            <summary className="cursor-pointer font-semibold">Informações complementares <span className="ml-2 text-xs font-normal text-muted-foreground">(opcional)</span></summary>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div><Label>Nº da OS da oficina</Label><Input className="mt-1" placeholder="Ex.: 465" value={osForm.numeroFornecedor} onChange={(e) => setOsForm({ ...osForm, numeroFornecedor: e.target.value })} /></div>
+              <div><Label>Responsável</Label><Input className="mt-1" placeholder="Motorista ou responsável" value={osForm.responsavel} onChange={(e) => setOsForm({ ...osForm, responsavel: e.target.value })} /></div>
+              <div><Label>KM de entrada</Label><Input className="mt-1" type="number" min="0" value={osForm.kmAbertura} onChange={(e) => setOsForm({ ...osForm, kmAbertura: e.target.value })} /></div>
+              <div className="sm:col-span-2"><Label>Serviço realizado</Label><Textarea className="mt-1 min-h-20" placeholder="Pode ser preenchido ao concluir a OS." value={osForm.servicoRealizado} onChange={(e) => setOsForm({ ...osForm, servicoRealizado: e.target.value })} /></div>
+            </div>
+          </details>
+
+          <details className="space-y-3 rounded-xl border p-4" key={`docs-${editingOsId || "new"}`}>
+            <summary className="cursor-pointer font-semibold">Notas fiscais, anexos e observações <span className="ml-2 text-xs font-normal text-muted-foreground">(opcional · {pendingNotas.length} NF, {pendingAnexos.length} anexo(s))</span></summary>
+            <div className="mt-4 space-y-5">
           <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Notas Fiscais</h3><p className="text-xs text-muted-foreground">Anexe PDF, XML ou imagem e informe o valor. Uma OS pode ter várias notas.</p></div><Button type="button" variant="outline" onClick={() => setPendingNotas((n) => [...n, newNota()])}><FilePlus2 className="mr-1 h-4 w-4" />Adicionar NF</Button></div>{pendingNotas.map((nota, index) => <div key={nota.key} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12"><div className="sm:col-span-2"><Label>Número</Label><Input className="mt-1 h-9" value={nota.numero} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, numero: e.target.value } : r))} /></div><div className="sm:col-span-1"><Label>Série</Label><Input className="mt-1 h-9" value={nota.serie} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, serie: e.target.value } : r))} /></div><div className="sm:col-span-2"><Label>Data emissão</Label><Input className="mt-1 h-9" type="date" value={nota.dataEmissao} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, dataEmissao: e.target.value } : r))} /></div><div className="sm:col-span-2"><Label>Valor da NF</Label><Input className="mt-1 h-9" type="number" min="0" step="0.01" value={nota.valor} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, valor: e.target.value } : r))} /></div><div className="sm:col-span-4"><Label>Arquivo *</Label><Input className="mt-1 h-9" type="file" accept=".pdf,.xml,image/jpeg,image/png,image/webp" onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, file: e.target.files?.[0] || null } : r))} /></div><div className="flex items-end sm:col-span-1"><Button type="button" size="icon" variant="ghost" onClick={() => setPendingNotas((rows) => rows.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button></div><div className="sm:col-span-12"><Label>Chave de acesso</Label><Input className="mt-1 h-9" maxLength={54} value={nota.chaveAcesso} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, chaveAcesso: e.target.value } : r))} placeholder="44 dígitos (opcional)" /></div></div>)}</section>
 
           <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Outros anexos</h3><p className="text-xs text-muted-foreground">OS em papel, orçamento, fotos, comprovantes ou outros documentos.</p></div><Button type="button" variant="outline" onClick={() => setPendingAnexos((a) => [...a, newAnexo()])}><Paperclip className="mr-1 h-4 w-4" />Adicionar anexo</Button></div>{pendingAnexos.map((anexo, index) => <div key={anexo.key} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12"><div className="sm:col-span-3"><Label>Tipo</Label><select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={anexo.tipo} onChange={(e) => setPendingAnexos((rows) => rows.map((r, i) => i === index ? { ...r, tipo: e.target.value } : r))}><option value="ORDEM_SERVICO">OS da oficina</option><option value="ORCAMENTO">Orçamento</option><option value="FOTO">Foto</option><option value="COMPROVANTE">Comprovante</option><option value="OUTRO">Outro</option></select></div><div className="sm:col-span-4"><Label>Descrição</Label><Input className="mt-1 h-9" value={anexo.descricao} onChange={(e) => setPendingAnexos((rows) => rows.map((r, i) => i === index ? { ...r, descricao: e.target.value } : r))} /></div><div className="sm:col-span-4"><Label>Arquivo *</Label><Input className="mt-1 h-9" type="file" accept=".pdf,.xml,image/jpeg,image/png,image/webp" onChange={(e) => setPendingAnexos((rows) => rows.map((r, i) => i === index ? { ...r, file: e.target.files?.[0] || null } : r))} /></div><div className="flex items-end sm:col-span-1"><Button type="button" size="icon" variant="ghost" onClick={() => setPendingAnexos((rows) => rows.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button></div></div>)}</section>
 
           <div><Label>Observações</Label><Textarea className="mt-1 min-h-24" value={osForm.observacoes} onChange={(e) => setOsForm({ ...osForm, observacoes: e.target.value })} /></div>
+            </div>
+          </details>
         </div>
-        <DialogFooter className="mt-5"><Button variant="outline" onClick={() => setModal("")} disabled={saving}>Cancelar</Button><Button onClick={() => void salvarOs()} disabled={saving}>{saving ? "Salvando OS e anexos..." : `${editingOsId ? "Salvar alterações" : "Salvar OS"} · ${money(formTotal)}`}</Button></DialogFooter>
+        <DialogFooter className="sticky bottom-0 mt-5 flex-row items-center justify-between gap-3 border-t bg-background/95 pt-3 backdrop-blur"><div className="mr-auto text-sm"><span className="block text-xs text-muted-foreground">Total estimado</span><strong className="tabular-nums">{money(formTotal)}</strong></div><Button variant="outline" onClick={() => setModal("")} disabled={saving}>Cancelar</Button><Button onClick={() => void salvarOs()} disabled={saving}>{saving ? "Salvando..." : editingOsId ? "Salvar alterações" : "Salvar manutenção"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
 
