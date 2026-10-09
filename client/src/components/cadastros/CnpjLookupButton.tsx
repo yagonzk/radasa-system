@@ -31,7 +31,15 @@ export default function CnpjLookupButton({ cnpj, onFound, duplicateMessage, disa
         toast.warning(`Situação cadastral informada pela consulta: ${data.situacaoCadastral}`);
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || error?.message || "Não foi possível consultar o CNPJ. Preencha manualmente.");
+      const status = Number(error?.response?.status ?? 0);
+      const message = typeof error?.response?.data?.message === "string"
+        ? error.response.data.message
+        : [502, 503, 504].includes(status)
+          ? "Serviço temporariamente indisponível (erro " + status + "). Tente novamente em instantes ou preencha manualmente."
+          : error?.code === "ECONNABORTED" || !error?.response
+            ? "Sem resposta do servidor. Verifique sua conexão e tente novamente, ou preencha manualmente."
+            : error?.message || "Não foi possível consultar o CNPJ. Preencha manualmente.";
+      toast.error(message);
     } finally {
       setLoading(false);
     }

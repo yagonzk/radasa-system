@@ -38,20 +38,28 @@ cnpjRoutes.get("/:cnpj", async (req, res, next) => {
     return;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8_000);
-
   try {
-    const response = await fetch(
-      `https://brasilapi.com.br/api/cnpj/v1/${cnpj}`,
-      {
-        headers: {
-          Accept: "application/json",
-          "User-Agent": "Radasa-System/1.0",
-        },
-        signal: controller.signal,
-      },
-    );
+    // Repetir apenas falhas transitórias da consulta pública (nunca gravações).
+    // Cada tentativa tem seu próprio timeout; 503 do Worker antes da rota
+    // continua dependendo da saúde/implantação da infraestrutura Cloudflare.
+    let response: Response | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7_000);
+      try {
+        response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
+          headers: { Accept: "application/json", "User-Agent": "Radasa-System/1.0" },
+          signal: controller.signal,
+        });
+        if (![429, 500, 502, 503, 504].includes(response.status) || attempt === 1) break;
+      } catch (error: any) {
+        if (attempt === 1) throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    if (!response) throw new Error("Nenhuma resposta do serviço de consulta de CNPJ.");
 
     const body = (await response.json().catch(() => null)) as any;
 
@@ -63,11 +71,10 @@ cnpjRoutes.get("/:cnpj", async (req, res, next) => {
     }
 
     if (!response.ok) {
-      res.status(response.status === 400 ? 400 : 502).json({
-        message:
-          body?.message ||
-          body?.name ||
-          "O serviço de consulta de CNPJ está indisponível.",
+      res.status(response.status === 400 ? 400 : 503).json({
+        message: response.status === 429
+          ? "A consulta de CNPJ está temporariamente limitada. Aguarde um momento e tente novamente."
+          : "O serviço público de CNPJ está temporariamente indisponível. Tente novamente ou preencha manualmente.",
       });
       return;
     }
@@ -138,8 +145,6 @@ cnpjRoutes.get("/:cnpj", async (req, res, next) => {
     }
 
     console.error("Falha na consulta pública de CNPJ:", error);
-    res.status(502).json({ message: "Consulta de CNPJ temporariamente indisponível. Tente novamente ou preencha manualmente." });
-  } finally {
-    clearTimeout(timeout);
+    res.status(503).json({ message: "Não foi possível acessar o serviço público de CNPJ. Tente novamente ou preencha manualmente." });
   }
 });
