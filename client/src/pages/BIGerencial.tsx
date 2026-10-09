@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useClientes, useProdutos, type Manifesto } from "@/lib/store";
-import { getResourceRange } from "@/lib/api";
+import { api, getResourceRange } from "@/lib/api";
 import { canonicalClientIdentity, canonicalProductIdentity, formatPlate, mergeStagingBiFacts, readStagingBiFacts, type StagingBiFact } from "@/lib/bi-staging";
 import { BarChart3, Check, ChevronDown, Database, FileSpreadsheet, RotateCcw, Search, ClipboardCopy, Activity } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -10,6 +10,26 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+type LinkedNfeItem = {id:string;manifestoId:string|null;numero:string;serie:string;codigo:string;descricao:string;quantidade:number;valorUnitario:number;valorTotal:number;municipio:string;uf:string;dataEmissao:string};
+const canonNum=(value:unknown)=>String(value??"").replace(/\D/g,"").replace(/^0+(?=\d)/,"");
+const partsNf=(numero:unknown,serie:unknown)=>{const a=String(numero??"").split("/");return `${canonNum(a[0])}|${canonNum(serie||a[1])}`};
+const matchNfeForManifesto=(r:Manifesto,p:Manifesto["produtos"][number], nfeItems:LinkedNfeItem[], produtoNome:string, produtoCodigo:string)=>{
+ const doc=partsNf(p.notaFiscal,p.serieNf);
+ const possible=nfeItems.filter(n=>n.manifestoId===r.id&&partsNf(n.numero,n.serie)===doc);
+ if(!possible.length)return null;
+ const productMatches=possible.filter(n=>{
+   const c=canonNum(n.codigo),pc=canonNum(produtoCodigo);
+   return (c&&pc&&c===pc)||(norm(n.descricao)&&norm(n.descricao)===norm(produtoNome));
+ });
+ const qtd=Number(p.quantidade||0);
+ const exact=productMatches.filter(n=>Number(n.quantidade)===qtd);
+ if(exact.length===1)return exact[0];
+ if(productMatches.length===1&&Number(productMatches[0].quantidade)===qtd)return productMatches[0];
+ // Produto pode ter códigos diferentes no romaneio e na NF-e.
+ const byQtd=possible.filter(n=>Number(n.quantidade)===qtd);
+ if(!productMatches.length&&byQtd.length===1)return byQtd[0];
+ return null; // ambiguidade: nunca atribuir faturamento de outro item
+};
 type Fact=StagingBiFact&{produtoKey:string;mes:string;percentual:number};
 type Option={value:string;label:string};
 const money=(v:number)=>v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -38,6 +58,7 @@ export default function BIGerencial(){
  const chartTooltipStyle = { backgroundColor: isDark ? "#0f172a" : "#ffffff", borderColor: isDark ? "#334155" : "#e2e8f0", color: isDark ? "#f8fafc" : "#0f172a" };
  const {items:clientes}=useClientes(); const {items:produtos}=useProdutos();
  const [romaneios,setRomaneios]=useState<Manifesto[]>([]);
+ const [nfeItems,setNfeItems]=useState<LinkedNfeItem[]>([]);
  const [romaneiosLoading,setRomaneiosLoading]=useState(false);
  const [romaneiosError,setRomaneiosError]=useState("");
  const [showFreightDiagnostic,setShowFreightDiagnostic]=useState(false);
@@ -51,8 +72,20 @@ export default function BIGerencial(){
   setRomaneiosLoading(true);
   setRomaneiosError("");
   void getResourceRange<Manifesto>("manifestos",from||undefined,to||undefined)
-   .then(items=>{if(active)setRomaneios(items)})
-   .catch(error=>{if(active){setRomaneios([]);setRomaneiosError(error instanceof Error?error.message:"Falha ao carregar romaneios")}})
+   .then(async items=>{
+     if(!active)return;
+     setRomaneios(items);
+     const ids=items.map(r=>r.id).filter(Boolean);
+     if(!ids.length){setNfeItems([]);return}
+     try {
+       const resposta=await api.post<LinkedNfeItem[]>("/bi/nfes/itens-romaneios",{manifestoIds:ids});
+       if(active)setNfeItems(resposta.data);
+     } catch (error) {
+       if(active){setNfeItems([]);setRomaneiosError("Não foi possível carregar as NF-es vinculadas para calcular o faturamento.")}
+       console.error("[BI Gerencial] NF-es vinculadas indisponíveis",error);
+     }
+   })
+   .catch(error=>{if(active){setRomaneios([]);setNfeItems([]);setRomaneiosError(error instanceof Error?error.message:"Falha ao carregar romaneios")}})
    .finally(()=>{if(active)setRomaneiosLoading(false)});
   return ()=>{active=false};
  },[from,to]);
@@ -62,7 +95,7 @@ export default function BIGerencial(){
  const clienteLookup=useMemo(()=>{const m=new Map<string,(typeof clientes)[number]>();for(const c of clientes)for(const n of [c.nomeFantasia,c.razaoSocial]){const k=norm(n);if(k&&!m.has(k))m.set(k,c)}return m},[clientes]);
  const clienteByCode=useMemo(()=>{const m=new Map<string,(typeof clientes)[number]>();for(const c of clientes){const key=canonicalClientIdentity(c.codigoInterno,"","");if(c.codigoInterno&&!m.has(key))m.set(key,c)}return m},[clientes]);
  const produtoByCode=useMemo(()=>{const m=new Map<string,(typeof produtos)[number]>();for(const p of produtos){const key=canonicalProductIdentity(p.codigoInterno,"");if(p.codigoInterno&&key&&!m.has(key))m.set(key,p)}return m},[produtos]);
- const liveStagingFacts=useMemo<StagingBiFact[]>(()=>romaneios.flatMap(r=>r.produtos.map((p,i)=>{const clienteId=p.clienteId||r.clienteId,c=clienteMap.get(clienteId),prod=produtoMap.get(p.produtoId),qtd=Number(p.quantidade||0),frete=Number(p.valorTotal||0);return{id:`biv2-live-${r.id}-${p.id||i}`,data:r.dataManifesto,romaneio:p.romaneio||r.romaneios||"",nf:p.notaFiscal||"",serie:p.serieNf||"",nfSerie:p.notaFiscal?`${p.notaFiscal}${p.serieNf?`/${p.serieNf}`:""}`:"",clienteId,cliente:c?.nomeFantasia||c?.razaoSocial||"Sem cliente",razaoSocial:c?.razaoSocial||c?.nomeFantasia||"",clienteCod:c?.codigoInterno||"",clienteLoja:"",produtoId:p.produtoId,produtoCod:prod?.codigoInterno||"",produto:prod?.nome||"Produto não identificado",placa:formatPlate(r.placaVeiculo),quantidade:qtd,valorUnitProduto:0,freteUnit:qtd?frete/qtd:0,frete,faturamento:0,municipio:c?.enderecoFiscal||"",tipo:p.tipoManifesto||r.tipoManifesto,instrucao:p.instrucaoCobranca||""}})),[romaneios,clienteMap,produtoMap]);
+ const liveStagingFacts=useMemo<StagingBiFact[]>(()=>romaneios.flatMap(r=>r.produtos.map((p,i)=>{const clienteId=p.clienteId||r.clienteId,c=clienteMap.get(clienteId),prod=produtoMap.get(p.produtoId),qtd=Number(p.quantidade||0),frete=Number(p.valorTotal||0);const nfe=matchNfeForManifesto(r,p,nfeItems,prod?.nome||"",prod?.codigoInterno||"");const faturamento=nfe?Number(nfe.valorTotal||0):0;return{id:`biv2-live-${r.id}-${p.id||i}`,data:r.dataManifesto,romaneio:p.romaneio||r.romaneios||"",nf:p.notaFiscal||"",serie:p.serieNf||"",nfSerie:p.notaFiscal?`${p.notaFiscal}${p.serieNf?`/${p.serieNf}`:""}`:"",clienteId,cliente:c?.nomeFantasia||c?.razaoSocial||"Sem cliente",razaoSocial:c?.razaoSocial||c?.nomeFantasia||"",clienteCod:c?.codigoInterno||"",clienteLoja:"",produtoId:p.produtoId,produtoCod:prod?.codigoInterno||"",produto:prod?.nome||"Produto não identificado",placa:formatPlate(r.placaVeiculo),quantidade:qtd,valorUnitProduto:nfe?Number(nfe.valorUnitario||0):0,freteUnit:qtd?frete/qtd:0,frete,faturamento,municipio:nfe?[nfe.municipio,nfe.uf].filter(Boolean).join(" - "):c?.enderecoFiscal||"",tipo:p.tipoManifesto||r.tipoManifesto,instrucao:p.instrucaoCobranca||""}})),[romaneios,clienteMap,produtoMap,nfeItems]);
  const stagingFacts=useMemo(()=>mergeStagingBiFacts(manualFacts,liveStagingFacts),[manualFacts,liveStagingFacts]);
  const facts=useMemo<Fact[]>(()=>stagingFacts.map(x=>{
   const clienteCadastro=x.clienteCod?clienteByCode.get(canonicalClientIdentity(x.clienteCod,"","")):(clienteLookup.get(norm(x.cliente))||clienteLookup.get(norm(x.razaoSocial)));
