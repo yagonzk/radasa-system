@@ -138,21 +138,25 @@ export default function BIGerencial(){
   XLSX.writeFile(wb,"BI-Gerencial_faturamento_filtrado.xlsx");
  };
  const exportFreteUnitXlsx=()=>{
-  type ClienteFreteUnit={cliente:string;data:string;municipio:string;faturamento:number;frete:number;quantidade:number};
-  const consolidado=new Map<string,ClienteFreteUnit>();
+  // Cada combinação cliente + data + valor unitário real forma uma linha.
+  // Nunca calcular média do frete unitário entre romaneios distintos.
+  type LinhaFreteUnit={cliente:string;data:string;municipio:string;faturamento:number;freteUnit:number};
+  const consolidado=new Map<string,LinhaFreteUnit>();
   for(const x of consultaFiltered){
-   const chave=norm(x.cliente)||norm(x.razaoSocial)||x.clienteId;
+   const cliente=norm(x.cliente)||norm(x.razaoSocial)||x.clienteId;
+   const data=x.data||"";
+   const municipio=x.municipio||"";
+   const freteUnit=Math.round((Number(x.freteUnit)||0)*100)/100;
+   const chave=JSON.stringify([cliente,data,freteUnit,norm(municipio)]);
    const atual=consolidado.get(chave);
-   if(!atual){consolidado.set(chave,{cliente:x.cliente,data:x.data||"",municipio:x.municipio||"",faturamento:Number(x.faturamento)||0,frete:Number(x.frete)||0,quantidade:Number(x.quantidade)||0});continue;}
-   atual.faturamento+=Number(x.faturamento)||0;
-   atual.frete+=Number(x.frete)||0;
-   atual.quantidade+=Number(x.quantidade)||0;
-   if((x.data||"")>atual.data){atual.data=x.data||"";if(x.municipio)atual.municipio=x.municipio;}
-   else if(!atual.municipio&&x.municipio)atual.municipio=x.municipio;
+   if(atual){
+    atual.faturamento+=Number(x.faturamento)||0;
+   }else{
+    consolidado.set(chave,{cliente:x.cliente,data,municipio,faturamento:Number(x.faturamento)||0,freteUnit});
+   }
   }
-  // Uma linha por cliente: frete unitário ponderado pela quantidade e faturamento somado.
-  const dados=[...consolidado.values()].sort((a,b)=>a.cliente.localeCompare(b.cliente,"pt-BR",{numeric:true}));
-  const tabela:any[][]=[["Cliente","Frete Unitário","Data mais recente","Faturamento Total","Município"],...dados.map(x=>[x.cliente,x.quantidade>0?x.frete/x.quantidade:null,excelDate(x.data),x.faturamento,x.municipio||"Não informado"])];
+  const dados=[...consolidado.values()].sort((a,b)=>a.cliente.localeCompare(b.cliente,"pt-BR",{numeric:true})||b.data.localeCompare(a.data)||a.freteUnit-b.freteUnit||a.municipio.localeCompare(b.municipio,"pt-BR"));
+  const tabela:any[][]=[["Cliente","Frete Unitário","Data","Faturamento Total","Município"],...dados.map(x=>[x.cliente,x.freteUnit,excelDate(x.data),x.faturamento,x.municipio||"Não informado"])];
   const ws=XLSX.utils.aoa_to_sheet(tabela);
   formatExcelDateColumn(ws,tabela.length,2);
   ws["!cols"]=[{wch:40},{wch:20},{wch:19},{wch:22},{wch:36}];
