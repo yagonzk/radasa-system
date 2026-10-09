@@ -39,112 +39,113 @@ cnpjRoutes.get("/:cnpj", async (req, res, next) => {
   }
 
   try {
-    // Repetir apenas falhas transitórias da consulta pública (nunca gravações).
-    // Cada tentativa tem seu próprio timeout; 503 do Worker antes da rota
-    // continua dependendo da saúde/implantação da infraestrutura Cloudflare.
-    let response: Response | undefined;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    // BrasilAPI é a fonte principal. CNPJ.ws é consultada quando a primeira
+    // fonte estiver indisponível, retornar dados inválidos ou exceder o timeout.
+    // Não repetir imediatamente chamadas lentas para a mesma fonte.
+    async function requestJson(url: string, timeoutMs: number) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 7_000);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
+        const response = await fetch(url, {
           headers: { Accept: "application/json", "User-Agent": "Radasa-System/1.0" },
           signal: controller.signal,
         });
-        if (![429, 500, 502, 503, 504].includes(response.status) || attempt === 1) break;
-      } catch (error: any) {
-        if (attempt === 1) throw error;
+        const data = (await response.json().catch(() => null)) as any;
+        return { status: response.status, ok: response.ok, data };
       } finally {
-        clearTimeout(timeout);
+        clearTimeout(timer);
       }
-      await new Promise((resolve) => setTimeout(resolve, 400));
     }
-    if (!response) throw new Error("Nenhuma resposta do serviço de consulta de CNPJ.");
 
-    const body = (await response.json().catch(() => null)) as any;
+    let brasil: Awaited<ReturnType<typeof requestJson>> | undefined;
+    try {
+      brasil = await requestJson(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, 5_000);
+    } catch (error) {
+      console.warn("Consulta BrasilAPI falhou; usando fonte alternativa:", error);
+    }
 
-    if (response.status === 404) {
-      res.status(404).json({
-        message: "CNPJ não encontrado na base de consulta.",
+    let body: any = brasil?.ok ? brasil.data : null;
+    let fonte: "brasilapi" | "cnpjws" = "brasilapi";
+    const brasilValido = body && onlyDigits(body.cnpj) === cnpj &&
+      firstText(body.razao_social, body.nome_empresarial, body.nome);
+
+    let alternativa: Awaited<ReturnType<typeof requestJson>> | undefined;
+    if (!brasilValido) {
+      try {
+        alternativa = await requestJson(`https://publica.cnpj.ws/cnpj/${cnpj}`, 8_000);
+        if (alternativa.ok && onlyDigits(alternativa.data?.estabelecimento?.cnpj) === cnpj &&
+            firstText(alternativa.data?.razao_social)) {
+          body = alternativa.data;
+          fonte = "cnpjws";
+        } else {
+          body = null;
+        }
+      } catch (error) {
+        console.warn("Consulta alternativa CNPJ.ws falhou:", error);
+        body = null;
+      }
+    }
+
+    if (!body) {
+      const notFound = brasil?.status === 404 && alternativa?.status === 404;
+      res.status(notFound ? 404 : 503).json({
+        message: notFound
+          ? "CNPJ não encontrado nas bases de consulta."
+          : "Os serviços públicos de consulta de CNPJ estão temporariamente indisponíveis. Tente novamente ou preencha manualmente.",
       });
       return;
     }
 
-    if (!response.ok) {
-      res.status(response.status === 400 ? 400 : 503).json({
-        message: response.status === 429
-          ? "A consulta de CNPJ está temporariamente limitada. Aguarde um momento e tente novamente."
-          : "O serviço público de CNPJ está temporariamente indisponível. Tente novamente ou preencha manualmente.",
-      });
+    const est = fonte === "cnpjws" ? body.estabelecimento ?? {} : body;
+    const cnpjRetornado = fonte === "cnpjws" ? est.cnpj : body.cnpj;
+    if (onlyDigits(cnpjRetornado) !== cnpj) {
+      res.status(502).json({ message: "A consulta retornou um CNPJ diferente do solicitado." });
       return;
     }
-
-    if (onlyDigits(body?.cnpj) !== cnpj || !firstText(body?.razao_social, body?.nome_empresarial, body?.nome)) {
-      res.status(502).json({ message: "A consulta não retornou dados válidos para este CNPJ." });
-      return;
-    }
-    const atividadePrincipal = firstText(
-      body?.cnae_fiscal_descricao,
-      body?.descricao_atividade_principal,
-    );
 
     res.json({
-      cnpj: onlyDigits(body?.cnpj || cnpj),
-      razaoSocial: firstText(
-        body?.razao_social,
-        body?.nome,
-        body?.nome_empresarial,
-      ),
-      nomeFantasia: firstText(
-        body?.nome_fantasia,
-        body?.fantasia,
-        body?.titulo_estabelecimento,
-      ),
+      cnpj,
+      razaoSocial: firstText(body.razao_social, body.nome, body.nome_empresarial),
+      nomeFantasia: firstText(est.nome_fantasia, est.fantasia, est.titulo_estabelecimento),
       inscricaoEstadual: firstText(
-        body?.inscricao_estadual,
-        body?.ie,
+        est.inscricoes_estaduais?.[0]?.inscricao_estadual,
+        est.inscricao_estadual, est.ie,
       ),
-      email: firstText(body?.email),
+      email: firstText(est.email),
       telefone: firstText(
-        body?.ddd_telefone_1,
-        body?.telefone,
-        body?.ddd_telefone_2,
+        est.ddd_telefone_1,
+        est.ddd1 && est.telefone1 ? `${est.ddd1}${est.telefone1}` : "",
+        est.telefone, est.ddd_telefone_2,
       ),
-      cep: onlyDigits(body?.cep),
+      cep: onlyDigits(est.cep),
       logradouro: firstText(
-        body?.descricao_tipo_de_logradouro && body?.logradouro
-          ? `${body.descricao_tipo_de_logradouro} ${body.logradouro}`
-          : "",
-        body?.logradouro,
+        est.descricao_tipo_de_logradouro && est.logradouro
+          ? `${est.descricao_tipo_de_logradouro} ${est.logradouro}` : "",
+        est.tipo_logradouro && est.logradouro
+          ? `${est.tipo_logradouro} ${est.logradouro}` : "",
+        est.logradouro,
       ),
-      numero: firstText(body?.numero),
-      complemento: firstText(body?.complemento),
-      bairro: firstText(body?.bairro),
-      cidade: firstText(body?.municipio, body?.cidade),
-      uf: firstText(body?.uf).toUpperCase(),
+      numero: firstText(est.numero),
+      complemento: firstText(est.complemento),
+      bairro: firstText(est.bairro),
+      cidade: firstText(est.cidade?.nome, est.municipio, est.cidade),
+      uf: firstText(est.estado?.sigla, est.uf).toUpperCase(),
       situacaoCadastral: firstText(
-        body?.descricao_situacao_cadastral,
-        body?.situacao,
+        est.situacao_cadastral?.descricao,
+        est.descricao_situacao_cadastral, est.situacao,
       ),
-      dataAbertura: firstText(
-        body?.data_inicio_atividade,
-        body?.abertura,
-      ),
+      dataAbertura: firstText(est.data_inicio_atividade, est.abertura),
       naturezaJuridica: firstText(
-        body?.natureza_juridica,
-        body?.descricao_natureza_juridica,
+        body.natureza_juridica?.descricao,
+        body.natureza_juridica, body.descricao_natureza_juridica,
       ),
-      atividadePrincipal,
+      atividadePrincipal: firstText(
+        est.atividade_principal?.descricao,
+        est.cnae_fiscal_descricao, est.descricao_atividade_principal,
+      ),
     });
   } catch (error: any) {
-    if (error?.name === "AbortError") {
-      res.status(504).json({
-        message: "A consulta do CNPJ demorou demais. Tente novamente.",
-      });
-      return;
-    }
-
-    console.error("Falha na consulta pública de CNPJ:", error);
-    res.status(503).json({ message: "Não foi possível acessar o serviço público de CNPJ. Tente novamente ou preencha manualmente." });
+    console.error("Erro inesperado na consulta de CNPJ:", error);
+    res.status(503).json({ message: "Não foi possível consultar o CNPJ. Tente novamente ou preencha manualmente." });
   }
 });
