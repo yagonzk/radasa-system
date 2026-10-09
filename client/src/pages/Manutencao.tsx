@@ -655,14 +655,40 @@ export default function Manutencao() {
         <div className="space-y-6">
           <div className="rounded-xl border bg-muted/20 p-4 sm:p-5">
             <div className="mb-4 flex items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">1</span><div><h3 className="font-semibold">Dados principais</h3><p className="text-xs text-muted-foreground">Comece pelo veículo e pelo motivo da manutenção.</p></div></div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="sm:col-span-2"><Label>Veículo *</Label><div className="mt-1 flex items-center gap-2"><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={osForm.veiculoId} onChange={(e) => setOsForm({ ...osForm, veiculoId: e.target.value })}><option value="">Selecione o veículo</option>{veiculos.map((v) => <option key={v.id} value={v.id}>{v.placa} {v.modelo ? `· ${v.modelo}` : ""}</option>)}</select><Button type="button" size="icon" variant="outline" title="Cadastrar novo veículo" aria-label="Cadastrar novo veículo" onClick={openQuickVehicle}><Plus className="h-4 w-4" /></Button></div></div>
-              <div><Label>Tipo de manutenção</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={osForm.tipo} onChange={(e) => setOsForm({ ...osForm, tipo: e.target.value })}><option value="PREVENTIVA">Preventiva</option><option value="CORRETIVA">Corretiva</option><option value="EMERGENCIAL">Emergencial</option><option value="OUTRA">Outra</option></select></div>
-              <div><Label>Data</Label><Input className="mt-1" type="date" value={osForm.dataAbertura} onChange={(e) => setOsForm({ ...osForm, dataAbertura: e.target.value })} /></div>
-              <div className="sm:col-span-2"><Label>Oficina / fornecedor</Label>
-                <div className="mt-1 flex items-center gap-2"><Popover open={supplierOpen} onOpenChange={setSupplierOpen}><PopoverTrigger asChild><Button type="button" variant="outline" role="combobox" aria-expanded={supplierOpen} className="h-10 w-full justify-between px-3 font-normal"><span className="truncate text-left">{selectedSupplier ? `${selectedSupplier.nomeFantasia || selectedSupplier.razaoSocial}${selectedSupplier.cidade ? ` · ${selectedSupplier.cidade}/${selectedSupplier.uf}` : ""}` : "Sem fornecedor selecionado"}</span><ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" /></Button></PopoverTrigger><PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0"><Command><CommandInput placeholder="Pesquisar oficina..." /><CommandList><CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty><CommandItem value="sem fornecedor oficina" onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: "" })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${!osForm.fornecedorId ? "opacity-100" : "opacity-0"}`} />Sem fornecedor</CommandItem>{activeSuppliers.map((f) => <CommandItem key={f.id} value={`${f.nomeFantasia || ""} ${f.razaoSocial || ""} ${f.cidade || ""} ${f.uf || ""}`} onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: f.id })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${osForm.fornecedorId === f.id ? "opacity-100" : "opacity-0"}`} /><span className="truncate">{f.nomeFantasia || f.razaoSocial}</span></CommandItem>)}</CommandList></Command></PopoverContent></Popover><Button type="button" size="icon" variant="outline" title="Cadastrar nova oficina" aria-label="Cadastrar nova oficina" onClick={openQuickSupplier}><Plus className="h-4 w-4" /></Button></div>
+            <div className="grid min-w-0 gap-3 md:grid-cols-2">
+              <div className="min-w-0">
+                <Label>Veículo *</Label>
+                <div className="mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem] gap-2">
+                  <select className="h-10 min-w-0 w-full rounded-md border bg-background px-3 text-sm" value={osForm.veiculoId} onChange={(e) => setOsForm({ ...osForm, veiculoId: e.target.value })}>
+                    <option value="">Selecione o veículo</option>
+                    {veiculos.map((v) => <option key={v.id} value={v.id}>{v.placa} {v.modelo ? `· ${v.modelo}` : ""}</option>)}
+                  </select>
+                  <Button type="button" size="icon" variant="outline" className="h-10 w-10 shrink-0" title="Cadastrar novo veículo" aria-label="Cadastrar novo veículo" onClick={openQuickVehicle}><Plus className="h-4 w-4" /></Button>
+                </div>
               </div>
-              <div className="sm:col-span-2"><Label>Problema ou motivo da manutenção</Label><Textarea className="mt-1 min-h-20" placeholder="Ex.: Vazamento no radiador, troca de óleo, revisão..." value={osForm.descricao} onChange={(e) => setOsForm({ ...osForm, descricao: e.target.value })} /></div>
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                <div className="min-w-0"><Label>Tipo de manutenção</Label><select className="mt-1 h-10 min-w-0 w-full rounded-md border bg-background px-3 text-sm" value={osForm.tipo} onChange={(e) => setOsForm({ ...osForm, tipo: e.target.value })}><option value="PREVENTIVA">Preventiva</option><option value="CORRETIVA">Corretiva</option><option value="EMERGENCIAL">Emergencial</option><option value="OUTRA">Outra</option></select></div>
+                <div className="min-w-0"><Label>Data</Label><Input className="mt-1 min-w-0 w-full" type="date" value={osForm.dataAbertura} onChange={(e) => setOsForm({ ...osForm, dataAbertura: e.target.value })} /></div>
+              </div>
+              <div className="min-w-0">
+                <Label>Oficina / fornecedor</Label>
+                <div className="mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem] gap-2">
+                  <Popover open={supplierOpen} onOpenChange={setSupplierOpen}>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" role="combobox" aria-expanded={supplierOpen} className="h-10 min-w-0 w-full justify-between gap-2 px-3 font-normal">
+                        <span className="min-w-0 flex-1 truncate text-left">{selectedSupplier ? `${selectedSupplier.nomeFantasia || selectedSupplier.razaoSocial}${selectedSupplier.cidade ? ` · ${selectedSupplier.cidade}/${selectedSupplier.uf}` : ""}` : "Sem fornecedor selecionado"}</span>
+                        <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0"><Command><CommandInput placeholder="Pesquisar oficina..." /><CommandList><CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty><CommandItem value="sem fornecedor oficina" onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: "" })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${!osForm.fornecedorId ? "opacity-100" : "opacity-0"}`} />Sem fornecedor</CommandItem>{activeSuppliers.map((f) => <CommandItem key={f.id} value={`${f.nomeFantasia || ""} ${f.razaoSocial || ""} ${f.cidade || ""} ${f.uf || ""}`} onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: f.id })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${osForm.fornecedorId === f.id ? "opacity-100" : "opacity-0"}`} /><span className="truncate">{f.nomeFantasia || f.razaoSocial}</span></CommandItem>)}</CommandList></Command></PopoverContent>
+                  </Popover>
+                  <Button type="button" size="icon" variant="outline" className="h-10 w-10 shrink-0" title="Cadastrar nova oficina" aria-label="Cadastrar nova oficina" onClick={openQuickSupplier}><Plus className="h-4 w-4" /></Button>
+                </div>
+              </div>
+              <div className="min-w-0">
+                <Label>Problema ou motivo da manutenção</Label>
+                <Textarea className="mt-1 min-h-20 min-w-0 w-full" placeholder="Ex.: Vazamento no radiador, troca de óleo, revisão..." value={osForm.descricao} onChange={(e) => setOsForm({ ...osForm, descricao: e.target.value })} />
+              </div>
             </div>
           </div>
 
