@@ -138,8 +138,8 @@ export default function BIGerencial(){
   XLSX.writeFile(wb,"BI-Gerencial_faturamento_filtrado.xlsx");
  };
  const exportFreteUnitXlsx=()=>{
-  // Cada combinação cliente + data + valor unitário real forma uma linha.
-  // Nunca calcular média do frete unitário entre romaneios distintos.
+  // Uma linha para cada cliente e valor unitario exato, mesmo quando repetido em varias datas.
+  // A data exibida e a mais recente dos registros filtrados; faturamento soma todos do grupo.
   type LinhaFreteUnit={cliente:string;data:string;municipio:string;faturamento:number;freteUnit:number};
   const consolidado=new Map<string,LinhaFreteUnit>();
   for(const x of consultaFiltered){
@@ -147,10 +147,12 @@ export default function BIGerencial(){
    const data=x.data||"";
    const municipio=x.municipio||"";
    const freteUnit=Math.round((Number(x.freteUnit)||0)*100)/100;
-   const chave=JSON.stringify([cliente,data,freteUnit,norm(municipio)]);
+   const chave=JSON.stringify([cliente,freteUnit]);
    const atual=consolidado.get(chave);
    if(atual){
     atual.faturamento+=Number(x.faturamento)||0;
+    // Repeticoes do mesmo frete nao criam novas linhas; retemos a ultima data e municipio correspondente.
+    if(data>atual.data){atual.data=data;atual.municipio=municipio;}
    }else{
     consolidado.set(chave,{cliente:x.cliente,data,municipio,faturamento:Number(x.faturamento)||0,freteUnit});
    }
