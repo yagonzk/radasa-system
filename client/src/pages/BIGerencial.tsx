@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useClientes, useProdutos, useRomaneios } from "@/lib/store";
+import { useClientes, useProdutos, type Manifesto } from "@/lib/store";
+import { getResourceRange } from "@/lib/api";
 import { canonicalClientIdentity, canonicalProductIdentity, formatPlate, mergeStagingBiFacts, readStagingBiFacts, type StagingBiFact } from "@/lib/bi-staging";
 import { BarChart3, Check, ChevronDown, Database, FileSpreadsheet, RotateCcw, Search, ClipboardCopy, Activity } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -31,11 +32,26 @@ export default function BIGerencial(){
  const { theme } = useTheme();
  const isDark = theme === "dark";
  const chartTooltipStyle = { backgroundColor: isDark ? "#0f172a" : "#ffffff", borderColor: isDark ? "#334155" : "#e2e8f0", color: isDark ? "#f8fafc" : "#0f172a" };
- const {items:romaneios}=useRomaneios(); const {items:clientes}=useClientes(); const {items:produtos}=useProdutos();
+ const {items:clientes}=useClientes(); const {items:produtos}=useProdutos();
+ const [romaneios,setRomaneios]=useState<Manifesto[]>([]);
+ const [romaneiosLoading,setRomaneiosLoading]=useState(false);
+ const [romaneiosError,setRomaneiosError]=useState("");
  const [showFreightDiagnostic,setShowFreightDiagnostic]=useState(false);
  const [manualFacts,setManualFacts]=useState<StagingBiFact[]>([]); const [loading,setLoading]=useState(true);
  useEffect(()=>{setLoading(true);void fetch("/dados/romaneio_nf_staging.xlsx",{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.arrayBuffer()}).then(b=>setManualFacts(readStagingBiFacts(b))).catch(e=>{console.warn("[BI Gerencial] Falha ao carregar staging",e);setManualFacts([])}).finally(()=>setLoading(false))},[]);
  const range=useMemo(()=>currentMonthRange(),[]); const [from,setFrom]=useState(range.from),[to,setTo]=useState(range.to); const [placas,setPlacas]=useState<string[]>([]),[clienteIds,setClienteIds]=useState<string[]>([]),[produtoKeys,setProdutoKeys]=useState<string[]>([]);
+ // A lista compartilhada de Romaneios carrega somente o mês atual.
+ // O BI precisa consultar explicitamente o período selecionado pelo usuário.
+ useEffect(()=>{
+  let active=true;
+  setRomaneiosLoading(true);
+  setRomaneiosError("");
+  void getResourceRange<Manifesto>("manifestos",from||undefined,to||undefined)
+   .then(items=>{if(active)setRomaneios(items)})
+   .catch(error=>{if(active){setRomaneios([]);setRomaneiosError(error instanceof Error?error.message:"Falha ao carregar romaneios")}})
+   .finally(()=>{if(active)setRomaneiosLoading(false)});
+  return ()=>{active=false};
+ },[from,to]);
  const [tab,setTab]=useState("geral"),[columnFilters,setColumnFilters]=useState<Record<string,string[]>>({}),[sort,setSort]=useState("data-desc");
  const [tabProdutos,setTabProdutos]=useState<string[]>([]),[tabClientes,setTabClientes]=useState<string[]>([]),[tabPlacas,setTabPlacas]=useState<string[]>([]);
  const clienteMap=useMemo(()=>new Map(clientes.map(c=>[c.id,c])),[clientes]); const produtoMap=useMemo(()=>new Map(produtos.map(p=>[p.id,p])),[produtos]);
@@ -97,8 +113,8 @@ export default function BIGerencial(){
    const status=!candidates.length?"NF não encontrada nos romaneios carregados":exact.length===1?"Item correspondente encontrado; verificar consolidação":exact.length>1?"Vários itens correspondentes (ambíguo)":sameQuantity.length===1?"Quantidade encontrada, código/descrição do produto divergente":sameProduct.length?"Produto encontrado, quantidade divergente":"NF encontrada, mas item não conciliado";
    return {nf:x.nfSerie,cliente:x.cliente,data:x.data,produto:x.produto,codigo:x.produtoCod,quantidade:x.quantidade,placa:x.placa,freteBI:x.frete,status,romaneiosEncontrados:candidates.length,mesmaQuantidade:sameQuantity.length,mesmoProduto:sameProduct.length,fretesRomaneios:candidates.map(y=>({romaneio:y.romaneio,produto:y.produto,codigo:y.produtoCod,quantidade:y.quantidade,frete:y.frete,placa:y.placa}))};
   });
-  return {resumo:{registrosFiltrados:consultaFiltered.length,fretesZerados:problems.length,romaneiosCarregados:romaneios.length,itensCarregados:liveStagingFacts.length,linhasPlanilha:manualFacts.length},filtros:{de:from,ate:to,placas,clientes:clienteIds,produtos:produtoKeys,colunas:columnFilters},detalhes:details};
- },[consultaFiltered,liveStagingFacts,romaneios.length,manualFacts.length,from,to,placas,clienteIds,produtoKeys,columnFilters]);
+  return {resumo:{registrosFiltrados:consultaFiltered.length,fretesZerados:problems.length,romaneiosCarregados:romaneios.length,romaneiosLoading,romaneiosError,itensCarregados:liveStagingFacts.length,linhasPlanilha:manualFacts.length},filtros:{de:from,ate:to,placas,clientes:clienteIds,produtos:produtoKeys,colunas:columnFilters},detalhes:details};
+ },[consultaFiltered,liveStagingFacts,romaneios.length,romaneiosLoading,romaneiosError,manualFacts.length,from,to,placas,clienteIds,produtoKeys,columnFilters]);
  const copyFreightDiagnostic=async()=>{try{await navigator.clipboard.writeText(JSON.stringify(freightDiagnostic,null,2))}catch(e){console.error("Falha ao copiar diagnóstico",e);window.alert("Não foi possível copiar automaticamente. Verifique a permissão da área de transferência.")}};
  const monthNames=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
  const monthSheetName=(mes:string)=>{const [ano,m]=mes.split("-");return `${monthNames[Math.max(0,Number(m)-1)]||mes} ${ano}`.slice(0,31)};
