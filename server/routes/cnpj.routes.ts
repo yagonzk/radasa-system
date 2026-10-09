@@ -6,6 +6,21 @@ function onlyDigits(value: unknown) {
   return String(value ?? "").replace(/\D/g, "");
 }
 
+function isValidCnpj(value: string) {
+  if (!/^\d{14}$/.test(value) || /^(\d)\1+$/.test(value)) return false;
+  const check = (size: number) => {
+    let weight = size - 7;
+    let sum = 0;
+    for (let index = 0; index < size; index++) {
+      sum += Number(value[index]) * weight;
+      weight = weight === 2 ? 9 : weight - 1;
+    }
+    const remainder = sum % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+  return Number(value[12]) === check(12) && Number(value[13]) === check(13);
+}
+
 function firstText(...values: unknown[]) {
   for (const value of values) {
     const text = String(value ?? "").trim();
@@ -18,13 +33,13 @@ function firstText(...values: unknown[]) {
 cnpjRoutes.get("/:cnpj", async (req, res, next) => {
   const cnpj = onlyDigits(req.params.cnpj);
 
-  if (cnpj.length !== 14) {
-    res.status(400).json({ message: "Informe um CNPJ com 14 dígitos." });
+  if (!isValidCnpj(cnpj)) {
+    res.status(400).json({ message: "Informe um CNPJ válido com 14 dígitos." });
     return;
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
+  const timeout = setTimeout(() => controller.abort(), 8_000);
 
   try {
     const response = await fetch(
@@ -57,15 +72,14 @@ cnpjRoutes.get("/:cnpj", async (req, res, next) => {
       return;
     }
 
-    const atividadePrincipal = Array.isArray(body?.cnaes_secundarios)
-      ? firstText(
-          body?.cnae_fiscal_descricao,
-          body?.descricao_atividade_principal,
-        )
-      : firstText(
-          body?.cnae_fiscal_descricao,
-          body?.descricao_atividade_principal,
-        );
+    if (onlyDigits(body?.cnpj) !== cnpj || !firstText(body?.razao_social, body?.nome_empresarial, body?.nome)) {
+      res.status(502).json({ message: "A consulta não retornou dados válidos para este CNPJ." });
+      return;
+    }
+    const atividadePrincipal = firstText(
+      body?.cnae_fiscal_descricao,
+      body?.descricao_atividade_principal,
+    );
 
     res.json({
       cnpj: onlyDigits(body?.cnpj || cnpj),
@@ -91,11 +105,10 @@ cnpjRoutes.get("/:cnpj", async (req, res, next) => {
       ),
       cep: onlyDigits(body?.cep),
       logradouro: firstText(
-        body?.logradouro,
-        body?.descricao_tipo_de_logradouro &&
-          body?.logradouro
+        body?.descricao_tipo_de_logradouro && body?.logradouro
           ? `${body.descricao_tipo_de_logradouro} ${body.logradouro}`
           : "",
+        body?.logradouro,
       ),
       numero: firstText(body?.numero),
       complemento: firstText(body?.complemento),
@@ -124,7 +137,8 @@ cnpjRoutes.get("/:cnpj", async (req, res, next) => {
       return;
     }
 
-    next(error);
+    console.error("Falha na consulta pública de CNPJ:", error);
+    res.status(502).json({ message: "Consulta de CNPJ temporariamente indisponível. Tente novamente ou preencha manualmente." });
   } finally {
     clearTimeout(timeout);
   }

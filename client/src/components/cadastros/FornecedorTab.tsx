@@ -1,5 +1,7 @@
 import { formatCpfCnpjInput } from "@/lib/documentMasks";
 import { useMemo, useState } from "react";
+import CnpjLookupButton from "./CnpjLookupButton";
+import { fillIfEmpty, formatCompanyAddress } from "@/lib/cnpjLookup";
 import { Building2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useFornecedores, type Fornecedor } from "@/lib/store";
@@ -92,6 +94,13 @@ export default function FornecedorTab() {
     setOpen(true);
   };
 
+  const duplicateCnpj = (value: string) => {
+    const cnpj = digits(value);
+    return cnpj.length === 14 && items.some((item) => item.id !== editingId && digits(item.documento) === cnpj)
+      ? "Este CNPJ já está cadastrado em Fornecedores. Abra o cadastro existente para editar."
+      : undefined;
+  };
+
   const toggleTipo = (tipo: string, checked: boolean) => {
     setForm((current) => ({
       ...current,
@@ -158,7 +167,15 @@ export default function FornecedorTab() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div><Label>Razão Social / Nome *</Label><Input className="mt-1" value={form.razaoSocial} onChange={(e) => setForm({ ...form, razaoSocial: e.target.value })} /></div>
             <div><Label>Nome Fantasia</Label><Input className="mt-1" value={form.nomeFantasia} onChange={(e) => setForm({ ...form, nomeFantasia: e.target.value })} /></div>
-            <div><Label>CNPJ/CPF</Label><Input className="mt-1" inputMode="numeric" maxLength={18} placeholder="CPF ou CNPJ" value={formatCpfCnpjInput(form.documento)} onChange={(e) => setForm({ ...form, documento: digits(e.target.value).slice(0, 14) })} /></div>
+            <div><Label>CNPJ/CPF</Label><div className="mt-1 flex min-w-0 gap-2"><Input className="min-w-0 flex-1" inputMode="numeric" maxLength={18} placeholder="CPF ou CNPJ" value={formatCpfCnpjInput(form.documento)} onChange={(e) => setForm({ ...form, documento: digits(e.target.value).slice(0, 14) })} /><CnpjLookupButton cnpj={form.documento} disabled={saving} duplicateMessage={duplicateCnpj(form.documento)} onFound={(data, consulted) => setForm((current) => digits(current.documento) !== consulted ? current : ({ ...current,
+      razaoSocial: fillIfEmpty(current.razaoSocial, data.razaoSocial),
+      nomeFantasia: fillIfEmpty(current.nomeFantasia, data.nomeFantasia),
+      telefone: fillIfEmpty(current.telefone, data.telefone),
+      email: fillIfEmpty(current.email, data.email),
+      endereco: fillIfEmpty(current.endereco, formatCompanyAddress(data)),
+      cidade: fillIfEmpty(current.cidade, data.cidade),
+      uf: fillIfEmpty(current.uf, data.uf),
+    }))} /></div></div>
             <div><Label>Contato responsável</Label><Input className="mt-1" value={form.contato} onChange={(e) => setForm({ ...form, contato: e.target.value })} /></div>
             <div><Label>Telefone / WhatsApp</Label><Input className="mt-1" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} /></div>
             <div><Label>E-mail</Label><Input className="mt-1" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>

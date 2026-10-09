@@ -13,6 +13,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import DataTable from "./DataTable";
+import CnpjLookupButton from "./CnpjLookupButton";
+import { fillIfEmpty, formatCompanyAddress } from "@/lib/cnpjLookup";
 import { Plus, Building2, Upload, Download, FileSpreadsheet, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -758,15 +760,29 @@ export default function ClienteTab() {
               />
             </FormField>
             <FormField label="CNPJ">
-              <Input
-                value={formatCnpj(form.cnpj)}
-                onChange={(e) =>
-                  setForm({ ...form, cnpj: onlyDigits(e.target.value).slice(0, 14) })
-                }
-                placeholder="00.000.000/0000-00"
-                inputMode="numeric"
-                maxLength={18}
-              />
+              <div className="flex min-w-0 gap-2">
+                <Input
+                  className="min-w-0 flex-1"
+                  value={formatCnpj(form.cnpj)}
+                  onChange={(e) => setForm({ ...form, cnpj: onlyDigits(e.target.value).slice(0, 14) })}
+                  placeholder="00.000.000/0000-00"
+                  inputMode="numeric"
+                  maxLength={18}
+                />
+                <CnpjLookupButton
+                  cnpj={form.cnpj}
+                  disabled={saving}
+                  duplicateMessage={items.some((item) => item.id !== editingId && onlyDigits(item.cnpj || "") === onlyDigits(form.cnpj) && onlyDigits(form.cnpj).length === 14) ? "Este CNPJ já está cadastrado em Clientes. Abra o cadastro existente para editar." : undefined}
+                  onFound={(data, consulted) => setForm((current) => onlyDigits(current.cnpj) !== consulted ? current : ({
+                    ...current,
+                    razaoSocial: fillIfEmpty(current.razaoSocial, data.razaoSocial),
+                    nomeFantasia: fillIfEmpty(current.nomeFantasia, data.nomeFantasia || data.razaoSocial),
+                    email: fillIfEmpty(current.email, data.email),
+                    telefone: fillIfEmpty(current.telefone, data.telefone),
+                    enderecoFiscal: fillIfEmpty(current.enderecoFiscal, formatCompanyAddress(data)),
+                  }))}
+                />
+              </div>
             </FormField>
             <div className="grid grid-cols-2 gap-4">
               <FormField label="Email">

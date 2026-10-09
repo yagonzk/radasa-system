@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import DataTable from "./DataTable";
 import { toast } from "sonner";
+import { fillIfEmpty } from "@/lib/cnpjLookup";
 
 interface CnpjLookupResponse {
   cnpj: string;
@@ -235,27 +236,30 @@ export default function EmpresaTab() {
       return;
     }
 
+    if (items.some((item) => item.id !== editingId && onlyDigits(item.cnpj) === cnpj)) {
+      toast.warning("Esta empresa já está cadastrada. Abra o cadastro existente para editar.");
+      return;
+    }
     setConsultingCnpj(true);
 
     try {
       const { data } = await api.get<CnpjLookupResponse>(`/cnpj/${cnpj}`);
 
-      setForm((current) => ({
+      if (onlyDigits(data.cnpj) !== cnpj || !data.razaoSocial) throw new Error("Consulta retornou dados divergentes do CNPJ.");
+      setForm((current) => onlyDigits(current.cnpj) !== cnpj ? current : ({
         ...current,
-        cnpj: data.cnpj || current.cnpj,
-        razaoSocial: data.razaoSocial || current.razaoSocial,
-        nomeFantasia: data.nomeFantasia || current.nomeFantasia,
-        inscricaoEstadual:
-          data.inscricaoEstadual || current.inscricaoEstadual,
-        email: data.email || current.email,
-        telefone: data.telefone || current.telefone,
-        cep: data.cep || current.cep,
-        logradouro: data.logradouro || current.logradouro,
-        numero: data.numero || current.numero,
-        complemento: data.complemento || current.complemento,
-        bairro: data.bairro || current.bairro,
-        cidade: data.cidade || current.cidade,
-        uf: data.uf || current.uf,
+        razaoSocial: fillIfEmpty(current.razaoSocial, data.razaoSocial),
+        nomeFantasia: fillIfEmpty(current.nomeFantasia, data.nomeFantasia),
+        inscricaoEstadual: fillIfEmpty(current.inscricaoEstadual, data.inscricaoEstadual),
+        email: fillIfEmpty(current.email, data.email),
+        telefone: fillIfEmpty(current.telefone, data.telefone),
+        cep: fillIfEmpty(current.cep, data.cep),
+        logradouro: fillIfEmpty(current.logradouro, data.logradouro),
+        numero: fillIfEmpty(current.numero, data.numero),
+        complemento: fillIfEmpty(current.complemento, data.complemento),
+        bairro: fillIfEmpty(current.bairro, data.bairro),
+        cidade: fillIfEmpty(current.cidade, data.cidade),
+        uf: fillIfEmpty(current.uf, data.uf),
       }));
 
       const details = [
@@ -269,11 +273,7 @@ export default function EmpresaTab() {
         .filter(Boolean)
         .join(" • ");
 
-      toast.success(
-        details
-          ? `Empresa encontrada. ${details}`
-          : "Empresa encontrada e formulário preenchido.",
-      );
+      toast.success(details ? `Empresa localizada. ${details}` : "CNPJ consultado. Confira os dados antes de salvar.");
     } catch (error: any) {
       console.error(error);
       toast.error(
