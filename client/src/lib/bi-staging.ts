@@ -29,8 +29,9 @@ const rows=(wb:XLSX.WorkBook,name:string)=>{const ws=wb.Sheets[name];return ws?X
 const romaneioSheetNames=(wb:XLSX.WorkBook)=>wb.SheetNames.filter(name=>name==="stg_romaneio_itens"||name.startsWith("Cópia de stg_romaneio_itens"));
 const uniqueRows=(items:Record<string,unknown>[])=>{const seen=new Set<string>();return items.filter(r=>{const key=JSON.stringify(r);if(seen.has(key))return false;seen.add(key);return true})};
 const nfParts=(x:{nf:string;serie:string;nfSerie:string})=>{
-  if(x.nf||x.serie)return [canonicalKeyPart(x.nf),canonicalKeyPart(x.serie)];
-  const parts=text(x.nfSerie).split("/");return [canonicalKeyPart(parts[0]),canonicalKeyPart(parts[1])];
+  // Alguns registros atuais guardam "062833/004" dentro do próprio campo NF.
+  const rawNf=text(x.nf),parts=(rawNf.includes("/")?rawNf:text(x.nfSerie)).split("/");
+  return [canonicalKeyPart(rawNf.includes("/")?parts[0]:rawNf||parts[0]),canonicalKeyPart(x.serie||parts[1])];
 };
 const invoiceKey=(x:Pick<StagingBiFact,"nf"|"serie"|"nfSerie"|"produtoCod"|"produto">)=>{const [nf,serie]=nfParts(x);return `${nf}|${serie}|${productIdentity(x.produtoCod,x.produto)}`};
 
@@ -88,20 +89,43 @@ const stagingMonth=(x:StagingBiFact)=>String(x.data||"").slice(0,7);
 
 export function mergeStagingBiFacts(manual:StagingBiFact[],current:StagingBiFact[]):StagingBiFact[]{
   // Romaneios atuais são soberanos para frete. NF da staging é soberana para faturamento.
-  const manualByInvoice=new Map<string,StagingBiFact[]>();
-  for(const m of manual){if(!m.nf)continue;const key=invoiceKey(m);const list=manualByInvoice.get(key)||[];list.push(m);manualByInvoice.set(key,list)}
+  // Indexar por NF + série, independentemente do código interno do produto.
+  // O staging pode utilizar código comercial (00308), enquanto o cadastro atual
+  // usa outro identificador para o mesmo Garrafão 20 L.
+  const manualByDocument=new Map<string,StagingBiFact[]>();
+  const documentKey=(x:StagingBiFact)=>nfParts(x).join("|");
+  for(const m of manual){
+    if(!m.nf)continue;
+    const key=documentKey(m);
+    const group=manualByDocument.get(key)||[];group.push(m);manualByDocument.set(key,group);
+  }
   const consumed=new Set<string>();
-
+  const isSameProduct=(a:StagingBiFact,b:StagingBiFact)=>{
+    const ac=canonicalKeyPart(a.produtoCod),bc=canonicalKeyPart(b.produtoCod);
+    if(ac&&bc&&ac===bc)return true;
+    const af=productFamily(a.produto),bf=productFamily(b.produto);
+    if(af&&bf&&af===bf)return true;
+    return Boolean(norm(a.produto)&&norm(a.produto)===norm(b.produto));
+  };
   const live=current.map(x=>{
-    const matches=x.nf?manualByInvoice.get(invoiceKey(x))||[]:[];
-    if(!matches.length)return x;
-    matches.forEach(m=>consumed.add(m.id));const faturamento=matches.reduce((s,m)=>s+m.faturamento,0);const n=matches[0];
-    // Se o romaneio atual estiver incompleto, preserve o frete documentado no histórico
-    // vinculado à mesma NF/produto; nunca substitua um valor válido por zero.
-    const historicoFrete=matches.find(m=>Number.isFinite(m.frete)&&Math.abs(m.frete)>0);
-    const frete=Number.isFinite(x.frete)&&Math.abs(x.frete)>0?x.frete:(historicoFrete?.frete??x.frete);
-    const quantidade=x.quantidade>0?x.quantidade:(n.quantidade||0);
-    return {...x,data:n.data||x.data,nf:n.nf||x.nf,serie:n.serie||x.serie,nfSerie:n.nfSerie||x.nfSerie,produtoCod:n.produtoCod||x.produtoCod,produto:n.produto||x.produto,placa:x.placa&&x.placa!=="Sem placa"?x.placa:n.placa,quantidade,frete,freteUnit:quantidade?frete/quantidade:0,valorUnitProduto:n.valorUnitProduto||x.valorUnitProduto,faturamento,municipio:n.municipio||x.municipio};
+    const candidates=x.nf?(manualByDocument.get(documentKey(x))||[]).filter(m=>!consumed.has(m.id)):[];
+    // A mesma NF pode conter vários itens: nunca juntar produtos diferentes.
+    // Quando os códigos diferem entre sistemas, a quantidade individual auxilia
+    // a encontrar um único produto correspondente sem estimar valores.
+    const byProduct=candidates.filter(m=>isSameProduct(m,x));
+    const byProductAndQuantity=byProduct.filter(m=>m.quantidade===x.quantidade);
+    const byQuantity=candidates.filter(m=>m.quantidade===x.quantidade);
+    const matches=byProductAndQuantity.length===1?byProductAndQuantity:
+      byProduct.length===1?byProduct:
+      byProduct.length===0&&byQuantity.length===1&&
+        (!norm(x.produto)||x.produto==="Produto não identificado"||!norm(byQuantity[0].produto))?byQuantity:[];
+    // Não associar quando o documento não possui correspondência inequívoca.
+    if(matches.length!==1)return x;
+    const n=matches[0];
+    consumed.add(n.id);
+    const frete=Number.isFinite(x.frete)&&Math.abs(x.frete)>0?x.frete:(n.frete||0);
+    const quantidade=x.quantidade>0?x.quantidade:n.quantidade;
+    return {...x,data:n.data||x.data,nf:n.nf||x.nf,serie:n.serie||x.serie,nfSerie:n.nfSerie||x.nfSerie,produtoCod:n.produtoCod||x.produtoCod,produto:n.produto||x.produto,placa:x.placa&&x.placa!=="Sem placa"?x.placa:n.placa,quantidade,frete,freteUnit:quantidade?frete/quantidade:0,valorUnitProduto:n.valorUnitProduto||x.valorUnitProduto,faturamento:n.faturamento,municipio:n.municipio||x.municipio};
   });
   // Nunca zere fretes históricos apenas porque existe um romaneio atual no mesmo mês.
   // Isso eliminava valores legítimos de viagens sem correspondência exata no cadastro atual.
