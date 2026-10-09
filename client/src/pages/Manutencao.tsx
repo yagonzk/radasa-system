@@ -120,6 +120,7 @@ export default function Manutencao() {
   const [activeColumnFilter, setActiveColumnFilter] = useState<string | null>(null);
   const [columnFilterSearch, setColumnFilterSearch] = useState("");
   const [editingOsId, setEditingOsId] = useState<string | null>(null);
+  const [additionalInfoOpen, setAdditionalInfoOpen] = useState(false);
   const [detail, setDetail] = useState<OS | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [concludeOpen, setConcludeOpen] = useState(false);
@@ -347,6 +348,7 @@ export default function Manutencao() {
   const abrir = (x: "OS" | "PLANO" | "DOC") => {
     if (x === "OS") {
       setEditingOsId(null);
+      setAdditionalInfoOpen(false);
       setOsForm(emptyOsForm());
       setSupplierOpen(false);
       setPendingNotas([]);
@@ -360,6 +362,7 @@ export default function Manutencao() {
     try {
       const response = await api.get<OS>(`/manutencao/ordens/${id}`);
       setEditingOsId(id);
+      setAdditionalInfoOpen(true);
       setOsForm(maintenanceOrderToForm(response.data));
       setSupplierOpen(false);
       setPendingNotas([]);
@@ -683,7 +686,7 @@ export default function Manutencao() {
 
           <section className="space-y-3"><div><h3 className="font-semibold">Resumo dos custos</h3><p className="text-xs text-muted-foreground">O total é calculado automaticamente pelos itens informados.</p></div><div className="grid gap-3 sm:grid-cols-2"><div><Label>Desconto</Label><Input className="mt-1" type="number" min="0" step="0.01" value={osForm.desconto} onChange={(e) => setOsForm({ ...osForm, desconto: e.target.value })} /></div><div className="rounded-lg border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">Total da OS</div><div className="mt-1 text-lg font-bold">{money(formTotal)}</div></div></div></section>
 
-          <details className="rounded-xl border p-4" key={`extra-${editingOsId || "new"}`} defaultOpen={Boolean(editingOsId)}>
+          <details className="rounded-xl border p-4" key={`extra-${editingOsId || "new"}`} open={additionalInfoOpen} onToggle={(event) => setAdditionalInfoOpen(event.currentTarget.open)}>
             <summary className="cursor-pointer font-semibold">Informações complementares <span className="ml-2 text-xs font-normal text-muted-foreground">(opcional)</span></summary>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div><Label>Nº da OS da oficina</Label><Input className="mt-1" placeholder="Ex.: 465" value={osForm.numeroFornecedor} onChange={(e) => setOsForm({ ...osForm, numeroFornecedor: e.target.value })} /></div>

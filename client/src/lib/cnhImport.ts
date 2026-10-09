@@ -187,7 +187,7 @@ export async function lerCnhPdf(file: File, progresso?: (mensagem: string) => vo
     const { createWorker, PSM } = await import("tesseract.js");
     progresso?.("Carregando reconhecimento de texto...");
     ocrWorker = await createWorker("por", 1);
-    await ocrWorker.setParameters({ tessedit_pageseg_mode: String(PSM.SINGLE_LINE), preserve_interword_spaces: "1" });
+    await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, preserve_interword_spaces: "1" });
     const areas: Record<string, string> = {};
     const entries = Object.entries(REGIOES_CNH);
     for (let index = 0; index < entries.length; index++) {
@@ -200,36 +200,36 @@ export async function lerCnhPdf(file: File, progresso?: (mensagem: string) => vo
           try {
             // Na CNH-e de exemplo a categoria "AD" é vermelha; o "D" de ACC é preto.
             if (redOnly) {
-              await ocrWorker.setParameters({ tessedit_pageseg_mode: String(PSM.SINGLE_WORD), tessedit_char_whitelist: "ABCDE" });
+              await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_WORD, tessedit_char_whitelist: "ABCDE" });
               const redText = (await ocrWorker.recognize(redOnly)).data.text.trim();
               if (categoriaCnh(redText)) areas[field] = redText;
               if (categoriaCnh(redText) === "D") {
                 // Uma leitura de "AD" pode perder o A. Releia antes de aceitar D.
-                await ocrWorker.setParameters({ tessedit_pageseg_mode: String(PSM.SINGLE_LINE), tessedit_char_whitelist: "ABCDE" });
+                await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: "ABCDE" });
                 const another = (await ocrWorker.recognize(redOnly)).data.text.trim();
                 if (categoriaCnh(another)?.length === 2) areas[field] = another;
               }
             }
             if (!areas[field]) {
-              await ocrWorker.setParameters({ tessedit_pageseg_mode: String(PSM.SINGLE_WORD), tessedit_char_whitelist: "ABCDE" });
+              await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_WORD, tessedit_char_whitelist: "ABCDE" });
               areas[field] = (await ocrWorker.recognize(crop)).data.text.trim();
             }
           } finally { if (redOnly) redOnly.width = redOnly.height = 1; }
         } else if (field === "cpf") {
-          await ocrWorker.setParameters({ tessedit_pageseg_mode: String(PSM.SINGLE_LINE), tessedit_char_whitelist: "0123456789.- " });
+          await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: "0123456789.- " });
           areas[field] = (await ocrWorker.recognize(crop)).data.text.trim();
           if (!cpfsDoOcr(areas[field]).some(cpfValido)) {
             // Não inventa números: tenta uma segunda imagem, e aceita só CPF válido.
             const enhanced = altoContraste(crop);
             try {
-              await ocrWorker.setParameters({ tessedit_pageseg_mode: String(PSM.SINGLE_WORD), tessedit_char_whitelist: "0123456789.- " });
+              await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_WORD, tessedit_char_whitelist: "0123456789.- " });
               const alternative = (await ocrWorker.recognize(enhanced)).data.text.trim();
               areas[field] += "\n" + alternative;
             } finally { enhanced.width = enhanced.height = 1; }
           }
         } else {
           const mode = field === "cnhRegistro" ? PSM.SINGLE_BLOCK : PSM.SINGLE_LINE;
-          await ocrWorker.setParameters({ tessedit_pageseg_mode: String(mode), tessedit_char_whitelist: "" });
+          await ocrWorker.setParameters({ tessedit_pageseg_mode: mode, tessedit_char_whitelist: "" });
           areas[field] = (await ocrWorker.recognize(crop)).data.text.trim();
         }
       } finally { crop.width = crop.height = 1; }
