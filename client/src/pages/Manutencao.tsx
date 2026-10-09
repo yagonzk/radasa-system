@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { api } from "@/lib/api";
 import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
-import { useEstoqueProdutos, useFornecedores, useVeiculos } from "@/lib/store";
+import { useEstoqueProdutos, useFornecedores, useMotoristas, useVeiculos, type SubcategoriaVeiculo } from "@/lib/store";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,15 @@ const newItem = (): OsItem => ({ tipo: "SERVICO", categoria: "", descricao: "", 
 const newNota = (): PendingNota => ({ key: crypto.randomUUID(), numero: "", serie: "", chaveAcesso: "", dataEmissao: today(), valor: "", file: null });
 const newAnexo = (): PendingAnexo => ({ key: crypto.randomUUID(), tipo: "ORDEM_SERVICO", descricao: "", file: null });
 
+
+
+type QuickVehicleForm = { placa: string; marca: string; modelo: string; subcategoria: SubcategoriaVeiculo | ""; motoristaId: string };
+type QuickSupplierForm = { razaoSocial: string; nomeFantasia: string; documento: string; telefone: string; cidade: string; uf: string; contato: string };
+const emptyQuickVehicleForm = (): QuickVehicleForm => ({ placa: "", marca: "", modelo: "", subcategoria: "CAMINHAO", motoristaId: "" });
+const emptyQuickSupplierForm = (): QuickSupplierForm => ({ razaoSocial: "", nomeFantasia: "", documento: "", telefone: "", cidade: "", uf: "", contato: "" });
+const digitsOnly = (value: string) => value.replace(/\D/g, "");
+const normalizePlateQuick = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
+const formatPlateQuick = (value: string) => { const n = normalizePlateQuick(value); return n.length <= 3 ? n : `${n.slice(0,3)}-${n.slice(3)}`; };
 const statusLabel = maintenanceStatusLabel;
 const tipoLabel = maintenanceTypeLabel;
 
@@ -85,9 +94,10 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export default function Manutencao() {
-  const { items: veiculos } = useVeiculos();
+  const { items: veiculos, create: createVeiculo, refresh: refreshVeiculos } = useVeiculos();
   const { items: produtosEstoque } = useEstoqueProdutos();
-  const { items: fornecedores } = useFornecedores();
+  const { items: fornecedores, create: createFornecedor, refresh: refreshFornecedores } = useFornecedores();
+  const { items: motoristas } = useMotoristas();
   const [tab, setTab] = useState<"OS" | "PLANOS" | "DOCS">("OS");
   const [dash, setDash] = useState<any>({});
   const [planos, setPlanos] = useState<Plano[]>([]);
@@ -119,11 +129,106 @@ export default function Manutencao() {
   const [detailAnexo, setDetailAnexo] = useState<PendingAnexo>(newAnexo());
   const [detailUploading, setDetailUploading] = useState(false);
   const [supplierOpen, setSupplierOpen] = useState(false);
+  const [quickVehicleOpen, setQuickVehicleOpen] = useState(false);
+  const [quickSupplierOpen, setQuickSupplierOpen] = useState(false);
+  const [quickVehicleSaving, setQuickVehicleSaving] = useState(false);
+  const [quickSupplierSaving, setQuickSupplierSaving] = useState(false);
+  const [quickVehicleForm, setQuickVehicleForm] = useState<QuickVehicleForm>(emptyQuickVehicleForm());
+  const [quickSupplierForm, setQuickSupplierForm] = useState<QuickSupplierForm>(emptyQuickSupplierForm());
   const saveLockRef = useRef(false);
 
   const placa = (id: string) => veiculos.find((v) => v.id === id)?.placa || "—";
   const activeSuppliers = fornecedores.filter((f) => f.ativo !== false);
   const selectedSupplier = activeSuppliers.find((f) => f.id === osForm.fornecedorId);
+  const activeDrivers = motoristas.filter((m) => m.status === "ATIVO");
+
+  const openQuickVehicle = () => {
+    setQuickVehicleForm({ ...emptyQuickVehicleForm(), motoristaId: activeDrivers[0]?.id || "" });
+    setQuickVehicleOpen(true);
+  };
+
+  const openQuickSupplier = () => {
+    setQuickSupplierForm(emptyQuickSupplierForm());
+    setQuickSupplierOpen(true);
+  };
+
+  const saveQuickVehicle = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (quickVehicleSaving) return;
+    const placa = formatPlateQuick(quickVehicleForm.placa);
+    if (normalizePlateQuick(placa).length !== 7) return toast.error("Informe uma placa válida para o veículo.");
+    if (!quickVehicleForm.subcategoria) return toast.error("Selecione o tipo do veículo.");
+    if (!quickVehicleForm.motoristaId) return toast.error("Selecione o motorista vinculado.");
+    setQuickVehicleSaving(true);
+    try {
+      const created = await createVeiculo({
+        placa,
+        modelo: quickVehicleForm.modelo,
+        marca: quickVehicleForm.marca,
+        renavam: "",
+        chassi: "",
+        anoFabricacao: null,
+        anoModelo: null,
+        cor: "",
+        combustivel: "",
+        proprietario: "",
+        situacaoOperacional: "DISPONIVEL",
+        subcategoria: quickVehicleForm.subcategoria,
+        motoristaId: quickVehicleForm.motoristaId,
+        crlvValidade: "",
+        ipvaVencimento: "",
+        ipvaPago: false,
+        ipvaValor: 0,
+        licenciamentoVencimento: "",
+        licenciamentoValor: 0,
+        seguroValidade: "",
+        seguroValor: 0,
+        rntrc: "",
+        observacoes: "",
+      } as any);
+      await refreshVeiculos();
+      setOsForm((current) => ({ ...current, veiculoId: created.id }));
+      setQuickVehicleOpen(false);
+      toast.success("Veículo cadastrado e selecionado.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? "Não foi possível cadastrar o veículo.");
+    } finally {
+      setQuickVehicleSaving(false);
+    }
+  };
+
+  const saveQuickSupplier = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (quickSupplierSaving) return;
+    if (!quickSupplierForm.razaoSocial.trim()) return toast.error("Informe o nome da oficina ou fornecedor.");
+    const documento = digitsOnly(quickSupplierForm.documento);
+    if (documento && documento.length !== 11 && documento.length !== 14) return toast.error("Informe um CPF ou CNPJ válido.");
+    setQuickSupplierSaving(true);
+    try {
+      const created = await createFornecedor({
+        razaoSocial: quickSupplierForm.razaoSocial,
+        nomeFantasia: quickSupplierForm.nomeFantasia,
+        documento,
+        tipos: ["Oficina Mecânica"],
+        telefone: quickSupplierForm.telefone,
+        email: "",
+        endereco: "",
+        cidade: quickSupplierForm.cidade,
+        uf: quickSupplierForm.uf.toUpperCase().slice(0, 2),
+        contato: quickSupplierForm.contato,
+        observacoes: "Criado pela tela de manutenção.",
+        ativo: true,
+      } as any);
+      await refreshFornecedores();
+      setOsForm((current) => ({ ...current, fornecedorId: created.id }));
+      setQuickSupplierOpen(false);
+      toast.success("Oficina/fornecedor cadastrado e selecionado.");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message ?? "Não foi possível cadastrar o fornecedor.");
+    } finally {
+      setQuickSupplierSaving(false);
+    }
+  };
 
   const load = async () => {
     try {
@@ -548,11 +653,11 @@ export default function Manutencao() {
           <div className="rounded-xl border bg-muted/20 p-4 sm:p-5">
             <div className="mb-4 flex items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">1</span><div><h3 className="font-semibold">Dados principais</h3><p className="text-xs text-muted-foreground">Comece pelo veículo e pelo motivo da manutenção.</p></div></div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="sm:col-span-2"><Label>Veículo *</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={osForm.veiculoId} onChange={(e) => setOsForm({ ...osForm, veiculoId: e.target.value })}><option value="">Selecione o veículo</option>{veiculos.map((v) => <option key={v.id} value={v.id}>{v.placa} {v.modelo ? `· ${v.modelo}` : ""}</option>)}</select></div>
+              <div className="sm:col-span-2"><Label>Veículo *</Label><div className="mt-1 flex items-center gap-2"><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={osForm.veiculoId} onChange={(e) => setOsForm({ ...osForm, veiculoId: e.target.value })}><option value="">Selecione o veículo</option>{veiculos.map((v) => <option key={v.id} value={v.id}>{v.placa} {v.modelo ? `· ${v.modelo}` : ""}</option>)}</select><Button type="button" size="icon" variant="outline" title="Cadastrar novo veículo" aria-label="Cadastrar novo veículo" onClick={openQuickVehicle}><Plus className="h-4 w-4" /></Button></div></div>
               <div><Label>Tipo de manutenção</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={osForm.tipo} onChange={(e) => setOsForm({ ...osForm, tipo: e.target.value })}><option value="PREVENTIVA">Preventiva</option><option value="CORRETIVA">Corretiva</option><option value="EMERGENCIAL">Emergencial</option><option value="OUTRA">Outra</option></select></div>
               <div><Label>Data</Label><Input className="mt-1" type="date" value={osForm.dataAbertura} onChange={(e) => setOsForm({ ...osForm, dataAbertura: e.target.value })} /></div>
               <div className="sm:col-span-2"><Label>Oficina / fornecedor</Label>
-                <Popover open={supplierOpen} onOpenChange={setSupplierOpen}><PopoverTrigger asChild><Button type="button" variant="outline" role="combobox" aria-expanded={supplierOpen} className="mt-1 h-10 w-full justify-between px-3 font-normal"><span className="truncate text-left">{selectedSupplier ? `${selectedSupplier.nomeFantasia || selectedSupplier.razaoSocial}${selectedSupplier.cidade ? ` · ${selectedSupplier.cidade}/${selectedSupplier.uf}` : ""}` : "Sem fornecedor selecionado"}</span><ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" /></Button></PopoverTrigger><PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0"><Command><CommandInput placeholder="Pesquisar oficina..." /><CommandList><CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty><CommandItem value="sem fornecedor oficina" onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: "" })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${!osForm.fornecedorId ? "opacity-100" : "opacity-0"}`} />Sem fornecedor</CommandItem>{activeSuppliers.map((f) => <CommandItem key={f.id} value={`${f.nomeFantasia || ""} ${f.razaoSocial || ""} ${f.cidade || ""} ${f.uf || ""}`} onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: f.id })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${osForm.fornecedorId === f.id ? "opacity-100" : "opacity-0"}`} /><span className="truncate">{f.nomeFantasia || f.razaoSocial}</span></CommandItem>)}</CommandList></Command></PopoverContent></Popover>
+                <div className="mt-1 flex items-center gap-2"><Popover open={supplierOpen} onOpenChange={setSupplierOpen}><PopoverTrigger asChild><Button type="button" variant="outline" role="combobox" aria-expanded={supplierOpen} className="h-10 w-full justify-between px-3 font-normal"><span className="truncate text-left">{selectedSupplier ? `${selectedSupplier.nomeFantasia || selectedSupplier.razaoSocial}${selectedSupplier.cidade ? ` · ${selectedSupplier.cidade}/${selectedSupplier.uf}` : ""}` : "Sem fornecedor selecionado"}</span><ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" /></Button></PopoverTrigger><PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0"><Command><CommandInput placeholder="Pesquisar oficina..." /><CommandList><CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty><CommandItem value="sem fornecedor oficina" onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: "" })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${!osForm.fornecedorId ? "opacity-100" : "opacity-0"}`} />Sem fornecedor</CommandItem>{activeSuppliers.map((f) => <CommandItem key={f.id} value={`${f.nomeFantasia || ""} ${f.razaoSocial || ""} ${f.cidade || ""} ${f.uf || ""}`} onSelect={() => { setOsForm((current) => ({ ...current, fornecedorId: f.id })); setSupplierOpen(false); }}><Check className={`h-4 w-4 ${osForm.fornecedorId === f.id ? "opacity-100" : "opacity-0"}`} /><span className="truncate">{f.nomeFantasia || f.razaoSocial}</span></CommandItem>)}</CommandList></Command></PopoverContent></Popover><Button type="button" size="icon" variant="outline" title="Cadastrar nova oficina" aria-label="Cadastrar nova oficina" onClick={openQuickSupplier}><Plus className="h-4 w-4" /></Button></div>
               </div>
               <div className="sm:col-span-2"><Label>Problema ou motivo da manutenção</Label><Textarea className="mt-1 min-h-20" placeholder="Ex.: Vazamento no radiador, troca de óleo, revisão..." value={osForm.descricao} onChange={(e) => setOsForm({ ...osForm, descricao: e.target.value })} /></div>
             </div>
@@ -629,5 +734,11 @@ export default function Manutencao() {
     <Dialog open={detailDocMode === "NF"} onOpenChange={(open) => !open && setDetailDocMode("")}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Adicionar Nota Fiscal à OS</DialogTitle></DialogHeader><div className="grid gap-3 sm:grid-cols-2"><div><Label>Número</Label><Input className="mt-1" value={detailNota.numero} onChange={(e) => setDetailNota({ ...detailNota, numero: e.target.value })} /></div><div><Label>Série</Label><Input className="mt-1" value={detailNota.serie} onChange={(e) => setDetailNota({ ...detailNota, serie: e.target.value })} /></div><div><Label>Data de emissão</Label><Input className="mt-1" type="date" value={detailNota.dataEmissao} onChange={(e) => setDetailNota({ ...detailNota, dataEmissao: e.target.value })} /></div><div><Label>Valor da NF</Label><Input className="mt-1" type="number" min="0" step="0.01" value={detailNota.valor} onChange={(e) => setDetailNota({ ...detailNota, valor: e.target.value })} /></div><div className="sm:col-span-2"><Label>Chave de acesso</Label><Input className="mt-1" value={detailNota.chaveAcesso} onChange={(e) => setDetailNota({ ...detailNota, chaveAcesso: e.target.value })} /></div><div className="sm:col-span-2"><Label>Arquivo *</Label><Input className="mt-1" type="file" accept=".pdf,.xml,image/jpeg,image/png,image/webp" onChange={(e) => setDetailNota({ ...detailNota, file: e.target.files?.[0] || null })} /></div></div><DialogFooter><Button variant="outline" onClick={() => setDetailDocMode("")}>Cancelar</Button><Button disabled={detailUploading} onClick={() => void saveDetailDocument()}>{detailUploading ? "Enviando..." : "Anexar Nota Fiscal"}</Button></DialogFooter></DialogContent></Dialog>
 
     <Dialog open={detailDocMode === "ANEXO"} onOpenChange={(open) => !open && setDetailDocMode("")}><DialogContent><DialogHeader><DialogTitle>Adicionar anexo à OS</DialogTitle></DialogHeader><div className="space-y-3"><div><Label>Tipo</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={detailAnexo.tipo} onChange={(e) => setDetailAnexo({ ...detailAnexo, tipo: e.target.value })}><option value="ORDEM_SERVICO">OS da oficina</option><option value="ORCAMENTO">Orçamento</option><option value="FOTO">Foto</option><option value="COMPROVANTE">Comprovante</option><option value="OUTRO">Outro</option></select></div><div><Label>Descrição</Label><Input className="mt-1" value={detailAnexo.descricao} onChange={(e) => setDetailAnexo({ ...detailAnexo, descricao: e.target.value })} /></div><div><Label>Arquivo *</Label><Input className="mt-1" type="file" accept=".pdf,.xml,image/jpeg,image/png,image/webp" onChange={(e) => setDetailAnexo({ ...detailAnexo, file: e.target.files?.[0] || null })} /></div></div><DialogFooter><Button variant="outline" onClick={() => setDetailDocMode("")}>Cancelar</Button><Button disabled={detailUploading} onClick={() => void saveDetailDocument()}>{detailUploading ? "Enviando..." : "Adicionar anexo"}</Button></DialogFooter></DialogContent></Dialog>
+
+
+    <Dialog open={quickVehicleOpen} onOpenChange={setQuickVehicleOpen}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Novo veículo</DialogTitle></DialogHeader><form onSubmit={saveQuickVehicle} className="space-y-4"><div className="grid gap-3 sm:grid-cols-2"><div><Label>Placa *</Label><Input className="mt-1" value={quickVehicleForm.placa} onChange={(e) => setQuickVehicleForm((current) => ({ ...current, placa: formatPlateQuick(e.target.value) }))} placeholder="ABC-1234" /></div><div><Label>Tipo *</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={quickVehicleForm.subcategoria} onChange={(e) => setQuickVehicleForm((current) => ({ ...current, subcategoria: e.target.value as SubcategoriaVeiculo }))}><option value="CAMINHAO">Caminhão</option><option value="CARRO">Carro</option><option value="MOTO">Moto</option></select></div><div><Label>Marca</Label><Input className="mt-1" value={quickVehicleForm.marca} onChange={(e) => setQuickVehicleForm((current) => ({ ...current, marca: e.target.value }))} /></div><div><Label>Modelo</Label><Input className="mt-1" value={quickVehicleForm.modelo} onChange={(e) => setQuickVehicleForm((current) => ({ ...current, modelo: e.target.value }))} /></div><div className="sm:col-span-2"><Label>Motorista vinculado *</Label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={quickVehicleForm.motoristaId} onChange={(e) => setQuickVehicleForm((current) => ({ ...current, motoristaId: e.target.value }))}><option value="">Selecione o motorista</option>{activeDrivers.map((motorista) => <option key={motorista.id} value={motorista.id}>{motorista.nome}</option>)}</select></div></div><DialogFooter><Button type="button" variant="outline" onClick={() => setQuickVehicleOpen(false)}>Cancelar</Button><Button type="submit" disabled={quickVehicleSaving}>{quickVehicleSaving ? "Salvando..." : "Salvar veículo"}</Button></DialogFooter></form></DialogContent></Dialog>
+
+    <Dialog open={quickSupplierOpen} onOpenChange={setQuickSupplierOpen}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Nova oficina / fornecedor</DialogTitle></DialogHeader><form onSubmit={saveQuickSupplier} className="space-y-4"><div className="grid gap-3 sm:grid-cols-2"><div className="sm:col-span-2"><Label>Nome / razão social *</Label><Input className="mt-1" value={quickSupplierForm.razaoSocial} onChange={(e) => setQuickSupplierForm((current) => ({ ...current, razaoSocial: e.target.value }))} /></div><div><Label>Nome fantasia</Label><Input className="mt-1" value={quickSupplierForm.nomeFantasia} onChange={(e) => setQuickSupplierForm((current) => ({ ...current, nomeFantasia: e.target.value }))} /></div><div><Label>CNPJ / CPF</Label><Input className="mt-1" value={quickSupplierForm.documento} onChange={(e) => setQuickSupplierForm((current) => ({ ...current, documento: digitsOnly(e.target.value).slice(0, 14) }))} /></div><div><Label>Telefone</Label><Input className="mt-1" value={quickSupplierForm.telefone} onChange={(e) => setQuickSupplierForm((current) => ({ ...current, telefone: e.target.value }))} /></div><div><Label>Contato</Label><Input className="mt-1" value={quickSupplierForm.contato} onChange={(e) => setQuickSupplierForm((current) => ({ ...current, contato: e.target.value }))} /></div><div><Label>Cidade</Label><Input className="mt-1" value={quickSupplierForm.cidade} onChange={(e) => setQuickSupplierForm((current) => ({ ...current, cidade: e.target.value }))} /></div><div><Label>UF</Label><Input className="mt-1" maxLength={2} value={quickSupplierForm.uf} onChange={(e) => setQuickSupplierForm((current) => ({ ...current, uf: e.target.value.toUpperCase() }))} /></div></div><p className="text-xs text-muted-foreground">Esse cadastro rápido já será criado como fornecedor ativo do tipo <strong>Oficina Mecânica</strong>.</p><DialogFooter><Button type="button" variant="outline" onClick={() => setQuickSupplierOpen(false)}>Cancelar</Button><Button type="submit" disabled={quickSupplierSaving}>{quickSupplierSaving ? "Salvando..." : "Salvar oficina"}</Button></DialogFooter></form></DialogContent></Dialog>
+
   </div></Layout>;
 }
