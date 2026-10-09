@@ -91,14 +91,22 @@ export function mergeStagingBiFacts(manual:StagingBiFact[],current:StagingBiFact
   const manualByInvoice=new Map<string,StagingBiFact[]>();
   for(const m of manual){if(!m.nf)continue;const key=invoiceKey(m);const list=manualByInvoice.get(key)||[];list.push(m);manualByInvoice.set(key,list)}
   const consumed=new Set<string>();
-  const currentMonths=new Set(current.map(stagingMonth).filter(Boolean));
+
   const live=current.map(x=>{
     const matches=x.nf?manualByInvoice.get(invoiceKey(x))||[]:[];
     if(!matches.length)return x;
     matches.forEach(m=>consumed.add(m.id));const faturamento=matches.reduce((s,m)=>s+m.faturamento,0);const n=matches[0];
-    return {...x,data:n.data||x.data,nf:n.nf||x.nf,serie:n.serie||x.serie,nfSerie:n.nfSerie||x.nfSerie,produtoCod:n.produtoCod||x.produtoCod,produto:n.produto||x.produto,placa:x.placa&&x.placa!=="Sem placa"?x.placa:n.placa,valorUnitProduto:n.valorUnitProduto||x.valorUnitProduto,faturamento,municipio:n.municipio||x.municipio};
+    // Se o romaneio atual estiver incompleto, preserve o frete documentado no histórico
+    // vinculado à mesma NF/produto; nunca substitua um valor válido por zero.
+    const historicoFrete=matches.find(m=>Number.isFinite(m.frete)&&Math.abs(m.frete)>0);
+    const frete=Number.isFinite(x.frete)&&Math.abs(x.frete)>0?x.frete:(historicoFrete?.frete??x.frete);
+    const quantidade=x.quantidade>0?x.quantidade:(n.quantidade||0);
+    return {...x,data:n.data||x.data,nf:n.nf||x.nf,serie:n.serie||x.serie,nfSerie:n.nfSerie||x.nfSerie,produtoCod:n.produtoCod||x.produtoCod,produto:n.produto||x.produto,placa:x.placa&&x.placa!=="Sem placa"?x.placa:n.placa,quantidade,frete,freteUnit:quantidade?frete/quantidade:0,valorUnitProduto:n.valorUnitProduto||x.valorUnitProduto,faturamento,municipio:n.municipio||x.municipio};
   });
-  const manualExtra=manual.filter(m=>!consumed.has(m.id)&&(!currentMonths.has(stagingMonth(m))||m.faturamento!==0)).map(m=>currentMonths.has(stagingMonth(m))?{...m,frete:0,freteUnit:0}:m);
+  // Nunca zere fretes históricos apenas porque existe um romaneio atual no mesmo mês.
+  // Isso eliminava valores legítimos de viagens sem correspondência exata no cadastro atual.
+  // Somente fatos realmente conciliados pela NF/produto são substituídos pelos registros atuais.
+  const manualExtra=manual.filter(m=>!consumed.has(m.id));
   const seen=new Set<string>();
   return fillMissingMunicipios([...manualExtra,...live].filter(x=>{const key=`${stagingKey(x)}|${x.id.startsWith("staging-nf-")?x.id:""}`;if(seen.has(key))return false;seen.add(key);return true}));
 }
