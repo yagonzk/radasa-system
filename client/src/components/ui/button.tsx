@@ -36,6 +36,16 @@ const buttonVariants = cva(
   }
 );
 
+const destructiveActionPattern = /(remov|exclu|apag|delet|arquiv|descart)/i;
+
+function extractButtonText(node: React.ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractButtonText).join(" ");
+  if (React.isValidElement(node)) return extractButtonText((node.props as { children?: React.ReactNode }).children);
+  return "";
+}
+
 function Button({
   className,
   variant,
@@ -47,11 +57,28 @@ function Button({
     asChild?: boolean;
   }) {
   const Comp = asChild ? Slot : "button";
+  const titleText = typeof props.title === "string" ? props.title : "";
+  const ariaText = typeof props["aria-label"] === "string" ? props["aria-label"] : "";
+  const childrenText = extractButtonText(props.children);
+  const isDestructiveAction = [titleText, ariaText, childrenText].some((value) => destructiveActionPattern.test(value));
+  const destructiveClassName = isDestructiveAction
+    ? variant === "ghost"
+      ? "text-destructive hover:text-destructive hover:bg-destructive/10"
+      : variant === "outline"
+        ? "border-destructive/40 text-destructive hover:text-destructive hover:bg-destructive/10"
+        : variant === "secondary"
+          ? "bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive"
+          : variant === "link"
+            ? "text-destructive hover:text-destructive"
+            : !variant || variant === "default"
+              ? "bg-destructive text-white hover:bg-destructive/90"
+              : ""
+    : "";
 
   return (
     <Comp
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(buttonVariants({ variant, size, className }), destructiveClassName)}
       {...props}
     />
   );
