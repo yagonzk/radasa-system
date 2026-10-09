@@ -699,15 +699,53 @@ export default function Manutencao() {
               ["Serviço de freios", "FREIOS"],
               ["Serviço de pneus", "PNEUS_RODAS"],
             ].map(([descricao, categoria]) => <Button key={categoria} size="sm" variant="secondary" className="h-7 text-xs" type="button" onClick={() => addFrequentService(descricao, categoria)}>{descricao}</Button>)}</div>
-            {osForm.itens.length === 0 ? <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Nenhum serviço ou peça lançado. Selecione + Serviço ou + Peça acima para começar.</div> : <div className="space-y-2">{osForm.itens.map((item, index) => <div key={index} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12">
-              <div className="sm:col-span-2"><Label>Tipo</Label><select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={item.tipo} onChange={(e) => updateItem(index, { tipo: e.target.value as OsItem["tipo"], produtoId: e.target.value === "PECA" ? item.produtoId : null })}><option value="SERVICO">Serviço</option><option value="PECA">Peça</option><option value="OUTRO">Outro</option></select></div>
-              <div className="sm:col-span-3"><Label>{item.tipo === "PECA" ? "Descrição / peça" : "Descrição"}</Label><Input className="mt-1 h-9" value={item.descricao} onChange={(e) => updateItem(index, { descricao: e.target.value })} placeholder={item.tipo === "SERVICO" ? "Ex.: Troca do reparador" : "Ex.: Flexível do freio"} /></div>
-              <div className="sm:col-span-2"><div className="flex items-center gap-1"><Label>Categoria</Label><Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-5 w-5 rounded-full" aria-label="Ver exemplos da categoria"><CircleHelp className="h-4 w-4" /></Button></PopoverTrigger><PopoverContent className="w-80 text-sm"><div className="font-semibold">{maintenanceCategoryLabel(item.categoria)}</div><p className="mt-1 text-muted-foreground">{maintenanceCategoryExamples(item.categoria)}</p></PopoverContent></Popover></div><select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={item.categoria || ""} onChange={(e) => updateItem(index, { categoria: e.target.value })}><option value="">Selecione a categoria</option>{MANUTENCAO_CATEGORIAS.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></div>
-              <div className="sm:col-span-2"><Label>Almoxarifado</Label><select disabled={item.tipo !== "PECA"} className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm disabled:opacity-50" value={item.produtoId || ""} onChange={(e) => { const product = produtosEstoque.find((p) => p.id === e.target.value); updateItem(index, { produtoId: e.target.value || null, descricao: item.descricao || product?.nome || "" }); }}><option value="">Peça externa / Consumo direto</option>{produtosEstoque.map((p) => <option key={p.id} value={p.id}>{p.codigoInterno} · {p.nome}</option>)}</select></div>
-              <div className="sm:col-span-1"><Label>Qtd.</Label><Input className="mt-1 h-9" type="number" min="0" step="0.001" value={item.quantidade} onChange={(e) => updateItem(index, { quantidade: Number(e.target.value) })} /></div>
-              <div className="sm:col-span-1"><Label>Valor unit.</Label><Input className="mt-1 h-9" type="number" min="0" step="0.01" value={item.valorUnitario} onChange={(e) => updateItem(index, { valorUnitario: Number(e.target.value) })} /></div>
-              <div className="flex items-end justify-between gap-2 sm:col-span-1"><div className="pb-2 text-xs font-semibold">{money(numberValue(item.quantidade) * numberValue(item.valorUnitario))}</div><Button type="button" variant="ghost" size="icon" onClick={() => setOsForm((f) => ({ ...f, itens: f.itens.filter((_, i) => i !== index) }))}><X className="h-4 w-4" /></Button></div>
-            </div>)}</div>}
+            {osForm.itens.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Nenhum serviço ou peça lançado. Selecione + Serviço ou + Peça acima para começar.</div>
+            ) : (
+              <div className="space-y-3">
+                {osForm.itens.map((item, index) => (
+                  <div key={index} className="min-w-0 space-y-3 rounded-xl border bg-muted/10 p-3 sm:p-4">
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(9rem,0.75fr)_minmax(0,2fr)]">
+                      <div className="min-w-0">
+                        <Label>Tipo</Label>
+                        <select className="mt-1 h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm" value={item.tipo} onChange={(e) => updateItem(index, { tipo: e.target.value as OsItem["tipo"], produtoId: e.target.value === "PECA" ? item.produtoId : null })}>
+                          <option value="SERVICO">Serviço</option><option value="PECA">Peça</option><option value="OUTRO">Outro</option>
+                        </select>
+                      </div>
+                      <div className="min-w-0">
+                        <Label>{item.tipo === "PECA" ? "Descrição / peça" : "Descrição"}</Label>
+                        <Input className="mt-1 h-10 w-full min-w-0" value={item.descricao} onChange={(e) => updateItem(index, { descricao: e.target.value })} placeholder={item.tipo === "SERVICO" ? "Ex.: Troca do reparador" : "Ex.: Flexível do freio"} />
+                      </div>
+                    </div>
+
+                    <div className={`grid min-w-0 gap-3 ${item.tipo === "PECA" ? "sm:grid-cols-2" : "grid-cols-1"}`}>
+                      <div className="min-w-0">
+                        <div className="flex h-5 items-center gap-1">
+                          <Label>Categoria</Label>
+                          <Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-5 w-5 shrink-0 rounded-full" aria-label="Ver exemplos da categoria"><CircleHelp className="h-4 w-4" /></Button></PopoverTrigger><PopoverContent className="w-80 max-w-[calc(100vw-2rem)] text-sm"><div className="font-semibold">{maintenanceCategoryLabel(item.categoria)}</div><p className="mt-1 text-muted-foreground">{maintenanceCategoryExamples(item.categoria)}</p></PopoverContent></Popover>
+                        </div>
+                        <select className="mt-1 h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm" value={item.categoria || ""} onChange={(e) => updateItem(index, { categoria: e.target.value })}>
+                          <option value="">Selecione a categoria</option>{MANUTENCAO_CATEGORIAS.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+                        </select>
+                      </div>
+                      {item.tipo === "PECA" && <div className="min-w-0">
+                        <Label>Almoxarifado</Label>
+                        <select className="mt-1 h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm" value={item.produtoId || ""} onChange={(e) => { const product = produtosEstoque.find((p) => p.id === e.target.value); updateItem(index, { produtoId: e.target.value || null, descricao: item.descricao || product?.nome || "" }); }}>
+                          <option value="">Peça externa / Consumo direto</option>{produtosEstoque.map((p) => <option key={p.id} value={p.id}>{p.codigoInterno} · {p.nome}</option>)}
+                        </select>
+                      </div>}
+                    </div>
+
+                    <div className="grid min-w-0 grid-cols-2 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_auto]">
+                      <div className="min-w-0"><Label>Quantidade</Label><Input className="mt-1 h-10 w-full min-w-0" type="number" min="0" step="0.001" value={item.quantidade} onChange={(e) => updateItem(index, { quantidade: Number(e.target.value) })} /></div>
+                      <div className="min-w-0"><Label>Valor unitário</Label><Input className="mt-1 h-10 w-full min-w-0" type="number" min="0" step="0.01" value={item.valorUnitario} onChange={(e) => updateItem(index, { valorUnitario: Number(e.target.value) })} /></div>
+                      <div className="min-w-0"><div className="text-xs text-muted-foreground">Total do item</div><div className="flex min-h-10 items-center text-sm font-semibold tabular-nums sm:text-base">{money(numberValue(item.quantidade) * numberValue(item.valorUnitario))}</div></div>
+                      <Button type="button" variant="outline" size="icon" className="h-10 w-10 justify-self-end" title="Remover item" aria-label={`Remover item ${index + 1}`} onClick={() => setOsForm((f) => ({ ...f, itens: f.itens.filter((_, i) => i !== index) }))}><X className="h-4 w-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="space-y-3"><div><h3 className="font-semibold">Resumo dos custos</h3><p className="text-xs text-muted-foreground">O total é calculado automaticamente pelos itens informados.</p></div><div className="grid gap-3 sm:grid-cols-2"><div><Label>Desconto</Label><Input className="mt-1" type="number" min="0" step="0.01" value={osForm.desconto} onChange={(e) => setOsForm({ ...osForm, desconto: e.target.value })} /></div><div className="rounded-lg border bg-muted/30 p-3"><div className="text-xs text-muted-foreground">Total da OS</div><div className="mt-1 text-lg font-bold">{money(formTotal)}</div></div></div></section>
@@ -725,15 +763,44 @@ export default function Manutencao() {
           <details className="space-y-3 rounded-xl border p-4" key={`docs-${editingOsId || "new"}`}>
             <summary className="cursor-pointer font-semibold">Notas fiscais, anexos e observações <span className="ml-2 text-xs font-normal text-muted-foreground">(opcional · {pendingNotas.length} NF, {pendingAnexos.length} anexo(s))</span></summary>
             <div className="mt-4 space-y-5">
-          <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Notas Fiscais</h3><p className="text-xs text-muted-foreground">Anexe PDF, XML ou imagem e informe o valor. Uma OS pode ter várias notas.</p></div><Button type="button" variant="outline" onClick={() => setPendingNotas((n) => [...n, newNota()])}><FilePlus2 className="mr-1 h-4 w-4" />Adicionar NF</Button></div>{pendingNotas.map((nota, index) => <div key={nota.key} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12"><div className="sm:col-span-2"><Label>Número</Label><Input className="mt-1 h-9" value={nota.numero} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, numero: e.target.value } : r))} /></div><div className="sm:col-span-1"><Label>Série</Label><Input className="mt-1 h-9" value={nota.serie} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, serie: e.target.value } : r))} /></div><div className="sm:col-span-2"><Label>Data emissão</Label><Input className="mt-1 h-9" type="date" value={nota.dataEmissao} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, dataEmissao: e.target.value } : r))} /></div><div className="sm:col-span-2"><Label>Valor da NF</Label><Input className="mt-1 h-9" type="number" min="0" step="0.01" value={nota.valor} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, valor: e.target.value } : r))} /></div><div className="sm:col-span-4"><Label>Arquivo *</Label><Input className="mt-1 h-9" type="file" accept=".pdf,.xml,image/jpeg,image/png,image/webp" onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, file: e.target.files?.[0] || null } : r))} /></div><div className="flex items-end sm:col-span-1"><Button type="button" size="icon" variant="ghost" onClick={() => setPendingNotas((rows) => rows.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button></div><div className="sm:col-span-12"><Label>Chave de acesso</Label><Input className="mt-1 h-9" maxLength={54} value={nota.chaveAcesso} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, chaveAcesso: e.target.value } : r))} placeholder="44 dígitos (opcional)" /></div></div>)}</section>
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div><h3 className="font-semibold">Notas Fiscais</h3><p className="text-xs text-muted-foreground">Anexe PDF, XML ou imagem e informe o valor. Uma OS pode ter várias notas.</p></div>
+              <Button type="button" variant="outline" onClick={() => setPendingNotas((n) => [...n, newNota()])}><FilePlus2 className="mr-1 h-4 w-4" />Adicionar NF</Button>
+            </div>
+            {pendingNotas.map((nota, index) => <div key={nota.key} className="min-w-0 space-y-3 rounded-lg border p-3 sm:p-4">
+              <div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold">Nota fiscal {index + 1}</span><Button type="button" size="icon" variant="ghost" aria-label={`Remover nota fiscal ${index + 1}`} onClick={() => setPendingNotas((rows) => rows.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button></div>
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                <div className="min-w-0"><Label>Número</Label><Input className="mt-1 h-10 w-full min-w-0" value={nota.numero} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, numero: e.target.value } : r))} /></div>
+                <div className="min-w-0"><Label>Série</Label><Input className="mt-1 h-10 w-full min-w-0" value={nota.serie} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, serie: e.target.value } : r))} /></div>
+                <div className="min-w-0"><Label>Data de emissão</Label><Input className="mt-1 h-10 w-full min-w-0" type="date" value={nota.dataEmissao} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, dataEmissao: e.target.value } : r))} /></div>
+                <div className="min-w-0"><Label>Valor da NF</Label><Input className="mt-1 h-10 w-full min-w-0" type="number" min="0" step="0.01" value={nota.valor} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, valor: e.target.value } : r))} /></div>
+                <div className="min-w-0 sm:col-span-2"><Label>Arquivo *</Label><Input className="mt-1 h-10 w-full min-w-0" type="file" accept=".pdf,.xml,image/jpeg,image/png,image/webp" onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, file: e.target.files?.[0] || null } : r))} /></div>
+                <div className="min-w-0 sm:col-span-2"><Label>Chave de acesso</Label><Input className="mt-1 h-10 w-full min-w-0" maxLength={54} value={nota.chaveAcesso} onChange={(e) => setPendingNotas((rows) => rows.map((r, i) => i === index ? { ...r, chaveAcesso: e.target.value } : r))} placeholder="44 dígitos (opcional)" /></div>
+              </div>
+            </div>)}
+          </section>
 
-          <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Outros anexos</h3><p className="text-xs text-muted-foreground">OS em papel, orçamento, fotos, comprovantes ou outros documentos.</p></div><Button type="button" variant="outline" onClick={() => setPendingAnexos((a) => [...a, newAnexo()])}><Paperclip className="mr-1 h-4 w-4" />Adicionar anexo</Button></div>{pendingAnexos.map((anexo, index) => <div key={anexo.key} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12"><div className="sm:col-span-3"><Label>Tipo</Label><select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={anexo.tipo} onChange={(e) => setPendingAnexos((rows) => rows.map((r, i) => i === index ? { ...r, tipo: e.target.value } : r))}><option value="ORDEM_SERVICO">OS da oficina</option><option value="ORCAMENTO">Orçamento</option><option value="FOTO">Foto</option><option value="COMPROVANTE">Comprovante</option><option value="OUTRO">Outro</option></select></div><div className="sm:col-span-4"><Label>Descrição</Label><Input className="mt-1 h-9" value={anexo.descricao} onChange={(e) => setPendingAnexos((rows) => rows.map((r, i) => i === index ? { ...r, descricao: e.target.value } : r))} /></div><div className="sm:col-span-4"><Label>Arquivo *</Label><Input className="mt-1 h-9" type="file" accept=".pdf,.xml,image/jpeg,image/png,image/webp" onChange={(e) => setPendingAnexos((rows) => rows.map((r, i) => i === index ? { ...r, file: e.target.files?.[0] || null } : r))} /></div><div className="flex items-end sm:col-span-1"><Button type="button" size="icon" variant="ghost" onClick={() => setPendingAnexos((rows) => rows.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button></div></div>)}</section>
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div><h3 className="font-semibold">Outros anexos</h3><p className="text-xs text-muted-foreground">OS em papel, orçamento, fotos, comprovantes ou outros documentos.</p></div>
+              <Button type="button" variant="outline" onClick={() => setPendingAnexos((a) => [...a, newAnexo()])}><Paperclip className="mr-1 h-4 w-4" />Adicionar anexo</Button>
+            </div>
+            {pendingAnexos.map((anexo, index) => <div key={anexo.key} className="min-w-0 space-y-3 rounded-lg border p-3 sm:p-4">
+              <div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold">Anexo {index + 1}</span><Button type="button" size="icon" variant="ghost" aria-label={`Remover anexo ${index + 1}`} onClick={() => setPendingAnexos((rows) => rows.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button></div>
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                <div className="min-w-0"><Label>Tipo</Label><select className="mt-1 h-10 w-full min-w-0 rounded-md border bg-background px-3 text-sm" value={anexo.tipo} onChange={(e) => setPendingAnexos((rows) => rows.map((r, i) => i === index ? { ...r, tipo: e.target.value } : r))}><option value="ORDEM_SERVICO">OS da oficina</option><option value="ORCAMENTO">Orçamento</option><option value="FOTO">Foto</option><option value="COMPROVANTE">Comprovante</option><option value="OUTRO">Outro</option></select></div>
+                <div className="min-w-0"><Label>Descrição</Label><Input className="mt-1 h-10 w-full min-w-0" value={anexo.descricao} onChange={(e) => setPendingAnexos((rows) => rows.map((r, i) => i === index ? { ...r, descricao: e.target.value } : r))} /></div>
+                <div className="min-w-0 sm:col-span-2"><Label>Arquivo *</Label><Input className="mt-1 h-10 w-full min-w-0" type="file" accept=".pdf,.xml,image/jpeg,image/png,image/webp" onChange={(e) => setPendingAnexos((rows) => rows.map((r, i) => i === index ? { ...r, file: e.target.files?.[0] || null } : r))} /></div>
+              </div>
+            </div>)}
+          </section>
 
           <div><Label>Observações</Label><Textarea className="mt-1 min-h-24" value={osForm.observacoes} onChange={(e) => setOsForm({ ...osForm, observacoes: e.target.value })} /></div>
             </div>
           </details>
         </div>
-        <DialogFooter className="sticky bottom-0 mt-5 flex-row items-center justify-between gap-3 border-t bg-background/95 pt-3 backdrop-blur"><div className="mr-auto text-sm"><span className="block text-xs text-muted-foreground">Total estimado</span><strong className="tabular-nums">{money(formTotal)}</strong></div><Button variant="outline" onClick={() => setModal("")} disabled={saving}>Cancelar</Button><Button onClick={() => void salvarOs()} disabled={saving}>{saving ? "Salvando..." : editingOsId ? "Salvar alterações" : "Salvar manutenção"}</Button></DialogFooter>
+        <DialogFooter className="sticky bottom-0 mt-5 flex flex-col items-stretch gap-3 border-t bg-background/95 pt-3 backdrop-blur sm:flex-row sm:items-center"><div className="mr-auto min-w-0 text-sm"><span className="block text-xs text-muted-foreground">Total estimado</span><strong className="tabular-nums">{money(formTotal)}</strong></div><Button className="w-full sm:w-auto" variant="outline" onClick={() => setModal("")} disabled={saving}>Cancelar</Button><Button className="w-full sm:w-auto" onClick={() => void salvarOs()} disabled={saving}>{saving ? "Salvando..." : editingOsId ? "Salvar alterações" : "Salvar manutenção"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
 
