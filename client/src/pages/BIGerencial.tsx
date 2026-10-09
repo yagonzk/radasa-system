@@ -81,7 +81,7 @@ export default function BIGerencial(){
  const monthNames=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
  const monthSheetName=(mes:string)=>{const [ano,m]=mes.split("-");return `${monthNames[Math.max(0,Number(m)-1)]||mes} ${ano}`.slice(0,31)};
  const exportFaturamentoXlsx=()=>{
-  const exportRows=facts;
+  const exportRows=consultaFiltered;
   const headers=["Data","Cod Cliente","Cliente","Cod. Produto","Produto","Valor Unitário","Quantidade"];
   const makeSheet=(items:Fact[])=>{
    const data:any[][]=[headers,...items.map(x=>[x.data,x.clienteCod||"",x.cliente,x.produtoCod||"",x.produto,x.valorUnitProduto,x.quantidade])];
@@ -93,12 +93,12 @@ export default function BIGerencial(){
   XLSX.utils.book_append_sheet(wb,makeSheet(exportRows),"GERAL");
   const months=[...new Set(exportRows.map(x=>x.mes).filter(Boolean))].sort();
   for(const mes of months)XLSX.utils.book_append_sheet(wb,makeSheet(exportRows.filter(x=>x.mes===mes)),monthSheetName(mes));
-  XLSX.writeFile(wb,"BI-Gerencial_faturamento_historico-completo.xlsx");
+  XLSX.writeFile(wb,"BI-Gerencial_faturamento_filtrado.xlsx");
  };
  const exportFreteUnitXlsx=()=>{
   type ClienteFreteUnit={cliente:string;data:string;municipio:string;faturamento:number;frete:number;quantidade:number};
   const consolidado=new Map<string,ClienteFreteUnit>();
-  for(const x of filtered){
+  for(const x of consultaFiltered){
    const chave=x.clienteId||x.clienteCod||x.cliente.trim().toLocaleLowerCase("pt-BR");
    const atual=consolidado.get(chave);
    if(!atual){consolidado.set(chave,{cliente:x.cliente,data:x.data||"",municipio:x.municipio||"",faturamento:Number(x.faturamento)||0,frete:Number(x.frete)||0,quantidade:Number(x.quantidade)||0});continue;}
@@ -121,7 +121,7 @@ export default function BIGerencial(){
  const exportFreteXlsx=()=>{
   type FreteRow={data:string;clienteCod:string;cliente:string;romaneio:string;valorRomaneio:number;mes:string};
   const map=new Map<string,FreteRow>();
-  for(const x of facts){
+  for(const x of consultaFiltered){
    if(!x.romaneio)continue;
    const key=[x.data,x.romaneio,x.clienteCod||x.clienteId,x.cliente].join("|");
    const atual=map.get(key);
@@ -138,10 +138,10 @@ export default function BIGerencial(){
   XLSX.utils.book_append_sheet(wb,makeSheet(exportRows),"GERAL");
   const months=[...new Set(exportRows.map(x=>x.mes).filter(Boolean))].sort();
   for(const mes of months)XLSX.utils.book_append_sheet(wb,makeSheet(exportRows.filter(x=>x.mes===mes)),monthSheetName(mes));
-  XLSX.writeFile(wb,"BI-Gerencial_frete_historico-completo.xlsx");
+  XLSX.writeFile(wb,"BI-Gerencial_frete_filtrado.xlsx");
  };
  return <Layout><div className="min-h-screen bg-background text-foreground p-4 md:p-6"><div className="mx-auto max-w-[1800px] space-y-5">
-  <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><BarChart3 className="h-6 w-6 text-[#0A508E]"/><h1 className="text-2xl font-bold text-[#0A508E] dark:text-foreground">BI Gerencial</h1></div><p className="mt-1 text-sm text-muted-foreground">Visão consolidada do histórico existente, NF-e do staging e Romaneios atuais.</p></div><div className="flex flex-wrap items-center gap-2"><Popover><PopoverTrigger asChild><Button variant="outline" className="h-9 text-xs" disabled={!facts.length}><FileSpreadsheet className="mr-2 h-3.5 w-3.5"/>Exportar XLSX</Button></PopoverTrigger><PopoverContent align="end" className="w-56 p-3 border-border bg-popover text-popover-foreground"><div className="mb-2 text-xs font-semibold text-muted-foreground">Escolha o tipo de exportação</div><div className="grid gap-2"><Button type="button" className="h-9 bg-[#0A508E] text-white hover:bg-[#0A508E]/90" onClick={exportFreteXlsx}>Frete</Button><Button type="button" className="h-9 bg-[#7C3AED] text-white hover:bg-[#6D28D9]" onClick={exportFreteUnitXlsx}>Frete Unit</Button><Button type="button" className="h-9 bg-[#159447] text-white hover:bg-[#159447]/90" onClick={exportFaturamentoXlsx}>Faturamento</Button></div></PopoverContent></Popover><div className="flex items-center gap-2 text-xs text-muted-foreground"><Database className="h-4 w-4"/>{loading?"Carregando staging...":`${facts.length.toLocaleString("pt-BR")} registros consolidados`}</div></div></div>
+  <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><BarChart3 className="h-6 w-6 text-[#0A508E]"/><h1 className="text-2xl font-bold text-[#0A508E] dark:text-foreground">BI Gerencial</h1></div><p className="mt-1 text-sm text-muted-foreground">Visão consolidada do histórico existente, NF-e do staging e Romaneios atuais.</p></div><div className="flex flex-wrap items-center gap-2"><Popover><PopoverTrigger asChild><Button variant="outline" className="h-9 text-xs" disabled={!consultaFiltered.length}><FileSpreadsheet className="mr-2 h-3.5 w-3.5"/>Exportar XLSX</Button></PopoverTrigger><PopoverContent align="end" className="w-56 p-3 border-border bg-popover text-popover-foreground"><div className="mb-2 text-xs font-semibold text-muted-foreground">Escolha o tipo de exportação</div><div className="grid gap-2"><Button type="button" className="h-9 bg-[#0A508E] text-white hover:bg-[#0A508E]/90" onClick={exportFreteXlsx}>Frete</Button><Button type="button" className="h-9 bg-[#7C3AED] text-white hover:bg-[#6D28D9]" onClick={exportFreteUnitXlsx}>Frete Unit</Button><Button type="button" className="h-9 bg-[#159447] text-white hover:bg-[#159447]/90" onClick={exportFaturamentoXlsx}>Faturamento</Button></div></PopoverContent></Popover><div className="flex items-center gap-2 text-xs text-muted-foreground"><Database className="h-4 w-4"/>{loading?"Carregando staging...":`${facts.length.toLocaleString("pt-BR")} registros consolidados`}</div></div></div>
   <section className="rounded-xl border border-border bg-card text-card-foreground p-4 shadow-sm"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6"><div className="space-y-1"><label className="text-xs font-semibold text-muted-foreground">Data inicial</label><input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="h-9 w-full rounded-md border border-border bg-background text-foreground px-2 text-xs"/></div><div className="space-y-1"><label className="text-xs font-semibold text-muted-foreground">Data final</label><input type="date" value={to} onChange={e=>setTo(e.target.value)} className="h-9 w-full rounded-md border border-border bg-background text-foreground px-2 text-xs"/></div><MultiFilter label="Placa" values={placas} onChange={setPlacas} options={plateOptions}/><MultiFilter label="Cliente" values={clienteIds} onChange={setClienteIds} options={clientOptions}/><MultiFilter label="Produto" values={produtoKeys} onChange={setProdutoKeys} options={productOptions}/><div className="flex items-end"><Button variant="outline" className="h-9 w-full text-xs" onClick={clear}><RotateCcw className="mr-2 h-3.5 w-3.5"/>Limpar filtros</Button></div></div></section>
   <nav className="flex flex-wrap gap-2 rounded-xl border border-border bg-card text-card-foreground p-2 shadow-sm">{[["geral","Visão Geral"],["produtos","Produtos"],["clientes","Clientes"],["placas","Veículos/Placas"],["consulta","Consulta Geral"]].map(([k,l])=><button key={k} onClick={()=>setTab(k)} className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${tab===k?"bg-[#0A508E] text-white shadow":"text-[#0A508E] dark:text-foreground hover:bg-[#159447]/10 hover:bg-muted"}`}>{l}</button>)}</nav>
   {tab==="geral"&&<><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6"><Kpi label="Faturamento" value={money(totals.faturamento)}/><Kpi label="Frete total" value={money(totals.frete)}/><Kpi label="Quantidade" value={num(totals.quantidade)}/><Kpi label="Valor unitário produto" value={money(totals.valorProduto)}/><Kpi label="Valor unitário frete" value={money(totals.valorFrete)}/><Kpi label="Frete / faturamento" value={pct(totals.percentual)}/></section><section className="rounded-xl border border-border bg-card text-card-foreground p-4 shadow-sm"><h2 className="mb-3 font-semibold text-[#0A508E] dark:text-foreground">Evolução por mês</h2><div className="h-80"><ResponsiveContainer width="100%" height="100%"><LineChart data={byMonth}><CartesianGrid stroke={isDark?"#334155":"#e2e8f0"} strokeDasharray="3 3"/><XAxis dataKey="label" fontSize={11} tick={{fill:isDark?"#cbd5e1":"#475569"}}/><YAxis fontSize={10} tick={{fill:isDark?"#cbd5e1":"#475569"}}/><Tooltip contentStyle={chartTooltipStyle} labelStyle={{color:isDark?"#f8fafc":"#0f172a"}} formatter={(v)=>money(Number(v||0))}/><Legend/><Line type="monotone" dataKey="faturamento" name="Faturamento" stroke="#0A508E" strokeWidth={3}/><Line type="monotone" dataKey="frete" name="Frete" stroke="#159447" strokeWidth={3}/></LineChart></ResponsiveContainer></div></section></>}
