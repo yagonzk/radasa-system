@@ -113,6 +113,19 @@ function normalizeCidadeLookup(value: string) {
   return normalizeLookup(value).replace(/\s*[\/,-]?\s*(MT|PA)$/i, "").trim();
 }
 
+// Prioriza a UF informada no destino; para cidades sem UF, usa o cadastro de locais
+// somente quando a cidade corresponde a um único estado cadastrado.
+function ufDestinoViagem(cidadeEntrega: string, locais: Array<{ cidade: string; uf?: string | null }>): string {
+  const destino = String(cidadeEntrega ?? "").trim();
+  const sigla = destino.match(/(?:^|[\s,\/\-])(?:MT|PA)\s*$/i);
+  if (sigla) return sigla[0].trim().replace(/^[,\/\-]\s*/, "").toUpperCase();
+  const estados = new Set(locais
+    .filter((local) => normalizeCidadeLookup(local.cidade) === normalizeCidadeLookup(destino))
+    .map((local) => (local.uf || local.cidade.match(/(?:^|[\s,\/\-])(MT|PA)\s*$/i)?.[1] || "").toUpperCase())
+    .filter((uf) => uf === "MT" || uf === "PA"));
+  return estados.size === 1 ? [...estados][0] : "";
+}
+
 function formatKm(value: number) {
   return Number(value || 0).toLocaleString("pt-BR", {
     minimumFractionDigits: 0,
@@ -341,6 +354,7 @@ export default function Viagens() {
   const [editingViagem, setEditingViagem] = useState<Viagem | null>(null);
   const [viewingViagem, setViewingViagem] = useState<Viagem | null>(null);
   const [search, setSearch] = useState("");
+  const [ufFiltro, setUfFiltro] = useState<"TODOS" | "MT" | "PA">("TODOS");
   const [columnFilters, setColumnFilters] = useState<ViagemColumnFilters>(() => ({
     ...emptyViagemColumnFilters,
     dataInicio: initialViagemMonth.from,
@@ -525,6 +539,7 @@ export default function Viagens() {
           if (!searchable.includes(query)) return false;
         }
 
+        if (ufFiltro !== "TODOS" && ufDestinoViagem(v.cidadeEntrega, locais) !== ufFiltro) return false;
         if (columnFilters.dataInicio && v.dataManifesto < columnFilters.dataInicio) return false;
         if (columnFilters.dataFim && v.dataManifesto > columnFilters.dataFim) return false;
         if (columnFilters.placa && v.placa !== columnFilters.placa) return false;
@@ -542,7 +557,7 @@ export default function Viagens() {
         b.dataManifesto.localeCompare(a.dataManifesto) ||
         String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")),
       );
-  }, [columnFilters, locais, motoristaById, search, viagens]);
+  }, [columnFilters, locais, motoristaById, search, ufFiltro, viagens]);
 
   const totalCustos = filteredViagens.reduce(
     (sum: number, v: Viagem) => sum + viagemTotalCusto(v, locais),
@@ -571,6 +586,7 @@ export default function Viagens() {
   };
 
   const hasColumnFilters = Boolean(
+    ufFiltro !== "TODOS" ||
     columnFilters.dataInicio ||
     columnFilters.dataFim ||
     columnFilters.placa ||
@@ -924,11 +940,24 @@ export default function Viagens() {
               className="pl-9"
             />
           </div>
+          <div className="flex min-w-[160px] items-center gap-2">
+            <Label htmlFor="filtro-uf-acerto" className="shrink-0 text-sm">Estado</Label>
+            <Select value={ufFiltro} onValueChange={(value) => setUfFiltro(value as "TODOS" | "MT" | "PA")}>
+              <SelectTrigger id="filtro-uf-acerto" aria-label="Filtrar acertos por estado" className="min-w-[130px]">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="TODOS">Todos</SelectItem>
+                <SelectItem value="MT">Mato Grosso (MT)</SelectItem>
+                <SelectItem value="PA">Pará (PA)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {hasColumnFilters && (
             <Button
               type="button"
               variant="outline"
-              onClick={() => setColumnFilters(emptyViagemColumnFilters)}
+              onClick={() => { setColumnFilters(emptyViagemColumnFilters); setUfFiltro("TODOS"); }}
             >
               <X className="mr-2 h-4 w-4" />
               Limpar filtros
