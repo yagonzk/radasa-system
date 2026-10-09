@@ -1,3 +1,4 @@
+import { formatBrazilianPhoneInput } from "@/lib/phoneMask";
 import { formatCpfCnpjInput } from "@/lib/documentMasks";
 import { useMemo, useState } from "react";
 import CnpjLookupButton from "./CnpjLookupButton";
@@ -170,14 +171,14 @@ export default function FornecedorTab() {
             <div><Label>CNPJ/CPF</Label><div className="mt-1 flex min-w-0 gap-2"><Input className="min-w-0 flex-1" inputMode="numeric" maxLength={18} placeholder="CPF ou CNPJ" value={formatCpfCnpjInput(form.documento)} onChange={(e) => setForm({ ...form, documento: digits(e.target.value).slice(0, 14) })} /><CnpjLookupButton cnpj={form.documento} disabled={saving} duplicateMessage={duplicateCnpj(form.documento)} onFound={(data, consulted) => setForm((current) => digits(current.documento) !== consulted ? current : ({ ...current,
       razaoSocial: fillIfEmpty(current.razaoSocial, data.razaoSocial),
       nomeFantasia: fillIfEmpty(current.nomeFantasia, data.nomeFantasia),
-      telefone: fillIfEmpty(current.telefone, data.telefone),
+      telefone: formatBrazilianPhoneInput(fillIfEmpty(current.telefone, data.telefone)),
       email: fillIfEmpty(current.email, data.email),
       endereco: fillIfEmpty(current.endereco, formatCompanyAddress(data)),
       cidade: fillIfEmpty(current.cidade, data.cidade),
       uf: fillIfEmpty(current.uf, data.uf),
     }))} /></div></div>
             <div><Label>Contato responsável</Label><Input className="mt-1" value={form.contato} onChange={(e) => setForm({ ...form, contato: e.target.value })} /></div>
-            <div><Label>Telefone / WhatsApp</Label><Input className="mt-1" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} /></div>
+            <div><Label>Telefone / WhatsApp</Label><Input className="mt-1" value={formatBrazilianPhoneInput(form.telefone)} onChange={(e) => setForm({ ...form, telefone: formatBrazilianPhoneInput(e.target.value) })} /></div>
             <div><Label>E-mail</Label><Input className="mt-1" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             <div className="sm:col-span-2"><Label>Endereço</Label><Input className="mt-1" value={form.endereco} onChange={(e) => setForm({ ...form, endereco: e.target.value })} /></div>
             <div><Label>Cidade</Label><Input className="mt-1" value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value })} /></div>

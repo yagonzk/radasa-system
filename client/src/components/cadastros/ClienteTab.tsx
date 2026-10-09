@@ -1,3 +1,4 @@
+import { formatBrazilianPhoneInput } from "@/lib/phoneMask";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import * as XLSX from "xlsx";
 import { useClientes, type Cliente } from "@/lib/store";
@@ -778,7 +779,7 @@ export default function ClienteTab() {
                     razaoSocial: fillIfEmpty(current.razaoSocial, data.razaoSocial),
                     nomeFantasia: fillIfEmpty(current.nomeFantasia, data.nomeFantasia || data.razaoSocial),
                     email: fillIfEmpty(current.email, data.email),
-                    telefone: fillIfEmpty(current.telefone, data.telefone),
+                    telefone: formatBrazilianPhoneInput(fillIfEmpty(current.telefone, data.telefone)),
                     enderecoFiscal: fillIfEmpty(current.enderecoFiscal, formatCompanyAddress(data)),
                   }))}
                 />
@@ -795,8 +796,8 @@ export default function ClienteTab() {
               </FormField>
               <FormField label="Telefone">
                 <Input
-                  value={form.telefone}
-                  onChange={(e) => setForm({ ...form, telefone: e.target.value })}
+                  value={formatBrazilianPhoneInput(form.telefone)}
+                  onChange={(e) => setForm({ ...form, telefone: formatBrazilianPhoneInput(e.target.value) })}
                   placeholder="(00) 00000-0000"
                 />
               </FormField>

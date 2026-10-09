@@ -1,3 +1,4 @@
+import { formatBrazilianPhoneInput } from "@/lib/phoneMask";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Building2, FileKey2, LoaderCircle, Plus, Search, ShieldCheck } from "lucide-react";
 import { useEmpresa, type Empresa } from "@/lib/store";
@@ -252,7 +253,7 @@ export default function EmpresaTab() {
         nomeFantasia: fillIfEmpty(current.nomeFantasia, data.nomeFantasia),
         inscricaoEstadual: fillIfEmpty(current.inscricaoEstadual, data.inscricaoEstadual),
         email: fillIfEmpty(current.email, data.email),
-        telefone: fillIfEmpty(current.telefone, data.telefone),
+        telefone: formatBrazilianPhoneInput(fillIfEmpty(current.telefone, data.telefone)),
         cep: fillIfEmpty(current.cep, data.cep),
         logradouro: fillIfEmpty(current.logradouro, data.logradouro),
         numero: fillIfEmpty(current.numero, data.numero),
@@ -639,9 +640,9 @@ export default function EmpresaTab() {
 
                 <FormField label="Telefone">
                   <Input
-                    value={form.telefone}
+                    value={formatBrazilianPhoneInput(form.telefone)}
                     onChange={(event) =>
-                      setForm({ ...form, telefone: event.target.value })
+                      setForm({ ...form, telefone: formatBrazilianPhoneInput(event.target.value) })
                     }
                     placeholder="(00) 00000-0000"
                   />
