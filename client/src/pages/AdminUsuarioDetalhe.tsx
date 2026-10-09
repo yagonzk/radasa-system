@@ -1,3 +1,4 @@
+import { documentDigits, formatCpfInput } from "@/lib/documentMasks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -399,7 +400,7 @@ export default function AdminUsuarioDetalhe() {
                 <label className="text-sm">Username<Input className="mt-1" value={account.username} autoCapitalize="none" onChange={(event) => setAccount({ ...account, username: event.target.value })} /></label>
                 <label className="text-sm">E-mail<Input className="mt-1" type="email" value={account.email} autoCapitalize="none" onChange={(event) => setAccount({ ...account, email: event.target.value })} /></label>
                 <label className="text-sm">Telefone<Input className="mt-1" value={account.telefone} onChange={(event) => setAccount({ ...account, telefone: event.target.value })} /></label>
-                <label className="text-sm">CPF<Input className="mt-1" inputMode="numeric" value={account.cpf} onChange={(event) => setAccount({ ...account, cpf: event.target.value })} placeholder="Somente se desejar vincular" /></label>
+                <label className="text-sm">CPF<Input className="mt-1" inputMode="numeric" maxLength={14} value={formatCpfInput(account.cpf)} onChange={(event) => setAccount({ ...account, cpf: documentDigits(event.target.value).slice(0, 11) })} placeholder="000.000.000-00" /></label>
                 <label className="text-sm">ID interno<Input className="mt-1" value={user.id} readOnly disabled /></label>
                 <div className="md:col-span-2 flex justify-end"><Button onClick={() => void saveAccount()} disabled={savingAccount}><Save className="mr-2 h-4 w-4" />{savingAccount ? "Salvando..." : "Salvar dados"}</Button></div>
               </CardContent>

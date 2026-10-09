@@ -1,3 +1,4 @@
+import { formatCpfCnpjInput } from "@/lib/documentMasks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -2227,7 +2228,7 @@ export default function CiotGerarPage() {
                 </Select>
               </Field>
               <Field label="CPF/CNPJ creditado">
-                <Input value={anttFields.cpfCnpjCreditado} maxLength={14} onChange={(e) => setAnttFields((v) => ({ ...v, cpfCnpjCreditado: digits(e.target.value) }))} />
+                <Input inputMode="numeric" value={formatCpfCnpjInput(anttFields.cpfCnpjCreditado)} maxLength={18} placeholder="CPF ou CNPJ" onChange={(e) => setAnttFields((v) => ({ ...v, cpfCnpjCreditado: digits(e.target.value).slice(0, 14) }))} />
               </Field>
               {anttFields.tipoPagamento === "6" ? (
                 <>
