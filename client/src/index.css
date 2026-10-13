@@ -198,8 +198,8 @@
     padding-right: 1rem;
   }
 
-  .flex {
-    min-height: 0;
+  /* Limita a prevenção de overflow ao conteúdo, sem zerar a altura do loader. */
+  [data-radasa-main] .flex {
     min-width: 0;
   }
 
