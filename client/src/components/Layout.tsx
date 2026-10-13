@@ -85,11 +85,11 @@ export default function Layout({ children }: { children: ReactNode }) {
     );
 
   return (
-    <div className={cn("module-shell module-transport flex min-h-screen min-w-0 bg-background", isDark && "dark")}>
+    <div className={cn("flex min-h-screen min-w-0 bg-background", isDark && "dark")}>
       {mobileMenuOpen && (
         <button
           type="button"
-          className="fixed inset-0 z-30 bg-black/45 backdrop-blur-[1px] lg:hidden"
+          className="fixed inset-0 z-30 bg-black/45 backdrop-blur-[1px] xl:hidden"
           aria-label="Fechar menu"
           onClick={() => setMobileMenuOpen(false)}
         />
@@ -98,13 +98,13 @@ export default function Layout({ children }: { children: ReactNode }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "surface-glass fixed left-3 top-3 z-40 flex h-[calc(100vh-1.5rem)] w-[236px] flex-col rounded-[2rem] border border-sidebar-border/90 bg-sidebar/95 shadow-[0_24px_60px_rgba(15,23,42,0.12)] transition-transform duration-200 lg:left-4 lg:top-4 lg:h-[calc(100vh-2rem)] lg:translate-x-0",
+          "surface-glass fixed left-3 top-3 z-40 flex h-[calc(100vh-1.5rem)] w-[236px] flex-col rounded-[2rem] border border-sidebar-border/90 bg-sidebar/95 shadow-[0_24px_60px_rgba(15,23,42,0.12)] transition-transform duration-200 xl:left-4 xl:top-4 xl:h-[calc(100vh-2rem)] xl:translate-x-0",
           mobileMenuOpen ? "translate-x-0" : "-translate-x-[120%]",
         )}
       >
         {/* Logo */}
         <div className="flex items-center gap-3 border-b border-sidebar-border/80 px-5 py-5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary to-chart-2 shadow-sm">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[#075181] to-[#1378a7] shadow-sm ring-1 ring-amber-400/35">
             <Truck className="h-5 w-5 text-primary-foreground" />
           </div>
           <span className="font-display text-[15px] font-bold leading-tight text-sidebar-foreground">
@@ -112,7 +112,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           </span>
           <button
             type="button"
-            className="ml-auto flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground hover:bg-sidebar-accent lg:hidden"
+            className="ml-auto flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground hover:bg-sidebar-accent xl:hidden"
             aria-label="Fechar menu"
             onClick={() => setMobileMenuOpen(false)}
           >
@@ -230,8 +230,8 @@ export default function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:ml-[268px]">
-        <header className="surface-glass sticky top-0 z-20 mx-3 mt-3 flex h-14 items-center gap-3 rounded-2xl border border-border/70 bg-background/85 px-3 shadow-sm backdrop-blur sm:mx-4 sm:px-4 lg:hidden">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col xl:ml-[268px]">
+        <header className="surface-glass sticky top-0 z-20 mx-3 mt-3 flex h-14 items-center gap-3 rounded-2xl border border-border/70 bg-background/85 px-3 shadow-sm backdrop-blur sm:mx-4 sm:px-4 xl:hidden">
           <button
             type="button"
             onClick={() => setMobileMenuOpen(true)}

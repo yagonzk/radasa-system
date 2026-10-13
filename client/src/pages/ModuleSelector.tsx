@@ -21,11 +21,11 @@ function ModuleCard({ module, onEnter }: { module: RadasaModule; onEnter: () => 
     : "Gestão agrícola, estoque, movimentações e lavouras.";
 
   return (
-    <Card className={cn("overflow-hidden border-2 transition", enabled ? "hover:border-primary/40 hover:shadow-md" : "opacity-75")}> 
+    <Card className={cn("overflow-hidden border-2 transition", enabled ? (transport ? "hover:border-primary/40 hover:shadow-md" : "hover:border-emerald-500/40 hover:shadow-md") : "opacity-75")}> 
       <CardContent className="p-0">
         <div className="flex min-h-[260px] flex-col p-6">
           <div className="flex items-start justify-between gap-3">
-            <div className={cn("flex h-12 w-12 items-center justify-center rounded-2xl", enabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}> 
+            <div className={cn("flex h-12 w-12 items-center justify-center rounded-2xl", enabled ? (transport ? "bg-primary/10 text-primary" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400") : "bg-muted text-muted-foreground")}> 
               <Icon className="h-6 w-6" />
             </div>
             <Badge variant="outline" className={cn(enabled ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-muted-foreground/20 bg-muted text-muted-foreground")}> 
@@ -45,7 +45,7 @@ function ModuleCard({ module, onEnter }: { module: RadasaModule; onEnter: () => 
           </div>
 
           <div className="mt-auto pt-5">
-            <Button className="w-full" disabled={!enabled} onClick={onEnter}>
+            <Button className={cn("w-full", !transport && "bg-[#266b40] text-white hover:bg-[#215e37] dark:bg-[#1d8242] dark:hover:bg-[#176e37]")} disabled={!enabled} onClick={onEnter}>
               {enabled ? <>Entrar em {title}<ArrowRight className="ml-2 h-4 w-4" /></> : title === "Agro" ? "Agro indisponível" : "Transportes indisponível"}
             </Button>
           </div>

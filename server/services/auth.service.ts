@@ -51,6 +51,7 @@ function signToken(user: { id: string; email: string; role: "ADMIN" | "GERENTE" 
     env.JWT_SECRET,
     {
       subject: user.id,
+      algorithm: "HS256",
       expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"],
     }
   );
