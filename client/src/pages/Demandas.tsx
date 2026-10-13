@@ -75,7 +75,7 @@ export default function Demandas() {
   const hoje = new Date().toISOString().slice(0,10);
 
   return <Layout>
-    <div className="flex h-[calc(100vh-112px)] min-h-[620px] flex-col gap-5 overflow-hidden">
+    <div className="flex min-w-0 flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2"><ListTodo className="h-6 w-6 text-primary"/><h1 className="text-2xl font-bold tracking-tight">Demandas</h1></div>
@@ -89,15 +89,15 @@ export default function Demandas() {
         <div className="hidden text-sm text-muted-foreground md:block">{items.length} {items.length === 1 ? "cartão" : "cartões"}</div>
       </div>
 
-      <div className="flex flex-1 gap-4 overflow-x-auto overflow-y-hidden pb-3">
+      <div className="grid min-w-0 grid-cols-1 gap-4 pb-3 md:grid-cols-2 2xl:grid-cols-4">
         {COLUNAS.map(col => {
           const cards = filtered.filter(d => d.status === col.value);
-          return <section key={col.value} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); if(draggingId) void moveTo(draggingId,col.value); setDraggingId(null);}} className="flex h-full w-[300px] min-w-[300px] flex-col rounded-xl border bg-muted/40 p-3">
+          return <section key={col.value} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); if(draggingId) void moveTo(draggingId,col.value); setDraggingId(null);}} className="flex min-w-0 min-h-[240px] flex-col rounded-xl border bg-muted/40 p-3">
             <div className="mb-3 flex items-start justify-between gap-2 px-1">
               <div><div className="flex items-center gap-2"><h2 className="text-sm font-semibold">{col.label}</h2><span className="rounded-full bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-foreground shadow-sm">{cards.length}</span></div><p className="mt-0.5 text-[11px] text-muted-foreground">{col.hint}</p></div>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={()=>openCreate(col.value)} title={`Adicionar em ${col.label}`}><Plus className="h-4 w-4"/></Button>
             </div>
-            <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+            <div className="min-w-0 space-y-2 pr-1">
               {cards.map(d => <article key={d.id} draggable onDragStart={()=>setDraggingId(d.id)} onDragEnd={()=>setDraggingId(null)} onDoubleClick={()=>openEdit(d)} className="group cursor-grab rounded-lg border bg-card p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:cursor-grabbing">
                 <div className="mb-2 flex items-start gap-2">
                   <h3 className="min-w-0 flex-1 text-sm font-semibold leading-5">{d.titulo}</h3>

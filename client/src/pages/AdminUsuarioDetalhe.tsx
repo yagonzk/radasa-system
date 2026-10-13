@@ -378,7 +378,7 @@ export default function AdminUsuarioDetalhe() {
           <Card><CardContent className="p-4"><div className="text-xs text-muted-foreground">Eventos auditados</div><div className="mt-2 text-2xl font-bold">{user.auditCount}</div></CardContent></Card>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto border-b pb-1">
+        <div className="flex min-w-0 flex-wrap gap-2 border-b pb-1">
           {[
             ["CONTA", "Dados da conta", UserRound],
             ["ACESSO", "Acesso e permissões", ShieldCheck],

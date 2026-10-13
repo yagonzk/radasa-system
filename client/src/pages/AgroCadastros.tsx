@@ -120,7 +120,7 @@ export default function AgroCadastros() {
 
         <Tabs value={tab} onValueChange={setTab}>
           <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 lg:flex-row lg:items-center lg:justify-between">
-            <TabsList className="w-full overflow-x-auto lg:w-auto"><TabsTrigger value="fazendas"><MapPinned />Fazendas</TabsTrigger><TabsTrigger value="talhoes"><Map />Talhões</TabsTrigger><TabsTrigger value="safras"><CalendarRange />Safras</TabsTrigger><TabsTrigger value="culturas"><Wheat />Culturas</TabsTrigger></TabsList>
+            <TabsList className="h-auto w-full flex-wrap lg:w-auto"><TabsTrigger value="fazendas"><MapPinned />Fazendas</TabsTrigger><TabsTrigger value="talhoes"><Map />Talhões</TabsTrigger><TabsTrigger value="safras"><CalendarRange />Safras</TabsTrigger><TabsTrigger value="culturas"><Wheat />Culturas</TabsTrigger></TabsList>
             <div className="relative min-w-0 flex-1 lg:max-w-sm"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" placeholder="Buscar neste cadastro..." value={search} onChange={(e) => setSearch(e.target.value)} /></div>
           </div>
 

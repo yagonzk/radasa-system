@@ -44,8 +44,8 @@ export default function Cadastros() {
         </div>
 
         <Tabs value={activeTab} onValueChange={(tab) => navigate(`/cadastros/${tab}`)} className="w-full">
-          <div className="overflow-x-auto pb-1">
-            <TabsList className="inline-flex h-10 min-w-max items-center justify-start gap-1 rounded-lg bg-muted/60 p-1">
+          <div className="min-w-0 pb-1">
+            <TabsList className="flex h-auto min-w-0 w-full flex-wrap items-center justify-start gap-1 rounded-xl bg-muted/60 p-1">
               <TabsTrigger value="motoristas">Motoristas</TabsTrigger>
               <TabsTrigger value="chapas">Chapas</TabsTrigger>
               <TabsTrigger value="veiculos">Veículos</TabsTrigger>

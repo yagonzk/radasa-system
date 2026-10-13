@@ -2306,7 +2306,7 @@ export default function CiotGerarPage() {
             </div>
           )}
 
-          <pre className="overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
+          <pre className="max-w-full whitespace-pre-wrap break-all rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
             {JSON.stringify(preparedPayload, null, 2)}
           </pre>
 

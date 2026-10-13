@@ -11,13 +11,13 @@ const tabs = [
 export default function CiotSubtabs() {
   const [location] = useLocation();
   return (
-    <div className="overflow-x-auto rounded-xl border bg-card p-1">
-      <div className="flex min-w-max gap-1">
+    <div className="min-w-0 rounded-xl border bg-card p-1">
+      <div className="flex min-w-0 flex-wrap gap-1">
         {tabs.map(({ href, label, icon: Icon }) => {
           const active = location.startsWith(href);
           return (
             <Link key={href} href={href} className={cn(
-              "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              "inline-flex min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
               active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}>
               <Icon className="h-4 w-4" />{label}
