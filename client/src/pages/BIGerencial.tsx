@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useClientes, useProdutos, type Manifesto } from "@/lib/store";
@@ -8,7 +8,9 @@ import { BarChart3, Check, ChevronDown, Database, FileSpreadsheet, RotateCcw, Se
 import * as XLSX from "xlsx";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { BiMetrics, BiRanking, BiConsultation, type BiFact } from "@/components/bi/BiPresentation";
+import "./bi-gerencial.css";
 
 type LinkedNfeItem = {id:string;manifestoId:string|null;numero:string;serie:string;codigo:string;descricao:string;quantidade:number;valorUnitario:number;valorTotal:number;municipio:string;uf:string;dataEmissao:string};
 const canonNum=(value:unknown)=>String(value??"").replace(/\D/g,"").replace(/^0+(?=\d)/,"");
@@ -30,7 +32,7 @@ const matchNfeForManifesto=(r:Manifesto,p:Manifesto["produtos"][number], nfeItem
  if(!productMatches.length&&byQtd.length===1)return byQtd[0];
  return null; // ambiguidade: nunca atribuir faturamento de outro item
 };
-type Fact=StagingBiFact&{produtoKey:string;mes:string;percentual:number};
+type Fact=BiFact;
 type Option={value:string;label:string};
 const money=(v:number)=>v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const num=(v:number)=>v.toLocaleString("pt-BR",{maximumFractionDigits:2});
@@ -48,35 +50,8 @@ function MultiFilter({label,values,onChange,options}:{label:string;values:string
  const shown=options.filter(o=>norm(o.label).includes(norm(query))); const toggle=(v:string)=>onChange(values.includes(v)?values.filter(x=>x!==v):[...values,v]);
  return <div className="space-y-1"><label className="text-xs font-semibold text-muted-foreground">{label}</label><Popover open={open} onOpenChange={setOpen}><PopoverTrigger asChild><Button variant="outline" className="h-10 w-full min-w-0 justify-between bg-background text-foreground border-border text-xs font-normal"><span className="truncate">{values.length===0?`Todos (${options.length})`:values.length===1?(options.find(o=>o.value===values[0])?.label||values[0]):`${values.length} selecionados`}</span><ChevronDown className="h-3.5 w-3.5"/></Button></PopoverTrigger><PopoverContent align="start" className="w-[min(320px,calc(100vw-32px))] p-2 border-border bg-popover text-popover-foreground"><div className="relative mb-2"><Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground"/><input aria-label={`Pesquisar ${label.toLowerCase()}`} placeholder={`Pesquisar ${label.toLowerCase()}...`} value={query} onChange={e=>setQuery(e.target.value)} className="h-9 w-full rounded-md border border-border bg-background text-foreground pl-8 pr-2 text-xs outline-none focus:border-[#0A508E]"/></div><div className="mb-2 flex justify-between border-b pb-2 text-xs"><button className="font-semibold text-primary dark:text-foreground" onClick={()=>onChange(options.map(o=>o.value))}>Selecionar todos</button><button className="text-muted-foreground" onClick={()=>onChange([])}>Limpar</button></div><div className="max-h-60 overflow-y-auto">{shown.map(o=><button type="button" key={o.value} onClick={()=>toggle(o.value)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"><Check className={`h-3.5 w-3.5 ${values.includes(o.value)?"opacity-100 text-primary":"opacity-0"}`}/><span className="truncate">{o.label}</span></button>)}</div></PopoverContent></Popover></div>
 }
-function HeaderFilter({label,values,onChange,options}:{label:string;values:string[];onChange:(v:string[])=>void;options:string[]}){
- const [open,setOpen]=useState(false),[q,setQ]=useState(""); const shown=options.filter(v=>norm(v).includes(norm(q))); const toggle=(v:string)=>onChange(values.includes(v)?values.filter(x=>x!==v):[...values,v]);
- return <Popover open={open} onOpenChange={setOpen}><PopoverTrigger asChild><button type="button" aria-label={`Filtrar ${label}`} className={`ml-1 inline-flex rounded p-0.5 hover:bg-white/20 ${values.length?"bg-[#F2C318] text-primary":""}`}><ChevronDown className="h-3 w-3"/></button></PopoverTrigger><PopoverContent align="start" className="w-[min(280px,calc(100vw-32px))] p-2 border-border bg-popover text-popover-foreground"><div className="relative mb-2"><Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground"/><input placeholder={`Pesquisar ${label.toLowerCase()}...`} value={q} onChange={e=>setQ(e.target.value)} className="h-9 w-full rounded-md border border-border bg-background text-foreground pl-8 pr-2 text-xs"/></div><div className="mb-2 flex justify-between border-b pb-2 text-xs"><button className="font-semibold text-primary dark:text-foreground" onClick={()=>onChange(options)}>Selecionar todos</button><button onClick={()=>onChange([])}>Limpar</button></div><div className="max-h-56 overflow-y-auto">{shown.map(v=><button key={v} onClick={()=>toggle(v)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"><Check className={`h-3.5 w-3.5 ${values.includes(v)?"opacity-100 text-primary":"opacity-0"}`}/><span className="truncate">{v||"—"}</span></button>)}</div></PopoverContent></Popover>
-}
-function Kpi({label,value}:{label:string;value:string}){
- return <div className="bi-kpi card-hover min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-  <div className="mb-3 flex items-center gap-2"><span className="h-1.5 w-9 rounded-full bg-primary"/><span className="h-1.5 w-3 rounded-full bg-[#f8bd30]"/></div>
-  <p className="text-[11px] font-semibold uppercase leading-relaxed tracking-[0.06em] text-muted-foreground">{label}</p>
-  <p className="mt-2 break-words text-[clamp(1rem,1.4vw,1.45rem)] font-bold leading-snug tracking-tight text-foreground tabular-nums">{value}</p>
- </div>;
-}
 export default function BIGerencial(){
  const { theme } = useTheme();
- const biContentRef = useRef<HTMLDivElement>(null);
- const [compactCharts, setCompactCharts] = useState(false);
- useEffect(() => {
-  const element = biContentRef.current;
-  if (!element) return;
-  const update = () => setCompactCharts(element.clientWidth < 720);
-  update();
-  if (typeof ResizeObserver === "undefined") {
-   window.addEventListener("resize", update);
-   return () => window.removeEventListener("resize", update);
-  }
-  const observer = new ResizeObserver(update);
-  observer.observe(element);
-  return () => observer.disconnect();
- }, []);
-
  const isDark = theme === "dark";
  const chartTooltipStyle = { backgroundColor: isDark ? "#0f172a" : "#ffffff", borderColor: isDark ? "#334155" : "#e2e8f0", color: isDark ? "#f8fafc" : "#0f172a" };
  const {items:clientes}=useClientes(); const {items:produtos}=useProdutos();
@@ -112,6 +87,7 @@ export default function BIGerencial(){
    .finally(()=>{if(active)setRomaneiosLoading(false)});
   return ()=>{active=false};
  },[from,to]);
+ const [tableQuery,setTableQuery]=useState("");
  const [tab,setTab]=useState("geral"),[columnFilters,setColumnFilters]=useState<Record<string,string[]>>({}),[sort,setSort]=useState("data-desc");
  const [tabProdutos,setTabProdutos]=useState<string[]>([]),[tabClientes,setTabClientes]=useState<string[]>([]),[tabPlacas,setTabPlacas]=useState<string[]>([]);
  const clienteMap=useMemo(()=>new Map(clientes.map(c=>[c.id,c])),[clientes]); const produtoMap=useMemo(()=>new Map(produtos.map(p=>[p.id,p])),[produtos]);
@@ -147,12 +123,19 @@ export default function BIGerencial(){
  const byProduct=useMemo(()=>{const m=new Map<string,{name:string;faturamento:number;frete:number}>();for(const x of productTabFacts){const key=x.produtoKey||x.produto;const v=m.get(key)||{name:x.produto,faturamento:0,frete:0};v.faturamento+=x.faturamento;v.frete+=x.frete;m.set(key,v)}return [...m.values()].sort((a,b)=>b.faturamento-a.faturamento).slice(0,10)},[productTabFacts]);
  const byClient=useMemo(()=>{const m=new Map<string,{name:string;faturamento:number;frete:number}>();for(const x of clientTabFacts){const v=m.get(x.clienteId)||{name:x.cliente,faturamento:0,frete:0};v.faturamento+=x.faturamento;v.frete+=x.frete;m.set(x.clienteId,v)}return [...m.values()].sort((a,b)=>b.faturamento-a.faturamento).slice(0,10)},[clientTabFacts]);
  const byPlate=useMemo(()=>{const m=new Map<string,{name:string;faturamento:number;frete:number}>();for(const x of plateTabFacts){const k=x.placa||"Sem placa",v=m.get(k)||{name:k,faturamento:0,frete:0};v.faturamento+=x.faturamento;v.frete+=x.frete;m.set(k,v)}return [...m.values()].sort((a,b)=>b.faturamento-a.faturamento)},[plateTabFacts]);
- const clear=()=>{setFrom(range.from);setTo(range.to);setPlacas([]);setClienteIds([]);setProdutoKeys([]);setColumnFilters({});setTabProdutos([]);setTabClientes([]);setTabPlacas([])};
+ const clear=()=>{setTableQuery("");setFrom(range.from);setTo(range.to);setPlacas([]);setClienteIds([]);setProdutoKeys([]);setColumnFilters({});setTabProdutos([]);setTabClientes([]);setTabPlacas([])};
  const columns=[
   {key:"nfSerie",label:"NF/Série",get:(x:Fact)=>x.nfSerie||"—"},{key:"cliente",label:"Cliente",get:(x:Fact)=>x.cliente},{key:"clienteCod",label:"Cód. Cliente",get:(x:Fact)=>x.clienteCod||"—"},{key:"produtoCod",label:"Cód. Produto",get:(x:Fact)=>x.produtoCod||"—"},{key:"produto",label:"Produto",get:(x:Fact)=>x.produto},{key:"quantidade",label:"Quantidade",get:(x:Fact)=>String(x.quantidade)},{key:"valorUnitProduto",label:"Valor Unitário do Produto",get:(x:Fact)=>String(x.valorUnitProduto)},{key:"faturamento",label:"Faturamento",get:(x:Fact)=>String(x.faturamento)},{key:"freteUnit",label:"Valor Unitário do Frete",get:(x:Fact)=>String(x.freteUnit)},{key:"frete",label:"Frete Total",get:(x:Fact)=>String(x.frete)},{key:"percentual",label:"% Frete/Faturamento",get:(x:Fact)=>String(x.percentual)},{key:"placa",label:"Placa",get:(x:Fact)=>x.placa},{key:"data",label:"Data",get:(x:Fact)=>formatDateBR(x.data)},{key:"municipio",label:"Município/Endereço",get:(x:Fact)=>x.municipio||"—"}
  ];
  const columnOptions=useMemo(()=>Object.fromEntries(columns.map(c=>[c.key,[...new Set(filtered.map(c.get))].sort((a,b)=>a.localeCompare(b,"pt-BR",{numeric:true}))])),[filtered]);
- const consultaFiltered=useMemo(()=>filtered.filter(x=>columns.every(c=>{const v=columnFilters[c.key]||[];return !v.length||v.includes(c.get(x))})),[filtered,columnFilters]);
+ const consultaFiltered=useMemo(()=>filtered.filter(x=>{
+  if (tableQuery.trim()) {
+   const needle=norm(tableQuery.trim());
+   const content=[x.nfSerie,x.cliente,x.clienteCod,x.produto,x.produtoCod,x.placa,x.municipio,formatDateBR(x.data),x.romaneio].map(norm).join(" ");
+   if(!content.includes(needle))return false;
+  }
+  return columns.every(c=>{const values=columnFilters[c.key]||[];return !values.length||values.includes(c.get(x))});
+ }),[filtered,columnFilters,tableQuery]);
  const rows=useMemo(()=>{const [field,dir]=sort.split("-");return [...consultaFiltered].sort((a,b)=>{let av:any=(a as any)[field],bv:any=(b as any)[field];const cmp=typeof av==="number"&&typeof bv==="number"?av-bv:String(av??"").localeCompare(String(bv??""),"pt-BR",{numeric:true});return dir==="desc"?-cmp:cmp})},[consultaFiltered,sort]);
  const tableTotals=useMemo(()=>{const quantidade=rows.reduce((s,x)=>s+x.quantidade,0),faturamento=rows.reduce((s,x)=>s+x.faturamento,0),frete=rows.reduce((s,x)=>s+x.frete,0);return{quantidade,faturamento,frete,valorProduto:quantidade?faturamento/quantidade:0,valorFrete:quantidade?frete/quantidade:0,percentual:faturamento?frete/faturamento*100:0}},[rows]);
  const freightDiagnostic=useMemo(()=>{
@@ -245,33 +228,203 @@ export default function BIGerencial(){
   for(const mes of months)XLSX.utils.book_append_sheet(wb,makeSheet(exportRows.filter(x=>x.mes===mes)),monthSheetName(mes));
   XLSX.writeFile(wb,"BI-Gerencial_frete_filtrado.xlsx");
  };
- return <Layout><div ref={biContentRef} className="bi-premium w-full min-w-0 max-w-full text-foreground"><div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-5"><style>{`
-.bi-premium .bi-page-header { padding: 8px 2px 3px; }
-.bi-premium .bi-filter-panel, .bi-premium .bi-tabs, .bi-premium .bi-chart-panel, .bi-premium .bi-table-panel { box-shadow: 0 9px 28px -18px rgba(4,20,49,.32); }
-.bi-premium .bi-filter-panel { background-image: linear-gradient(125deg, rgba(11,86,132,.06), transparent 72%); }
-.bi-premium .bi-filter-panel input, .bi-premium .bi-filter-panel button { min-width: 0; }
-.bi-premium .bi-filter-panel input:focus-visible, .bi-premium .bi-filter-panel button:focus-visible, .bi-premium .bi-table-panel select:focus-visible { outline: 2px solid #0b5684; outline-offset: 2px; }
-.bi-premium .bi-kpi { position: relative; min-width: 0; overflow: hidden; background-image: radial-gradient(circle at 100% 0%, rgba(11,86,132,.10), transparent 55%); transition: box-shadow .2s ease, border-color .2s ease; }
-.bi-premium .bi-kpi:hover { border-color: rgba(11,86,132,.35); box-shadow: 0 14px 30px -22px rgba(6,48,106,.65); }
-.bi-premium .bi-kpi > div:last-child { overflow-wrap: anywhere; }
-.bi-premium .bi-tabs button:focus-visible { outline: 2px solid #0b5684; outline-offset: 2px; }
-.bi-premium .bi-chart-panel h2, .bi-premium .bi-table-panel h2 { letter-spacing: -.02em; font-size: 1rem; }
-.bi-premium .bi-chart-panel, .bi-premium .bi-table-panel { animation: radasa-soft-appear 340ms cubic-bezier(.2,.75,.25,1) both; }
-.bi-premium .bi-table-panel thead th { vertical-align: middle; font-weight: 700; letter-spacing: .01em; }
-.bi-premium .bi-table-panel tbody tr:nth-child(even) { background-color: rgba(100,116,139,.045); }
-.bi-premium .bi-table-panel tbody tr:hover { background-color: rgba(11,86,132,.08); }
-.bi-premium .bi-table-panel tbody td { padding-top: 9px; padding-bottom: 9px; font-variant-numeric: tabular-nums; }
-.bi-premium .bi-table-panel tfoot td { padding-top: 12px; padding-bottom: 12px; font-variant-numeric: tabular-nums; }
-@media (prefers-reduced-motion: reduce) { .bi-premium .bi-kpi, .bi-premium .bi-table-panel tbody tr { transition: none; } }
-`}</style>
-  <div className="bi-page-header flex min-w-0 flex-wrap items-center justify-between gap-4"><div><div className="flex items-center gap-3"><BarChart3 className="h-6 w-6 text-primary"/><h1 className="text-2xl md:text-[28px] font-bold tracking-tight text-primary dark:text-foreground">BI Gerencial</h1></div><p className="mt-1 text-sm text-muted-foreground">Visão consolidada do histórico existente, NF-e do staging e Romaneios atuais.</p></div><div className="flex min-w-0 flex-wrap items-center gap-2"><Button type="button" variant="outline" className="h-9 text-xs" onClick={()=>{setShowFreightDiagnostic(v=>!v);setTab("consulta")}}><Activity className="mr-2 h-3.5 w-3.5"/>Diagnosticar fretes</Button><Popover><PopoverTrigger asChild><Button variant="outline" className="h-9 text-xs" disabled={!consultaFiltered.length}><FileSpreadsheet className="mr-2 h-3.5 w-3.5"/>Exportar XLSX</Button></PopoverTrigger><PopoverContent align="end" className="w-56 p-3 border-border bg-popover text-popover-foreground"><div className="mb-2 text-xs font-semibold text-muted-foreground">Escolha o tipo de exportação</div><div className="grid gap-2"><Button type="button" className="h-9 bg-[#0b5684] text-white hover:bg-[#0A508E]/90" onClick={exportFreteXlsx}>Frete</Button><Button type="button" className="h-9 bg-[#7C3AED] text-white hover:bg-[#6D28D9]" onClick={exportFreteUnitXlsx}>Frete Unit</Button><Button type="button" className="h-9 bg-[#159447] text-white hover:bg-[#159447]/90" onClick={exportFaturamentoXlsx}>Faturamento</Button></div></PopoverContent></Popover><div className="flex items-center gap-2 text-xs text-muted-foreground"><Database className="h-4 w-4"/>{loading?"Carregando staging...":`${facts.length.toLocaleString("pt-BR")} registros consolidados`}</div></div></div>
-  <section className="bi-filter-panel rounded-3xl border border-border bg-card text-card-foreground p-4 md:p-5 shadow-sm"><div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3"><div className="space-y-1"><label className="text-xs font-semibold text-muted-foreground">Data inicial</label><input type="date" lang="pt-BR" value={from} onChange={e=>setFrom(e.target.value)} className="h-10 w-full rounded-xl border border-border bg-background text-foreground px-3 text-xs"/></div><div className="space-y-1"><label className="text-xs font-semibold text-muted-foreground">Data final</label><input type="date" lang="pt-BR" value={to} onChange={e=>setTo(e.target.value)} className="h-10 w-full rounded-xl border border-border bg-background text-foreground px-3 text-xs"/></div><MultiFilter label="Placa" values={placas} onChange={setPlacas} options={plateOptions}/><MultiFilter label="Cliente" values={clienteIds} onChange={setClienteIds} options={clientOptions}/><MultiFilter label="Produto" values={produtoKeys} onChange={setProdutoKeys} options={productOptions}/><div className="flex items-end"><Button variant="outline" className="h-9 w-full text-xs" onClick={clear}><RotateCcw className="mr-2 h-3.5 w-3.5"/>Limpar filtros</Button></div></div></section>
-  <nav aria-label="Áreas do BI Gerencial" className="bi-tabs flex max-w-full gap-2 overflow-x-auto rounded-2xl border border-border bg-card p-2 shadow-sm">{[["geral","Visão Geral"],["produtos","Produtos"],["clientes","Clientes"],["placas","Veículos/Placas"],["consulta","Consulta Geral"]].map(([k,l])=><button type="button" key={k} onClick={()=>setTab(k)} aria-pressed={tab===k} data-active={tab===k ? "true" : undefined} className={`radasa-manual-tab shrink-0 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold ${tab===k ? "" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground"}`}>{l}</button>)}</nav>
-  {tab==="geral"&&<><section className="radasa-kpi-grid radasa-stagger"><Kpi label="Faturamento" value={money(totals.faturamento)}/><Kpi label="Frete total" value={money(totals.frete)}/><Kpi label="Quantidade" value={num(totals.quantidade)}/><Kpi label="Valor unitário produto" value={money(totals.valorProduto)}/><Kpi label="Valor unitário frete" value={money(totals.valorFrete)}/><Kpi label="Frete / faturamento" value={pct(totals.percentual)}/></section><section className="bi-chart-panel min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-card-foreground p-4 shadow-sm sm:p-5"><h2 className="mb-3 font-semibold text-primary dark:text-foreground">Evolução por mês</h2><div className="h-[280px] min-w-0 sm:h-[340px]"><ResponsiveContainer width="100%" height="100%"><LineChart data={byMonth}><CartesianGrid stroke={isDark?"#334155":"#e2e8f0"} strokeDasharray="3 3"/><XAxis dataKey="label" fontSize={11} tick={{fill:isDark?"#cbd5e1":"#475569"}}/><YAxis fontSize={10} tick={{fill:isDark?"#cbd5e1":"#475569"}}/><Tooltip contentStyle={chartTooltipStyle} labelStyle={{color:isDark?"#f8fafc":"#0f172a"}} formatter={(v)=>money(Number(v||0))}/><Legend/><Line isAnimationActive={animateCharts} animationBegin={150} animationDuration={900} type="monotone" dataKey="faturamento" name="Faturamento" stroke="#0b5684" strokeWidth={3}/><Line isAnimationActive={animateCharts} animationBegin={150} animationDuration={900} type="monotone" dataKey="frete" name="Frete" stroke="#f8bd30" strokeWidth={3}/></LineChart></ResponsiveContainer></div></section></>}
-  {tab==="produtos"&&<><section data-testid="produtos-mini-dashboard" className="radasa-kpi-grid radasa-stagger"><Kpi label="Faturamento" value={money(productTabTotals.faturamento)}/><Kpi label="Frete total" value={money(productTabTotals.frete)}/><Kpi label="Quantidade" value={num(productTabTotals.quantidade)}/><Kpi label="Valor unitário produto" value={money(productTabTotals.valorProduto)}/><Kpi label="Valor unitário frete" value={money(productTabTotals.valorFrete)}/><Kpi label="Frete / faturamento" value={pct(productTabTotals.percentual)}/></section><section className="bi-chart-panel min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-card-foreground p-4 shadow-sm sm:p-5"><div className="mb-3 max-w-md"><MultiFilter label="Filtrar produtos nesta análise" values={tabProdutos} onChange={setTabProdutos} options={productOptions}/></div><h2 className="mb-3 font-semibold text-primary dark:text-foreground">Análise por Produtos</h2><div className="bi-chart-scroll max-h-[620px] min-w-0 overflow-y-auto overflow-x-hidden"><div className="w-full min-w-0" style={{ height: Math.max(320, byProduct.length * 36 + 90) }}><ResponsiveContainer width="100%" height="100%"><BarChart data={byProduct} layout="vertical"><CartesianGrid stroke={isDark?"#334155":"#e2e8f0"} strokeDasharray="3 3"/><XAxis type="number" tick={{fill:isDark?"#cbd5e1":"#475569"}}/><YAxis type="category" dataKey="name" width={compactCharts ? 100 : 180} fontSize={10} tick={{fill:isDark?"#cbd5e1":"#475569"}}/><Tooltip contentStyle={chartTooltipStyle} labelStyle={{color:isDark?"#f8fafc":"#0f172a"}} formatter={(v)=>money(Number(v||0))}/><Legend/><Bar isAnimationActive={animateCharts} animationBegin={100} animationDuration={850} dataKey="faturamento" name="Faturamento" fill="#0b5684"/><Bar isAnimationActive={animateCharts} animationBegin={100} animationDuration={850} dataKey="frete" name="Frete" fill="#F2C318"/></BarChart></ResponsiveContainer></div></div></section></>}
-  {tab==="clientes"&&<><section data-testid="clientes-mini-dashboard" className="radasa-kpi-grid radasa-stagger"><Kpi label="Faturamento" value={money(clientTabTotals.faturamento)}/><Kpi label="Frete total" value={money(clientTabTotals.frete)}/><Kpi label="Quantidade" value={num(clientTabTotals.quantidade)}/><Kpi label="Valor unitário produto" value={money(clientTabTotals.valorProduto)}/><Kpi label="Valor unitário frete" value={money(clientTabTotals.valorFrete)}/><Kpi label="Frete / faturamento" value={pct(clientTabTotals.percentual)}/></section><section className="bi-chart-panel min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-card-foreground p-4 shadow-sm sm:p-5"><div className="mb-3 max-w-md"><MultiFilter label="Filtrar clientes nesta análise" values={tabClientes} onChange={setTabClientes} options={clientOptions}/></div><h2 className="mb-3 font-semibold text-primary dark:text-foreground">Análise por Clientes</h2><div className="bi-chart-scroll max-h-[620px] min-w-0 overflow-y-auto overflow-x-hidden"><div className="w-full min-w-0" style={{ height: Math.max(320, byClient.length * 36 + 90) }}><ResponsiveContainer width="100%" height="100%"><BarChart data={byClient} layout="vertical"><CartesianGrid stroke={isDark?"#334155":"#e2e8f0"} strokeDasharray="3 3"/><XAxis type="number" tick={{fill:isDark?"#cbd5e1":"#475569"}}/><YAxis type="category" dataKey="name" width={compactCharts ? 110 : 210} fontSize={10} tick={{fill:isDark?"#cbd5e1":"#475569"}}/><Tooltip contentStyle={chartTooltipStyle} labelStyle={{color:isDark?"#f8fafc":"#0f172a"}} formatter={(v)=>money(Number(v||0))}/><Legend/><Bar isAnimationActive={animateCharts} animationBegin={100} animationDuration={850} dataKey="faturamento" name="Faturamento" fill="#0b5684"/><Bar isAnimationActive={animateCharts} animationBegin={100} animationDuration={850} dataKey="frete" name="Frete" fill="#f8bd30"/></BarChart></ResponsiveContainer></div></div></section></>}
-  {tab==="placas"&&<><section data-testid="placas-mini-dashboard" className="radasa-kpi-grid radasa-stagger"><Kpi label="Faturamento" value={money(plateTabTotals.faturamento)}/><Kpi label="Frete total" value={money(plateTabTotals.frete)}/><Kpi label="Quantidade" value={num(plateTabTotals.quantidade)}/><Kpi label="Valor unitário produto" value={money(plateTabTotals.valorProduto)}/><Kpi label="Valor unitário frete" value={money(plateTabTotals.valorFrete)}/><Kpi label="Frete / faturamento" value={pct(plateTabTotals.percentual)}/></section><section className="bi-chart-panel min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-card-foreground p-4 shadow-sm sm:p-5"><div className="mb-3 max-w-md"><MultiFilter label="Filtrar placas nesta análise" values={tabPlacas} onChange={setTabPlacas} options={plateOptions}/></div><h2 className="mb-3 font-semibold text-primary dark:text-foreground">Análise por Veículos/Placas</h2><div className="bi-chart-scroll max-h-[620px] min-w-0 overflow-y-auto overflow-x-hidden"><div className="w-full min-w-0" style={{ height: Math.max(320, byPlate.length * 36 + 90) }}><ResponsiveContainer width="100%" height="100%"><BarChart data={byPlate} layout="vertical"><CartesianGrid stroke={isDark?"#334155":"#e2e8f0"} strokeDasharray="3 3"/><XAxis type="number" tick={{fill:isDark?"#cbd5e1":"#475569"}}/><YAxis type="category" dataKey="name" width={compactCharts ? 90 : 128} tick={{fill:isDark?"#cbd5e1":"#475569"}} fontSize={10}/><Tooltip contentStyle={chartTooltipStyle} labelStyle={{color:isDark?"#f8fafc":"#0f172a"}} formatter={(v)=>money(Number(v||0))}/><Legend/><Bar isAnimationActive={animateCharts} animationBegin={100} animationDuration={850} dataKey="faturamento" name="Faturamento" fill="#0b5684"/><Bar isAnimationActive={animateCharts} animationBegin={100} animationDuration={850} dataKey="frete" name="Frete" fill="#F2C318"/></BarChart></ResponsiveContainer></div></div></section></>}
-  {showFreightDiagnostic&&<section className="rounded-xl border border-amber-500/50 bg-card p-4 space-y-3"><div className="flex flex-wrap gap-3 items-center justify-between"><div><h2 className="font-semibold">Diagnóstico de fretes — filtros atuais</h2><p className="text-xs text-muted-foreground">{freightDiagnostic.resumo.fretesZerados} registros com faturamento e frete zero entre {freightDiagnostic.resumo.registrosFiltrados} filtrados; {freightDiagnostic.resumo.itensCarregados} itens de romaneio carregados.</p></div><div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={()=>void copyFreightDiagnostic()}><ClipboardCopy className="mr-2 h-4 w-4"/>Copiar relatório</Button><Button type="button" size="sm" variant="outline" onClick={()=>setShowFreightDiagnostic(false)}>Fechar</Button></div></div><p className="text-xs text-muted-foreground">O diagnóstico não altera valores. Compara número de NF/série, produto e quantidade dos registros filtrados com os romaneios carregados nesta tela. Se uma NF não aparecer, pode faltar carregamento ou vínculo no sistema.</p><div className="max-h-72 overflow-auto"><table className="w-full min-w-[850px] text-xs"><thead><tr className="text-left border-b"><th className="p-2">NF / Série</th><th className="p-2">Data</th><th className="p-2">Cliente</th><th className="p-2">Produto</th><th className="p-2">Qtd.</th><th className="p-2">Itens no romaneio</th><th className="p-2">Diagnóstico</th></tr></thead><tbody>{freightDiagnostic.detalhes.slice(0,150).map((x,i)=><tr key={`${x.nf}-${i}`} className="border-b"><td className="p-2 whitespace-nowrap">{x.nf}</td><td className="p-2">{formatDateBR(x.data)}</td><td className="p-2">{x.cliente}</td><td className="p-2">{x.produto}</td><td className="p-2">{x.quantidade}</td><td className="p-2">{x.romaneiosEncontrados}</td><td className="p-2">{x.status}</td></tr>)}</tbody></table>{freightDiagnostic.detalhes.length>150&&<p className="text-xs p-2">Exibindo os primeiros 150; o relatório copiado inclui todos.</p>}</div></section>}
-  {tab==="consulta"&&<><section data-testid="consulta-mini-dashboard" className="radasa-kpi-grid radasa-stagger"><Kpi label="Faturamento" value={money(tableTotals.faturamento)}/><Kpi label="Frete total" value={money(tableTotals.frete)}/><Kpi label="Quantidade" value={num(tableTotals.quantidade)}/><Kpi label="Valor unitário produto" value={money(tableTotals.valorProduto)}/><Kpi label="Valor unitário frete" value={money(tableTotals.valorFrete)}/><Kpi label="Frete / faturamento" value={pct(tableTotals.percentual)}/></section><section className="bi-table-panel min-w-0 overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b p-4"><div><h2 className="font-semibold text-primary dark:text-foreground">Consulta Geral</h2><p className="text-xs text-muted-foreground">{rows.length.toLocaleString("pt-BR")} registros após os filtros</p></div><label className="flex min-w-0 flex-wrap items-center gap-2 text-xs font-semibold text-muted-foreground">Ordenar por<select value={sort} onChange={e=>setSort(e.target.value)} className="h-10 max-w-full min-w-0 rounded-xl border border-border bg-background px-2 font-normal text-foreground"><option value="cliente-asc">Cliente A-Z</option><option value="cliente-desc">Cliente Z-A</option><option value="produto-asc">Produto A-Z</option><option value="produto-desc">Produto Z-A</option><option value="quantidade-desc">Maior quantidade</option><option value="quantidade-asc">Menor quantidade</option><option value="valorUnitProduto-desc">Maior valor unitário do produto</option><option value="valorUnitProduto-asc">Menor valor unitário do produto</option><option value="faturamento-desc">Maior faturamento</option><option value="faturamento-asc">Menor faturamento</option><option value="freteUnit-desc">Maior valor unitário do frete</option><option value="freteUnit-asc">Menor valor unitário do frete</option><option value="frete-desc">Maior frete</option><option value="frete-asc">Menor frete</option><option value="percentual-desc">Maior % frete/faturamento</option><option value="percentual-asc">Menor % frete/faturamento</option><option value="data-desc">Data mais recente</option><option value="data-asc">Data mais antiga</option></select></label></div><p className="border-t border-border/60 px-4 py-2 text-[11px] text-muted-foreground lg:hidden">Arraste a tabela na horizontal para visualizar todas as colunas.</p><div className="max-h-[640px] max-w-full overflow-auto overscroll-contain"><table className="w-full min-w-[1720px] table-fixed border-collapse text-xs"><colgroup><col style={{width:115}}/><col style={{width:190}}/><col style={{width:105}}/><col style={{width:105}}/><col style={{width:190}}/><col style={{width:102}}/><col style={{width:135}}/><col style={{width:145}}/><col style={{width:133}}/><col style={{width:125}}/><col style={{width:116}}/><col style={{width:108}}/><col style={{width:112}}/><col style={{width:139}}/></colgroup><thead className="sticky top-0 z-10 bg-[#0b5684] text-white"><tr>{columns.map(c=><th key={c.key} className="border-r border-white/10 px-2.5 py-3 text-left align-middle leading-tight"><span className="inline-flex items-center">{c.label}<HeaderFilter label={c.label} values={columnFilters[c.key]||[]} onChange={v=>setColumnFilters(f=>({...f,[c.key]:v}))} options={columnOptions[c.key]||[]}/></span></th>)}</tr></thead><tbody>{rows.map(x=><tr key={x.id} className="border-b border-border/70 hover:bg-[#F2C318]/10 hover:bg-muted/80 transition-colors"><td className="px-2 py-2">{x.nfSerie||"—"}</td><td className="px-2 py-2" title={x.cliente}><div className="truncate">{x.cliente}</div></td><td className="px-2 py-2">{x.clienteCod||"—"}</td><td className="px-2 py-2">{x.produtoCod||"—"}</td><td className="px-2 py-2" title={x.produto}><div className="truncate">{x.produto}</div></td><td className="whitespace-nowrap px-2 py-2 text-right">{num(x.quantidade)}</td><td className="whitespace-nowrap px-2 py-2 text-right">{money(x.valorUnitProduto)}</td><td className="whitespace-nowrap px-2 py-2 text-right">{money(x.faturamento)}</td><td className="whitespace-nowrap px-2 py-2 text-right">{money(x.freteUnit)}</td><td className="whitespace-nowrap px-2 py-2 text-right">{money(x.frete)}</td><td className="whitespace-nowrap px-2 py-2 text-right">{pct(x.percentual)}</td><td className="px-2 py-2">{x.placa}</td><td className="px-2 py-2">{formatDateBR(x.data)}</td><td className="px-2 py-2" title={x.municipio||"—"}><div className="truncate">{x.municipio||"—"}</div></td></tr>)}</tbody><tfoot className="sticky bottom-0 z-20 bg-card font-bold text-[#0A508E] dark:text-[#F2C318] border-t-2 border-[#0A508E] shadow-[0_-4px_8px_rgba(0,0,0,0.12)]"><tr><td className="px-2 py-2" colSpan={5}>TOTAL</td><td className="whitespace-nowrap px-2 py-2 text-right">{num(tableTotals.quantidade)}</td><td className="whitespace-nowrap px-2 py-2 text-right">{money(tableTotals.valorProduto)}</td><td className="whitespace-nowrap px-2 py-2 text-right">{money(tableTotals.faturamento)}</td><td className="whitespace-nowrap px-2 py-2 text-right">{money(tableTotals.valorFrete)}</td><td className="whitespace-nowrap px-2 py-2 text-right">{money(tableTotals.frete)}</td><td className="whitespace-nowrap px-2 py-2 text-right">{pct(tableTotals.percentual)}</td><td colSpan={3}/></tr></tfoot></table></div></section></>}
- </div></div></Layout>
+ return (
+  <Layout>
+   <div className="bi-v3" aria-label="BI Gerencial">
+    <div className="bi-v3__inner">
+     <header className="bi-v3__hero">
+      <div className="bi-v3__identity">
+       <div className="bi-v3__logo" aria-hidden="true"><BarChart3 className="h-6 w-6" /></div>
+       <div className="min-w-0">
+        <h1 className="bi-v3__title">BI Gerencial</h1>
+        <p className="bi-v3__subtitle">Faturamento, fretes e desempenho da operação em um painel organizado e responsivo.</p>
+       </div>
+      </div>
+      <div className="bi-v3__hero-actions">
+       <Button type="button" variant="outline" size="sm" onClick={() => { setShowFreightDiagnostic((current) => !current); setTab("consulta"); }}>
+        <Activity className="h-4 w-4" /> Diagnosticar fretes
+       </Button>
+       <Popover>
+        <PopoverTrigger asChild>
+         <Button variant="outline" size="sm" disabled={!consultaFiltered.length}>
+          <FileSpreadsheet className="h-4 w-4" /> Exportar Excel <ChevronDown className="h-3.5 w-3.5" />
+         </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-[min(270px,calc(100vw-36px))] space-y-2 bg-popover p-3 text-popover-foreground">
+         <p className="text-xs font-semibold text-muted-foreground">Exportar dados com os filtros atuais</p>
+         <Button type="button" variant="outline" className="w-full justify-start" onClick={exportFreteXlsx}>Frete por romaneio</Button>
+         <Button type="button" variant="outline" className="w-full justify-start" onClick={exportFreteUnitXlsx}>Frete unitário por cliente</Button>
+         <Button type="button" variant="outline" className="w-full justify-start" onClick={exportFaturamentoXlsx}>Faturamento</Button>
+        </PopoverContent>
+       </Popover>
+       <span className="bi-v3__status" title="Registros consolidados disponíveis para análise">
+        <Database className="h-4 w-4" />
+        {loading || romaneiosLoading ? "Atualizando dados..." : `${facts.length.toLocaleString("pt-BR")} registros consolidados`}
+        {!loading && !romaneiosLoading && !romaneiosError && <i className="bi-v3__status-dot" aria-label="Consulta concluída" />}
+       </span>
+      </div>
+     </header>
+
+     {romaneiosError && (
+      <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
+       {romaneiosError} Os dados disponíveis continuam visíveis, mas podem estar incompletos.
+      </div>
+     )}
+     {from && to && from > to && (
+      <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+       A data inicial deve ser anterior ou igual à data final.
+      </div>
+     )}
+
+     <section className="bi-v3__panel bi-v3__filter-panel" aria-label="Filtros gerais">
+      <div className="bi-v3__filter-head">
+       <div><h2>Filtros da análise</h2><p>Escolha o período e refine os resultados por veículo, cliente ou produto.</p></div>
+       <span className="text-xs font-medium text-muted-foreground">{filtered.length.toLocaleString("pt-BR")} registros no período</span>
+      </div>
+      <div className="bi-v3__filter-grid">
+       <div className="bi-v3__field">
+        <label htmlFor="bi-data-inicial">Data inicial</label>
+        <input id="bi-data-inicial" type="date" lang="pt-BR" value={from} onChange={(event) => setFrom(event.target.value)} className="bi-v3__input" />
+       </div>
+       <div className="bi-v3__field">
+        <label htmlFor="bi-data-final">Data final</label>
+        <input id="bi-data-final" type="date" lang="pt-BR" value={to} onChange={(event) => setTo(event.target.value)} className="bi-v3__input" />
+       </div>
+       <MultiFilter label="Placa" values={placas} onChange={setPlacas} options={plateOptions} />
+       <MultiFilter label="Cliente" values={clienteIds} onChange={setClienteIds} options={clientOptions} />
+       <MultiFilter label="Produto" values={produtoKeys} onChange={setProdutoKeys} options={productOptions} />
+       <Button type="button" variant="outline" className="bi-v3__filter-clear" onClick={clear}><RotateCcw className="h-4 w-4" /> Limpar filtros</Button>
+      </div>
+     </section>
+
+     <nav className="bi-v3__navigation" aria-label="Análises do BI Gerencial">
+      {([
+       ["geral", "Visão geral"],
+       ["produtos", "Produtos"],
+       ["clientes", "Clientes"],
+       ["placas", "Veículos / Placas"],
+       ["consulta", "Consulta geral"],
+      ] as const).map(([key, label]) => (
+       <button type="button" key={key} className="bi-v3__nav-item" aria-current={tab === key ? "page" : undefined} onClick={() => setTab(key)}>{label}</button>
+      ))}
+     </nav>
+
+     {tab === "geral" && <>
+      <BiMetrics totals={totals} />
+      <section className="bi-v3__panel">
+       <header className="bi-v3__panel-heading">
+        <p className="bi-v3__overline">Histórico financeiro</p>
+        <h2>Evolução por mês</h2>
+        <p className="bi-v3__secondary">Comparação entre faturamento e valor de frete dentro do período selecionado.</p>
+       </header>
+       <div className="bi-v3__chart-body">
+        {byMonth.length === 0 ? <div className="bi-v3__empty">Não há dados para o período selecionado.</div> :
+         <div className="bi-v3__chart-frame"><div className="bi-v3__chart-inner">
+          <ResponsiveContainer width="100%" height="100%">
+           <LineChart data={byMonth} margin={{ top: 14, right: 20, bottom: 12, left: 6 }}>
+            <CartesianGrid stroke={isDark ? "#334155" : "#e2e8f0"} strokeDasharray="3 5" vertical={false} />
+            <XAxis dataKey="label" fontSize={12} tickLine={false} axisLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b" }} />
+            <YAxis width={68} fontSize={11} tickLine={false} axisLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b" }} tickFormatter={(value: number) => new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 }).format(value)} />
+            <Tooltip contentStyle={chartTooltipStyle} labelStyle={{ color: isDark ? "#f8fafc" : "#0f172a" }} formatter={(value) => money(Number(value || 0))} />
+            <Legend wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
+            <Line type="monotone" dataKey="faturamento" name="Faturamento" stroke="#0b5684" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} isAnimationActive={animateCharts} animationDuration={750} />
+            <Line type="monotone" dataKey="frete" name="Frete" stroke="#e8ae29" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} isAnimationActive={animateCharts} animationDuration={750} />
+           </LineChart>
+          </ResponsiveContainer>
+         </div></div>}
+       </div>
+      </section>
+     </>}
+
+     {tab === "produtos" && <>
+      <BiMetrics totals={productTabTotals} testId="produtos-mini-dashboard" />
+      <section className="bi-v3__panel">
+       <header className="bi-v3__panel-heading">
+        <p className="bi-v3__overline">Comparativo operacional</p>
+        <h2>Análise por Produtos</h2>
+        <p className="bi-v3__secondary">Os dez produtos com maior faturamento, comparados ao frete associado.</p>
+        <div className="bi-v3__analysis-controls"><MultiFilter label="Filtrar produtos nesta análise" values={tabProdutos} onChange={setTabProdutos} options={productOptions} /></div>
+       </header>
+       <div className="bi-v3__chart-body"><div className="bi-v3__legend"><span className="bi-v3__legend-item">Faturamento</span><span className="bi-v3__legend-item bi-v3__legend-item--gold">Frete</span></div><BiRanking rows={byProduct} /></div>
+      </section>
+     </>}
+
+     {tab === "clientes" && <>
+      <BiMetrics totals={clientTabTotals} testId="clientes-mini-dashboard" />
+      <section className="bi-v3__panel">
+       <header className="bi-v3__panel-heading">
+        <p className="bi-v3__overline">Relacionamento comercial</p>
+        <h2>Análise por Clientes</h2>
+        <p className="bi-v3__secondary">Comparativo dos dez clientes com maior faturamento.</p>
+        <div className="bi-v3__analysis-controls"><MultiFilter label="Filtrar clientes nesta análise" values={tabClientes} onChange={setTabClientes} options={clientOptions} /></div>
+       </header>
+       <div className="bi-v3__chart-body"><div className="bi-v3__legend"><span className="bi-v3__legend-item">Faturamento</span><span className="bi-v3__legend-item bi-v3__legend-item--gold">Frete</span></div><BiRanking rows={byClient} /></div>
+      </section>
+     </>}
+
+     {tab === "placas" && <>
+      <BiMetrics totals={plateTabTotals} testId="placas-mini-dashboard" />
+      <section className="bi-v3__panel">
+       <header className="bi-v3__panel-heading">
+        <p className="bi-v3__overline">Desempenho da frota</p>
+        <h2>Análise por Veículos / Placas</h2>
+        <p className="bi-v3__secondary">Faturamento e frete por placa, com os valores completos de cada veículo.</p>
+        <div className="bi-v3__analysis-controls"><MultiFilter label="Filtrar placas nesta análise" values={tabPlacas} onChange={setTabPlacas} options={plateOptions} /></div>
+       </header>
+       <div className="bi-v3__chart-body"><div className="bi-v3__legend"><span className="bi-v3__legend-item">Faturamento</span><span className="bi-v3__legend-item bi-v3__legend-item--gold">Frete</span></div><BiRanking rows={byPlate} /></div>
+      </section>
+     </>}
+
+     {tab === "consulta" && <>
+      <BiMetrics totals={tableTotals} testId="consulta-mini-dashboard" />
+      <div className="bi-v3__panel p-4 sm:p-5">
+       <label className="bi-v3__field" htmlFor="bi-consulta-busca">
+        <span className="bi-v3__field-label">Pesquisar na Consulta Geral</span>
+        <div className="relative w-full">
+         <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+         <input id="bi-consulta-busca" type="search" value={tableQuery} onChange={(event) => setTableQuery(event.target.value)} placeholder="NF, cliente, produto, código, placa, município ou data..." className="bi-v3__input pl-10" />
+        </div>
+       </label>
+      </div>
+      {showFreightDiagnostic && (
+       <section className="bi-v3__panel bi-v3__diagnostic">
+        <header className="bi-v3__panel-heading bi-v3__panel-heading--wrap">
+         <div>
+          <h2>Diagnóstico de fretes — filtros atuais</h2>
+          <p className="bi-v3__secondary">{freightDiagnostic.resumo.fretesZerados} registros com faturamento e frete zero entre {freightDiagnostic.resumo.registrosFiltrados} filtrados. {freightDiagnostic.resumo.itensCarregados} itens de romaneio carregados.</p>
+         </div>
+         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => void copyFreightDiagnostic()}><ClipboardCopy className="h-4 w-4" /> Copiar relatório</Button>
+          <Button variant="outline" size="sm" onClick={() => setShowFreightDiagnostic(false)}>Fechar</Button>
+         </div>
+        </header>
+        <p className="bi-v3__secondary px-5 pb-4">Compara NF/série, produto e quantidade com os romaneios carregados. Uma NF ausente pode indicar falta de carregamento ou vínculo no sistema; este diagnóstico não altera os valores.</p>
+        <div className="bi-v3__diagnostic-table">
+         <table>
+          <thead><tr>{["NF / Série", "Data", "Cliente", "Produto", "Qtd.", "Itens no romaneio", "Diagnóstico"].map((label) => <th key={label}>{label}</th>)}</tr></thead>
+          <tbody>{freightDiagnostic.detalhes.slice(0, 150).map((row, index) => (
+           <tr key={`${row.nf}-${index}`}><td>{row.nf}</td><td>{formatDateBR(row.data)}</td><td>{row.cliente}</td><td>{row.produto}</td><td>{row.quantidade}</td><td>{row.romaneiosEncontrados}</td><td>{row.status}</td></tr>
+          ))}</tbody>
+         </table>
+         {freightDiagnostic.detalhes.length > 150 && <p className="bi-v3__secondary p-3">Exibindo os primeiros 150 registros. O relatório copiado contém todos os registros.</p>}
+         {freightDiagnostic.detalhes.length === 0 && <p className="bi-v3__secondary p-3">Não foram encontrados fretes zerados com faturamento positivo nos filtros atuais.</p>}
+        </div>
+       </section>
+      )}
+      <BiConsultation
+       rows={rows}
+       totals={tableTotals}
+       columns={columns}
+       columnOptions={columnOptions}
+       columnFilters={columnFilters}
+       setColumnFilters={setColumnFilters}
+       sort={sort}
+       onSort={setSort}
+       resetKey={`${sort}|${tableQuery}|${from}|${to}|${placas.join(",")}|${clienteIds.join(",")}|${produtoKeys.join(",")}|${JSON.stringify(columnFilters)}`}
+      />
+     </>}
+    </div>
+   </div>
+  </Layout>
+ );
 }

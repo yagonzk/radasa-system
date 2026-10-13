@@ -19,15 +19,19 @@ assert.ok(maintenance.includes('grid min-w-0 gap-4 xl:grid-cols-2'), 'Planejamen
 
 for (const token of [
   'matchNfeForManifesto', 'mergeStagingBiFacts', 'exportFaturamentoXlsx',
-  'exportFreteUnitXlsx', 'exportFreteXlsx', 'HeaderFilter',
-  'data-testid="consulta-mini-dashboard"', 'data-testid="placas-mini-dashboard"',
-  'data-testid="clientes-mini-dashboard"', 'data-testid="produtos-mini-dashboard"',
-  'formatDateBR(x.data)', 'ref={biContentRef}',
-  'min-w-[1720px]', 'overflow-auto overscroll-contain',
-  'ResizeObserver', 'compactCharts',
+  'exportFreteUnitXlsx', 'exportFreteXlsx', 'BiConsultation',
+  'testId="consulta-mini-dashboard"', 'testId="placas-mini-dashboard"',
+  'testId="clientes-mini-dashboard"', 'testId="produtos-mini-dashboard"',
+  'formatDateBR(row.data)', 'setColumnFilters', 'tableQuery',
 ]) assert.ok(bi.includes(token), `Falta capacidade ou ajuste de BI: ${token}`);
 
-assert.equal((bi.match(/bi-chart-scroll max-h-\[620px\]/g) || []).length, 3, 'Gráficos categorizados devem ter scroll vertical adaptável.');
-assert.ok(bi.includes('aria-label="Áreas do BI Gerencial"'), 'Navegação original do BI deve ser mantida.');
+const biView = fs.readFileSync('client/src/components/bi/BiPresentation.tsx', 'utf8');
+const biStyles = fs.readFileSync('client/src/pages/bi-gerencial.css', 'utf8');
+for (const token of ['BiColumnFilter', 'BiMetrics', 'BiRanking', 'columnWidths', 'compactColumnKeys', 'rows.slice']) {
+  assert.ok(biView.includes(token), `Apresentação do BI sem recurso ${token}`);
+}
+assert.ok(biStyles.includes('container: bi-dashboard / inline-size'), 'BI deve reagir à largura disponível, não somente ao viewport.');
+assert.ok(biStyles.includes('.bi-v3__table-scroll'), 'Consulta deve rolar sem compactar valores.');
+assert.ok(biStyles.includes('.bi-v3__mobile-rows'), 'Consulta deve usar cartões em espaços pequenos.');
 assert.ok(css.includes('--background: #eef2ff;') && css.includes('--background: #111827;'), 'Fundos aprovados devem ser mantidos.');
-console.log('OK: Manutenção integrada e BI responsivo, preservando navegação, operações, exportações e fundos.');
+console.log('OK: Manutenção preservada e BI reconstruído com filtros, exportações, legibilidade e fundos originais.');
