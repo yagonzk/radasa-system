@@ -195,7 +195,7 @@ export default function Administracao() {
                 autoComplete="off"
               />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
               <select className="h-10 rounded-md border bg-background px-3 text-sm" value={role} onChange={(event) => setRole(event.target.value)}>
                 <option value="TODOS">Todos os perfis</option>
                 {["ADMIN", "GERENTE", "BORRACHARIA", "MANUTENCAO", "VISUALIZACAO", "USER"].map((item) => <option key={item} value={item}>{item}</option>)}

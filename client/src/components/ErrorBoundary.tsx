@@ -1,38 +1,62 @@
+import { cn } from "@/lib/utils";
 import { AlertTriangle, RotateCcw } from "lucide-react";
-import { Component, type ReactNode } from "react";
+import { Component, ReactNode } from "react";
 
-interface Props { children: ReactNode }
-interface State { hasError: boolean }
+interface Props {
+  children: ReactNode;
+}
 
-/** Erros de chunks e renderizações apresentam uma recuperação clara sem expor stack traces. */
-export default class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
+interface State {
+  hasError: boolean;
+  error: Error | null;
+}
 
-  static getDerivedStateFromError(): State {
-    return { hasError: true };
+class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
   }
 
   render() {
-    if (!this.state.hasError) return this.props.children;
-    return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-background p-5 text-foreground">
-        <div className="w-full max-w-md rounded-3xl border border-border bg-card p-7 text-center shadow-lg sm:p-9" role="alert">
-          <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
-            <AlertTriangle className="size-7" />
-          </span>
-          <h1 className="mt-5 text-xl font-bold">Não foi possível abrir esta tela</h1>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Ocorreu uma falha ao carregar o sistema. Tente atualizar a página para recuperar o acesso.
-          </p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          >
-            <RotateCcw className="size-4" /> Atualizar página
-          </button>
+    if (this.state.hasError) {
+      return (
+        <div className="flex items-center justify-center min-h-screen p-8 bg-background">
+          <div className="flex flex-col items-center w-full max-w-2xl p-8">
+            <AlertTriangle
+              size={48}
+              className="text-destructive mb-6 flex-shrink-0"
+            />
+
+            <h2 className="text-xl mb-4">An unexpected error occurred.</h2>
+
+            <div className="p-4 w-full rounded bg-muted overflow-auto mb-6">
+              <pre className="text-sm text-muted-foreground whitespace-break-spaces">
+                {this.state.error?.stack}
+              </pre>
+            </div>
+
+            <button
+              onClick={() => window.location.reload()}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg",
+                "bg-primary text-primary-foreground",
+                "hover:opacity-90 cursor-pointer"
+              )}
+            >
+              <RotateCcw size={16} />
+              Reload Page
+            </button>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+
+    return this.props.children;
   }
 }
+
+export default ErrorBoundary;

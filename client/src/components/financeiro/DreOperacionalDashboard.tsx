@@ -1,4 +1,3 @@
-import { escapeHtml } from "@/lib/escapeHtml";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -149,10 +148,10 @@ export default function DreOperacionalDashboard({ from, to }: Props) {
 
   const exportPdf = () => {
     if (!data) return;
-    const rows = data.dre.map((x) => `<tr><td><b>${escapeHtml(x.label)}</b></td><td style="text-align:right"><b>${money(x.valor)}</b></td></tr>${x.filhos.map((f) => `<tr><td style="padding-left:24px">${escapeHtml(f.label)}</td><td style="text-align:right">${money(f.valor)}</td></tr>`).join("")}`).join("");
+    const rows = data.dre.map((x) => `<tr><td><b>${x.label}</b></td><td style="text-align:right"><b>${money(x.valor)}</b></td></tr>${x.filhos.map((f) => `<tr><td style="padding-left:24px">${f.label}</td><td style="text-align:right">${money(f.valor)}</td></tr>`).join("")}`).join("");
     const w = window.open("", "_blank", "width=1000,height=800");
     if (!w) return toast.error("Permita pop-ups para exportar o PDF.");
-    w.document.write(`<html><head><title>DRE Operacional</title><style>body{font-family:Arial;padding:24px;color:#111}table{width:100%;border-collapse:collapse}td{border-bottom:1px solid #ddd;padding:8px}h1{margin:0}small{color:#666}</style></head><body><h1>DRE Operacional</h1><small>${escapeHtml(from)} a ${escapeHtml(to)}</small><table>${rows}</table><script>window.onload=()=>window.print()<\/script></body></html>`);
+    w.document.write(`<html><head><title>DRE Operacional</title><style>body{font-family:Arial;padding:24px;color:#111}table{width:100%;border-collapse:collapse}td{border-bottom:1px solid #ddd;padding:8px}h1{margin:0}small{color:#666}</style></head><body><h1>DRE Operacional</h1><small>${from} a ${to}</small><table>${rows}</table><script>window.onload=()=>window.print()<\/script></body></html>`);
     w.document.close();
   };
 
@@ -217,7 +216,7 @@ export default function DreOperacionalDashboard({ from, to }: Props) {
         </div>
 
         {advancedOpen ? <div className="mt-4 border-t pt-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
             <SelectField label="Tipo de operação" value={filters.tipoOperacao || ""} onChange={(v) => setFilters((f) => ({ ...f, tipoOperacao: v }))}>{data.filtros.tiposOperacao.map((x) => <option key={x}>{x}</option>)}</SelectField>
             <SelectField label="Tipo de veículo" value={filters.tipoVeiculo || ""} onChange={(v) => setFilters((f) => ({ ...f, tipoVeiculo: v }))}>{data.filtros.tiposVeiculo.map((x) => <option key={x}>{x}</option>)}</SelectField>
             <SelectField label="Cidade origem" value={filters.cidadeOrigem || ""} onChange={(v) => setFilters((f) => ({ ...f, cidadeOrigem: v }))}>{data.filtros.cidadesOrigem.map((x) => <option key={x}>{x}</option>)}</SelectField>
@@ -260,7 +259,7 @@ export default function DreOperacionalDashboard({ from, to }: Props) {
         <div className="text-sm text-muted-foreground">Período: {from} a {to}{activeFilterCount ? ` · ${activeFilterCount} filtro(s) aplicado(s)` : ""}</div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={compareOn} onChange={(e) => setCompareOn(e.target.checked)} />Comparar com período anterior</label>
       </div>
-      <div className="radasa-kpi-grid">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {summaryCards.map(([label, key, value, Icon]) => {
           const d = delta(key);
           return <Card key={key} className="cursor-pointer" onClick={() => { if (key === "receitaLiquida") void drill("receita", undefined, label); if (key === "custosDiretos") void drill("custo", undefined, label); }}>

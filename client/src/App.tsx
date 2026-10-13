@@ -10,7 +10,7 @@ import Auth from "./pages/Auth";
 import ChangePassword from "./pages/ChangePassword";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
-import AppLoading from "./components/AppLoading";
+import { LoaderCircle } from "lucide-react";
 import { hasModuleAccess } from "./lib/module-access";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -47,7 +47,11 @@ const AdminHome = lazy(() => import("./pages/AdminHome"));
 const AdminCadastros = lazy(() => import("./pages/AdminCadastros"));
 const AdminConfiguracoes = lazy(() => import("./pages/AdminConfiguracoes"));
 
-const RouteFallback = AppLoading;
+const RouteFallback = () => (
+  <div className="flex min-h-[40vh] items-center justify-center bg-background">
+    <LoaderCircle className="h-7 w-7 animate-spin text-primary" />
+  </div>
+);
 
 function Router() {
   return (
@@ -115,7 +119,13 @@ function SessionGate() {
   const { user, loading } = useAuth();
   const [location] = useLocation();
 
-  if (loading) return <AppLoading />;
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <LoaderCircle className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (location === "/esqueci-senha" || location === "/redefinir-senha") {
     return <PublicAuthRouter />;

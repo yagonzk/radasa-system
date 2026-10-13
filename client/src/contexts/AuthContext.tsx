@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { api, getAccessToken, setAccessToken } from "@/lib/api";
+import { api, setAccessToken } from "@/lib/api";
 import { migrateLegacyLocalStorage } from "@/lib/legacyMigration";
 import { REALTIME_CHANGE_EVENT, startRealtimeSync } from "@/lib/realtime";
 
@@ -55,14 +55,14 @@ function canUseTransportes(user: AuthUser) {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(() => Boolean(getAccessToken()));
+  const [loading, setLoading] = useState(true);
 
   const finishAuthentication = useCallback(async (data: AuthResponse) => {
     setAccessToken(data.token);
     setUser(data.user);
     // A migração legada usa APIs do TMS. Não a executamos quando a conta possui
     // apenas Agro, evitando requests bloqueadas logo após o login.
-    if (canUseTransportes(data.user)) void migrateLegacyLocalStorage().catch(console.error);
+    if (canUseTransportes(data.user)) await migrateLegacyLocalStorage();
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -113,22 +113,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id, refreshUser]);
 
   useEffect(() => {
-    // Sem token não é necessário aguardar uma solicitação que retornaria 401.
-    if (!getAccessToken()) {
-      setLoading(false);
-      return;
-    }
     let active = true;
     api.get<AuthUser>("/auth/me")
-      .then(({ data }) => {
-        if (!active) return;
-        setUser(data);
-        // Migração legada não deve segurar a tela de carregamento.
-        if (canUseTransportes(data)) void migrateLegacyLocalStorage().catch(console.error);
-      })
-      .catch(() => {
-        if (active) { setAccessToken(null); setUser(null); }
-      })
+      .then(async ({ data }) => { if (!active) return; setUser(data); if (canUseTransportes(data)) await migrateLegacyLocalStorage(); })
+      .catch(() => { setAccessToken(null); if (active) setUser(null); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);

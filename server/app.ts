@@ -50,23 +50,29 @@ export function createApp() {
       }
 
       const origin = rawOrigin.replace(/\/$/, "");
-      let allowed = false;
+      let allowed = allowedOrigins.has(origin);
 
       try {
         const parsedOrigin = new URL(origin);
-        // Origin tem formato de origem (sem path, usuário ou credenciais).
-        if (parsedOrigin.origin !== origin || parsedOrigin.username || parsedOrigin.password) {
-          throw new Error("Origin inválida");
-        }
-        const secure = parsedOrigin.protocol === "https:";
-        const localhost = ["localhost", "127.0.0.1"].includes(parsedOrigin.hostname.toLowerCase());
-        const protocolAllowed = secure || (env.NODE_ENV !== "production" && localhost);
-        // Host (não X-Forwarded-Host) vem da URL roteada pelo servidor.
-        const requestHost = String(req.headers.host ?? "").trim().toLowerCase();
-        const sameHost = Boolean(requestHost) && parsedOrigin.host.toLowerCase() === requestHost;
-        const configured = allowedOrigins.has(parsedOrigin.origin);
-        const customDomain = ["radasa.com.br", "www.radasa.com.br"].includes(parsedOrigin.hostname.toLowerCase());
-        allowed = protocolAllowed && (configured || sameHost || (secure && customDomain));
+        const forwardedHostHeader = req.headers["x-forwarded-host"];
+        const forwardedHost = Array.isArray(forwardedHostHeader)
+          ? forwardedHostHeader[0]
+          : String(forwardedHostHeader ?? "").split(",")[0].trim();
+        const requestHost = (forwardedHost || String(req.headers.host ?? ""))
+          .trim()
+          .toLowerCase();
+        const originHost = parsedOrigin.host.toLowerCase();
+        const originHostname = parsedOrigin.hostname.toLowerCase();
+
+        const sameHost = Boolean(requestHost) && originHost === requestHost;
+        const customDomain =
+          parsedOrigin.protocol === "https:" &&
+          (originHostname === "radasa.com.br" || originHostname === "www.radasa.com.br");
+        const localDevelopment =
+          env.NODE_ENV !== "production" &&
+          (originHostname === "localhost" || originHostname === "127.0.0.1");
+
+        allowed = allowed || sameHost || customDomain || localDevelopment;
       } catch {
         allowed = false;
       }

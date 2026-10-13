@@ -1,4 +1,3 @@
-import { escapeHtml } from "@/lib/escapeHtml";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import Layout from "@/components/Layout";
@@ -1462,7 +1461,7 @@ export default function Romaneios() {
 
             rows.push(`
               <tr class="plate-start">
-                <td rowspan="3" class="plate"><span class="plate-pill">${escapeHtml(formatPlate(plate))}</span></td>
+                <td rowspan="3" class="plate"><span class="plate-pill">${formatPlate(plate)}</span></td>
                 <td><span class="type-dot lebrinha"></span>LEBRINHA</td>
                 <td class="amount-cell">${money(values.lebrinhaPrimeira)}</td>
                 <td class="amount-cell">${money(values.lebrinhaSegunda)}</td>
@@ -2379,13 +2378,13 @@ export default function Romaneios() {
           <span>Indicadores calculados sobre {filtered.length} romaneio(s) conforme todos os filtros ativos.</span>
         </div>
 
-        <div className="radasa-kpi-grid mb-7">
-          <div className="radasa-kpi-card min-h-[136px] min-w-0 rounded-3xl border border-border/80 bg-card/90 p-4 shadow-sm">
-            <p className="flex min-h-8 items-start gap-2 text-[11px] font-semibold uppercase leading-5 text-muted-foreground">
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="min-h-[128px] min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-3 2xl:p-4">
+            <p className="flex min-h-8 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground 2xl:text-xs">
               <FileText className="mt-0.5 h-4 w-4 shrink-0" />
               <span>Romaneios</span>
             </p>
-            <p className="mt-3 text-xl font-bold tabular-nums break-words" title={String(filtered.length)}>
+            <p className="mt-1 truncate text-xl font-bold tabular-nums 2xl:text-2xl" title={String(filtered.length)}>
               {filtered.length}
             </p>
           </div>
@@ -2430,9 +2429,9 @@ export default function Romaneios() {
             const isVisible = Boolean(visibleSummaryValues[key]);
 
             return (
-              <div key={key} className="radasa-kpi-card relative min-h-[136px] min-w-0 rounded-3xl border border-border/80 bg-card/90 p-4 shadow-sm">
-                <div className="min-h-9 pr-9">
-                  <p className="flex min-w-0 items-start gap-2 text-[11px] font-semibold uppercase leading-5 text-muted-foreground">
+              <div key={key} className="relative min-h-[128px] min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-3 2xl:p-4">
+                <div className="min-h-8 pr-8">
+                  <p className="flex min-w-0 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground 2xl:text-xs">
                     <Icon className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>{label}</span>
                   </p>
@@ -2440,13 +2439,13 @@ export default function Romaneios() {
                 <button
                   type="button"
                   onClick={() => toggleSummaryValue(key)}
-                  className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring 2xl:right-4 2xl:top-4"
+                  className="absolute right-3 top-3 inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring 2xl:right-4 2xl:top-4"
                   aria-label={isVisible ? `Ocultar ${label}` : `Mostrar ${label}`}
                   title={isVisible ? "Ocultar valor" : "Mostrar valor"}
                 >
                   {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
-                <p className={`mt-3 text-[clamp(1.05rem,1.6vw,1.5rem)] font-bold tabular-nums break-words ${valueClass ?? ""}`} title={isVisible ? value : "Valor oculto"}>
+                <p className={`mt-1 truncate text-xl font-bold tabular-nums 2xl:text-2xl ${valueClass ?? ""}`} title={isVisible ? value : "Valor oculto"}>
                   {isVisible ? value : "R$ ••••••"}
                 </p>
               </div>
@@ -2454,8 +2453,8 @@ export default function Romaneios() {
           })}
         </div>
 
-        <div className="mb-5 flex flex-col gap-3 rounded-3xl border border-border/80 bg-card/70 p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:p-4">
-          <div className="relative w-full min-w-0 flex-1 sm:basis-[300px]">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full max-w-xl">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pesquisar romaneio, NF, cliente, produto ou placa..." className="pl-9" />
           </div>
@@ -2466,7 +2465,7 @@ export default function Romaneios() {
           )}
           <Button
             type="button"
-            className="w-full shrink-0 sm:ml-auto sm:w-auto"
+            className="ml-auto"
             onClick={() => {
               setPreClosingTarget(null);
               setPreClosingOpen(true);
@@ -2503,10 +2502,9 @@ export default function Romaneios() {
         {filtered.length === 0 ? (
           <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">Nenhum romaneio encontrado.</div>
         ) : (
-          <div className="overflow-hidden rounded-3xl border border-border/80 bg-card/90 shadow-sm">
-            <div className="radasa-table-scroll overflow-x-auto" role="region" aria-label="Lista de romaneios com rolagem horizontal" tabIndex={0}>
-              <table className="w-full min-w-[1310px] table-fixed text-sm">
-                <colgroup><col style={{ width: 50 }} /><col style={{ width: 205 }} /><col style={{ width: 125 }} /><col style={{ width: 185 }} /><col style={{ width: 165 }} /><col style={{ width: 165 }} /><col style={{ width: 190 }} /><col style={{ width: 225 }} /></colgroup>
+          <div className="overflow-hidden rounded-xl border bg-card">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-muted/30 text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="w-10 px-2 py-3 text-center">
@@ -2532,7 +2530,7 @@ export default function Romaneios() {
                           ? "justify-center text-center"
                           : "justify-start text-left";
                       return (
-                        <th key={column.key} className="px-3 py-4 font-semibold">
+                        <th key={column.key} className="px-4 py-3 font-semibold">
                           <Popover
                             open={activeColumnFilter === column.key}
                             onOpenChange={(open) => {
@@ -2590,7 +2588,7 @@ export default function Romaneios() {
                         </th>
                       );
                     })}
-                    <th className="px-3 py-4 text-center">Ações</th>
+                    <th className="px-4 py-3 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2611,36 +2609,41 @@ export default function Romaneios() {
                             className="h-4 w-4 cursor-pointer accent-primary"
                           />
                         </td>
-                        <td className="max-w-[205px] px-3 py-4">
+                        <td className="max-w-[220px] px-4 py-3">
                           <p className="truncate font-semibold">{romaneio.romaneios || "Sem número"}</p>
                           <p className="truncate text-xs text-muted-foreground">{romaneio.transportadoraNome || "Sem transportadora"}</p>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 font-medium">{formatDate(romaneio.dataManifesto)}</td>
-                        <td className="max-w-[185px] px-3 py-4">
+                        <td className="whitespace-nowrap px-4 py-3 font-medium">{formatDate(romaneio.dataManifesto)}</td>
+                        <td className="max-w-[260px] px-4 py-3">
                           <p className="truncate font-medium">{romaneio.placaVeiculo || "—"}</p>
                           <p className="truncate text-xs text-muted-foreground">{romaneio.modeloVeiculo || "Modelo não informado"}</p>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-center font-semibold text-violet-500 tabular-nums">{formatBRL(valorLebrinhaRomaneio)}</td>
-                        <td className="whitespace-nowrap px-3 py-4 text-center font-semibold text-blue-500 tabular-nums">{formatBRL(valorClientesRomaneio)}</td>
-                        <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-primary tabular-nums">
-                          <div className="flex min-w-0 items-center justify-center gap-2">
-                            <span className="whitespace-nowrap">{formatBRL(total)}</span>
-                            {hasPendingReceberCliente && (
-                              <span
-                                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-amber-500 bg-amber-500/10 text-[11px] font-black leading-none text-amber-500"
-                                title="Existem itens de Receber c/ Cliente sem decisão de pagamento."
-                                aria-label="Existem itens de Receber c/ Cliente sem decisão de pagamento."
-                              >!</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="whitespace-nowrap px-2 py-3 text-center">
-                          <div className="inline-flex items-center justify-center gap-0.5">
-                            <Button size="icon-sm" variant="ghost" title="Inspecionar romaneio" aria-label="Inspecionar romaneio" onClick={() => setInspecting(romaneio)}><Eye className="h-4 w-4 text-blue-500" /></Button>
-                            <Button size="icon-sm" variant="ghost" title="Vincular NF-e" aria-label="Vincular NF-e" onClick={() => setNfTarget(romaneio)}><FileText className="h-4 w-4 text-amber-500" /></Button>
-                            <Button size="icon-sm" variant="ghost" title="Baixar CSV" aria-label="Baixar CSV do romaneio" onClick={() => downloadRomaneioCsv(romaneio)}><FileDown className="h-4 w-4 text-sky-600" /></Button>
-                            {(romaneio.pdfUrl || romaneio.pdfStored) && <Button size="icon-sm" variant="ghost" title="Baixar PDF" aria-label="Baixar PDF" onClick={() => void downloadPdf(romaneio)}><Download className="h-4 w-4 text-emerald-600" /></Button>}
-                            <Button size="icon-sm" variant="ghost" title="Excluir" aria-label="Excluir romaneio" onClick={async () => {
+                        <td className="whitespace-nowrap px-4 py-3 text-center font-semibold text-violet-500 tabular-nums">{formatBRL(valorLebrinhaRomaneio)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-center font-semibold text-blue-500 tabular-nums">{formatBRL(valorClientesRomaneio)}</td>
+                         <td className="whitespace-nowrap px-4 py-3 text-center font-bold text-primary tabular-nums">
+                           <span className="mx-auto grid w-full max-w-[150px] grid-cols-[1.25rem_minmax(0,1fr)_1.25rem] items-center gap-x-1">
+                             <span aria-hidden="true" />
+                             <span className="justify-self-center">{formatBRL(total)}</span>
+                             {hasPendingReceberCliente ? (
+                               <span
+                                 className="inline-flex h-5 w-5 items-center justify-center justify-self-center rounded-full border border-amber-500 text-[11px] font-black leading-none text-amber-500"
+                                 title="Existem itens de Receber c/ Cliente sem decisão de pagamento."
+                                 aria-label="Existem itens de Receber c/ Cliente sem decisão de pagamento."
+                               >
+                                 !
+                               </span>
+                             ) : (
+                               <span aria-hidden="true" />
+                             )}
+                           </span>
+                         </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <div className="inline-flex gap-1">
+                            <Button size="icon" variant="ghost" title="Inspecionar romaneio" aria-label="Inspecionar romaneio" onClick={() => setInspecting(romaneio)}><Eye className="h-4 w-4 text-blue-500" /></Button>
+                            <Button size="icon" variant="ghost" title="Vincular NF-e" aria-label="Vincular NF-e" onClick={() => setNfTarget(romaneio)}><FileText className="h-4 w-4 text-amber-500" /></Button>
+                            <Button size="icon" variant="ghost" title="Baixar CSV" aria-label="Baixar CSV do romaneio" onClick={() => downloadRomaneioCsv(romaneio)}><FileDown className="h-4 w-4 text-sky-600" /></Button>
+                            {(romaneio.pdfUrl || romaneio.pdfStored) && <Button size="icon" variant="ghost" title="Baixar PDF" aria-label="Baixar PDF" onClick={() => void downloadPdf(romaneio)}><Download className="h-4 w-4 text-emerald-600" /></Button>}
+                            <Button size="icon" variant="ghost" title="Excluir" aria-label="Excluir romaneio" onClick={async () => {
                               if (!window.confirm("Deseja excluir este romaneio?")) return;
                               try {
                                 await remove(romaneio.id);

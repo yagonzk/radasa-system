@@ -709,7 +709,7 @@ export default function Financeiro() {
         <Card className={activeTab === "GERAL" ? "" : "hidden"}>
           <CardHeader className="pb-3"><CardTitle className="text-base">Fluxo de Caixa e Previsão</CardTitle></CardHeader>
           <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Saldo realizado</div><div className="mt-1 text-lg font-bold">{money(fluxo?.saldoRealizado||0)}</div></div>
               <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Vencido a receber</div><div className="mt-1 text-lg font-bold">{money(fluxo?.vencidoReceber||0)}</div></div>
               <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Vencido a pagar</div><div className="mt-1 text-lg font-bold">{money(fluxo?.vencidoPagar||0)}</div></div>

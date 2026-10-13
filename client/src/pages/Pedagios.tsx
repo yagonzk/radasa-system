@@ -246,13 +246,7 @@ export default function Pedagios() {
       popup.appendChild(title);
       const details = document.createElement("div");
       details.style.marginTop = "5px";
-      const address = document.createElement("div");
-      address.textContent = t.address || "";
-      const vehicle = document.createElement("div");
-      vehicle.textContent = `${selectedVehicleLabel}${selectedAxes ? ` (${selectedAxes} eixos)` : ""}`;
-      const price = document.createElement("strong");
-      price.textContent = t.price == null ? "Tarifa pendente" : formatBRL(t.price);
-      details.append(address, vehicle, price);
+      details.innerHTML = `${t.address || ""}<br>${selectedVehicleLabel}${selectedAxes ? ` (${selectedAxes} eixos)` : ""}<br><b>${t.price == null ? "Tarifa pendente" : formatBRL(t.price)}</b>`;
       popup.appendChild(details);
       return L.marker([t.coordinates!.latitude, t.coordinates!.longitude], { icon: tollIcon }).addTo(mapRef.current).bindPopup(popup);
     });
