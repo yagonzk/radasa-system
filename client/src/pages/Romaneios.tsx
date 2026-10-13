@@ -171,7 +171,6 @@ const romaneioColumns: Array<{
   align?: "center" | "right";
   date?: boolean;
 }> = [
-  { key: "romaneio", label: "Romaneio" },
   { key: "data", label: "Data", date: true },
   { key: "veiculo", label: "Veículo" },
   { key: "valorLebrinha", label: "Valor Lebrinha", align: "center" },
@@ -2336,6 +2335,26 @@ export default function Romaneios() {
     }
   };
 
+  // As mesmas ações são usadas na tabela e nos cartões para telas menores.
+  const renderRomaneioActions = (romaneio: Romaneio) => (
+    <div className="romaneios-list-actions" role="group" aria-label="Ações do registro">
+      <Button size="icon-sm" variant="ghost" title="Inspecionar romaneio" aria-label="Inspecionar romaneio" onClick={() => setInspecting(romaneio)}><Eye className="h-4 w-4 text-blue-500" /></Button>
+      <Button size="icon-sm" variant="ghost" title="Vincular NF-e" aria-label="Vincular NF-e" onClick={() => setNfTarget(romaneio)}><FileText className="h-4 w-4 text-amber-500" /></Button>
+      <Button size="icon-sm" variant="ghost" title="Baixar CSV" aria-label="Baixar CSV do romaneio" onClick={() => downloadRomaneioCsv(romaneio)}><FileDown className="h-4 w-4 text-sky-600" /></Button>
+      {(romaneio.pdfUrl || romaneio.pdfStored) && <Button size="icon-sm" variant="ghost" title="Baixar PDF" aria-label="Baixar PDF" onClick={() => void downloadPdf(romaneio)}><Download className="h-4 w-4 text-emerald-600" /></Button>}
+      <Button size="icon-sm" variant="ghost" title="Excluir" aria-label="Excluir romaneio" onClick={async () => {
+        if (!window.confirm("Deseja excluir este romaneio?")) return;
+        try {
+          await remove(romaneio.id);
+          toast.success("Romaneio excluído.");
+        } catch (error: any) {
+          console.error("Falha ao excluir romaneio.", error);
+          toast.error(error?.response?.data?.message ?? "Não foi possível excluir o romaneio.");
+        }
+      }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+    </div>
+  );
+
   return (
     <Layout>
       <div className="w-full min-w-0 max-w-none">
@@ -2495,10 +2514,10 @@ export default function Romaneios() {
         {filtered.length === 0 ? (
           <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">Nenhum romaneio encontrado.</div>
         ) : (
-          <div className="overflow-hidden rounded-3xl border border-border/80 bg-card/90 shadow-sm">
-            <div className="radasa-table-scroll overflow-x-auto" role="region" aria-label="Lista de romaneios com rolagem horizontal" tabIndex={0}>
-              <table className="w-full min-w-[1310px] table-fixed text-sm">
-                <colgroup><col style={{ width: 50 }} /><col style={{ width: 205 }} /><col style={{ width: 125 }} /><col style={{ width: 185 }} /><col style={{ width: 165 }} /><col style={{ width: 165 }} /><col style={{ width: 190 }} /><col style={{ width: 225 }} /></colgroup>
+          <div className="romaneios-list-container overflow-hidden rounded-3xl border border-border/80 bg-card/90 shadow-sm">
+            <div className="romaneios-list-desktop" role="region" aria-label="Lista de romaneios">
+              <table className="romaneios-list-table w-full table-fixed text-sm">
+                <colgroup><col style={{ width: "4%" }} /><col style={{ width: "11%" }} /><col style={{ width: "17%" }} /><col style={{ width: "16%" }} /><col style={{ width: "16%" }} /><col style={{ width: "16%" }} /><col style={{ width: "20%" }} /></colgroup>
                 <thead className="bg-muted/30 text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="w-10 px-2 py-3 text-center">
@@ -2524,7 +2543,7 @@ export default function Romaneios() {
                           ? "justify-center text-center"
                           : "justify-start text-left";
                       return (
-                        <th key={column.key} className="px-3 py-4 font-semibold">
+                        <th key={column.key} className="px-2 py-3 font-semibold">
                           <Popover
                             open={activeColumnFilter === column.key}
                             onOpenChange={(open) => {
@@ -2582,7 +2601,7 @@ export default function Romaneios() {
                         </th>
                       );
                     })}
-                    <th className="px-3 py-4 text-center">Ações</th>
+                    <th className="px-1 py-3 text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2603,19 +2622,15 @@ export default function Romaneios() {
                             className="h-4 w-4 cursor-pointer accent-primary"
                           />
                         </td>
-                        <td className="max-w-[205px] px-3 py-4">
-                          <p className="truncate font-semibold">{romaneio.romaneios || "Sem número"}</p>
-                          <p className="truncate text-xs text-muted-foreground">{romaneio.transportadoraNome || "Sem transportadora"}</p>
+                        <td className="whitespace-nowrap px-1.5 py-3 font-medium">{formatDate(romaneio.dataManifesto)}</td>
+                        <td className="min-w-0 px-2 py-3">
+                          <p className="truncate font-medium" title={romaneio.placaVeiculo || undefined}>{romaneio.placaVeiculo || "—"}</p>
+                          <p className="truncate text-xs text-muted-foreground" title={romaneio.modeloVeiculo || undefined}>{romaneio.modeloVeiculo || "Modelo não informado"}</p>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-4 font-medium">{formatDate(romaneio.dataManifesto)}</td>
-                        <td className="max-w-[185px] px-3 py-4">
-                          <p className="truncate font-medium">{romaneio.placaVeiculo || "—"}</p>
-                          <p className="truncate text-xs text-muted-foreground">{romaneio.modeloVeiculo || "Modelo não informado"}</p>
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-4 text-center font-semibold text-violet-500 tabular-nums">{formatBRL(valorLebrinhaRomaneio)}</td>
-                        <td className="whitespace-nowrap px-3 py-4 text-center font-semibold text-blue-500 tabular-nums">{formatBRL(valorClientesRomaneio)}</td>
-                        <td className="whitespace-nowrap px-3 py-4 text-center font-bold text-primary tabular-nums">
-                          <div className="flex min-w-0 items-center justify-center gap-2">
+                        <td className="whitespace-nowrap px-1 py-3 text-center font-semibold text-violet-500 tabular-nums">{formatBRL(valorLebrinhaRomaneio)}</td>
+                        <td className="whitespace-nowrap px-1 py-3 text-center font-semibold text-blue-500 tabular-nums">{formatBRL(valorClientesRomaneio)}</td>
+                        <td className="whitespace-nowrap px-1 py-3 text-center font-bold text-primary tabular-nums">
+                          <div className="flex min-w-0 items-center justify-center gap-1">
                             <span className="whitespace-nowrap">{formatBRL(total)}</span>
                             {hasPendingReceberCliente && (
                               <span
@@ -2626,29 +2641,43 @@ export default function Romaneios() {
                             )}
                           </div>
                         </td>
-                        <td className="whitespace-nowrap px-2 py-3 text-center">
-                          <div className="inline-flex items-center justify-center gap-0.5">
-                            <Button size="icon-sm" variant="ghost" title="Inspecionar romaneio" aria-label="Inspecionar romaneio" onClick={() => setInspecting(romaneio)}><Eye className="h-4 w-4 text-blue-500" /></Button>
-                            <Button size="icon-sm" variant="ghost" title="Vincular NF-e" aria-label="Vincular NF-e" onClick={() => setNfTarget(romaneio)}><FileText className="h-4 w-4 text-amber-500" /></Button>
-                            <Button size="icon-sm" variant="ghost" title="Baixar CSV" aria-label="Baixar CSV do romaneio" onClick={() => downloadRomaneioCsv(romaneio)}><FileDown className="h-4 w-4 text-sky-600" /></Button>
-                            {(romaneio.pdfUrl || romaneio.pdfStored) && <Button size="icon-sm" variant="ghost" title="Baixar PDF" aria-label="Baixar PDF" onClick={() => void downloadPdf(romaneio)}><Download className="h-4 w-4 text-emerald-600" /></Button>}
-                            <Button size="icon-sm" variant="ghost" title="Excluir" aria-label="Excluir romaneio" onClick={async () => {
-                              if (!window.confirm("Deseja excluir este romaneio?")) return;
-                              try {
-                                await remove(romaneio.id);
-                                toast.success("Romaneio excluído.");
-                              } catch (error: any) {
-                                console.error("Falha ao excluir romaneio.", error);
-                                toast.error(error?.response?.data?.message ?? "Não foi possível excluir o romaneio.");
-                              }
-                            }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                          </div>
+                        <td className="px-1 py-3 text-center">
+                          {renderRomaneioActions(romaneio)}
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            </div>
+            <div className="romaneios-list-mobile" aria-label="Lista de romaneios">
+              <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
+                <input type="checkbox" checked={allPageSelected} onChange={toggleCurrentPageSelection} aria-label="Selecionar todos os registros desta página" className="h-4 w-4 cursor-pointer accent-primary" />
+                <span className="text-xs text-muted-foreground">Selecionar todos da página</span>
+              </div>
+              {visibleRomaneios.map((romaneio) => {
+                const metrics = romaneioMetricsById.get(romaneio.id);
+                const total = metrics?.total ?? 0;
+                const hasPendingReceberCliente = metrics?.hasPendingReceberCliente ?? false;
+                return (
+                  <article key={romaneio.id} className="romaneios-list-mobile-card">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <input type="checkbox" checked={selectedDeleteIds.has(romaneio.id)} onChange={() => toggleDeleteSelection(romaneio.id)} aria-label={`Selecionar registro de ${formatDate(romaneio.dataManifesto)}, ${romaneio.placaVeiculo || "sem placa"}`} className="h-4 w-4 shrink-0 cursor-pointer accent-primary" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold">{romaneio.placaVeiculo || "Sem placa"}</p>
+                        <p className="truncate text-xs text-muted-foreground">{romaneio.modeloVeiculo || "Modelo não informado"}</p>
+                      </div>
+                      <time dateTime={romaneio.dataManifesto} className="shrink-0 text-xs font-medium text-muted-foreground">{formatDate(romaneio.dataManifesto)}</time>
+                    </div>
+                    <dl className="romaneios-list-mobile-values">
+                      <div><dt>Valor Lebrinha</dt><dd className="text-violet-500">{formatBRL(metrics?.valorLebrinha ?? 0)}</dd></div>
+                      <div><dt>Valor Clientes</dt><dd className="text-blue-500">{formatBRL(metrics?.valorClientes ?? 0)}</dd></div>
+                      <div><dt>Valor total</dt><dd className="flex items-center gap-1 font-bold text-primary">{formatBRL(total)}{hasPendingReceberCliente && <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-amber-500 text-[10px] text-amber-500" title="Há cobrança de cliente pendente" aria-label="Há cobrança de cliente pendente">!</span>}</dd></div>
+                    </dl>
+                    {renderRomaneioActions(romaneio)}
+                  </article>
+                );
+              })}
             </div>
           </div>
         )}

@@ -630,3 +630,28 @@ body {
   }
   .romaneios-metric-card:last-child { grid-column: auto; }
 }
+
+/* Romaneios: tabela completa sem rolagem lateral e cartões quando não couber. */
+.romaneios-list-container { container-type: inline-size; container-name: romaneios-list; width: 100%; min-width: 0; }
+.romaneios-list-desktop { width: 100%; min-width: 0; overflow: hidden; }
+.romaneios-list-table { width: 100%; min-width: 0; }
+.romaneios-list-table th { font-size: clamp(10px, .78vw, 12px); }
+.romaneios-list-table td { font-size: clamp(11px, .9vw, 13px); }
+.romaneios-list-table td p { min-width: 0; }
+.romaneios-list-table th button { min-width: 0; }
+.romaneios-list-actions { display: flex; align-items: center; justify-content: center; gap: 2px; flex-wrap: nowrap; }
+.romaneios-list-actions [data-slot="button"] { width: 30px; height: 30px; flex: 0 0 30px; padding: 0; }
+.romaneios-list-mobile { display: none; }
+.romaneios-list-mobile-card { display: grid; gap: 10px; min-width: 0; padding: 12px; border-top: 1px solid var(--border); }
+.romaneios-list-mobile-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.romaneios-list-mobile-values > div { min-width: 0; }
+.romaneios-list-mobile-values dt { color: var(--muted-foreground); font-size: 11px; }
+.romaneios-list-mobile-values dd { margin-top: 2px; font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
+.romaneios-list-mobile-card .romaneios-list-actions { justify-content: flex-start; padding-top: 6px; border-top: 1px solid var(--border); }
+@container romaneios-list (max-width: 839px) {
+  .romaneios-list-desktop { display: none; }
+  .romaneios-list-mobile { display: block; }
+}
+@container romaneios-list (max-width: 480px) {
+  .romaneios-list-mobile-values { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
