@@ -650,7 +650,7 @@ export default function Estoque() {
             </TabsList>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:gap-4">
+          <div className="radasa-compact-kpis kpi-cols-4 mt-4">
             <Card title="Entradas" value={totalEntradas} icon={<ArrowDownToLine className="h-4 w-4" />} />
             <Card title="Saídas" value={totalSaidas} icon={<ArrowUpFromLine className="h-4 w-4" />} />
             <Card title="Saldo atual" value={totalEstoque} icon={<Boxes className="h-4 w-4" />} />

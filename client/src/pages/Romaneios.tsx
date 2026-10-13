@@ -2379,7 +2379,7 @@ export default function Romaneios() {
           <span>Indicadores calculados sobre {filtered.length} romaneio(s) conforme todos os filtros ativos.</span>
         </div>
 
-        <div className="radasa-kpi-grid mb-7">
+        <div className="radasa-kpi-grid radasa-compact-kpis kpi-cols-6 mb-4">
           <div className="radasa-kpi-card min-h-[136px] min-w-0 rounded-3xl border border-border/80 bg-card/90 p-4 shadow-sm">
             <p className="flex min-h-8 items-start gap-2 text-[11px] font-semibold uppercase leading-5 text-muted-foreground">
               <FileText className="mt-0.5 h-4 w-4 shrink-0" />

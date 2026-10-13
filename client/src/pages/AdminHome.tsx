@@ -106,7 +106,7 @@ export default function AdminHome() {
           </Button>
         </div>
 
-        <div className="radasa-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="radasa-stagger radasa-compact-kpis kpi-cols-4">
           <MetricCard label="Usuários" value={s?.usuarios.total ?? 0} hint={`${s?.usuarios.ativos ?? 0} ativos • ${s?.usuarios.pendentes ?? 0} pendentes`} icon={<Users className="h-5 w-5" />} />
           <MetricCard label="Transportes liberado" value={s?.licencas.transportesAtivas ?? 0} hint="contas com acesso vigente" icon={<Truck className="h-5 w-5" />} />
           <MetricCard label="Agro liberado" value={s?.licencas.agroAtivas ?? 0} hint="contas com acesso vigente" icon={<Leaf className="h-5 w-5" />} />

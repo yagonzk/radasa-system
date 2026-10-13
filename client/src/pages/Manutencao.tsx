@@ -552,7 +552,7 @@ export default function Manutencao() {
       </div>
     </header>
 
-    <section aria-label="Resumo da manutenção" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <section aria-label="Resumo da manutenção" className="radasa-compact-kpis kpi-cols-4">
       {[
         { icon: Wrench, name: "OS pendentes", value: statusCounts.pending, help: "Aguardando conclusão", tone: "text-amber-600 dark:text-amber-400", surface: "bg-amber-500/10" },
         { icon: CheckCircle2, name: "OS concluídas", value: statusCounts.done, help: "No histórico carregado", tone: "text-emerald-600 dark:text-emerald-400", surface: "bg-emerald-500/10" },

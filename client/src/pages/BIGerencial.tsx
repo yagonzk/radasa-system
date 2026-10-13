@@ -340,7 +340,7 @@ export default function BIGerencial(){
        </header>
        <div className="bi-v3__chart-body bi-v3__chart-body--open">
         {byEvolution.length === 0 ? <div className="bi-v3__empty">Não há dados para o período selecionado.</div> :
-         <div className="bi-v3__chart-frame"><div className="bi-v3__chart-inner">
+         <div className="bi-v3__chart-frame"><div className="bi-v3__chart-inner" style={{ minWidth: `${Math.max(540, Math.min(1800, byEvolution.length * 56))}px` }}>
           <ResponsiveContainer width="100%" height="100%">
            <LineChart data={byEvolution} margin={{ top: 14, right: 20, bottom: 12, left: 6 }}>
             <CartesianGrid stroke={isDark ? "#334155" : "#e2e8f0"} strokeDasharray="3 5" vertical={false} />

@@ -329,3 +329,16 @@
     justify-content: center;
   }
 }
+
+/* A evolução é o gráfico principal: mais espaço vertical sem aumentar os demais painéis. */
+.bi-v3__evolution-panel .bi-v3__chart-body {
+  padding: 14px 16px 20px;
+}
+.bi-v3__evolution-panel .bi-v3__chart-inner {
+  min-width: 100%;
+  height: clamp(330px, 38vw, 430px);
+}
+@container bi-dashboard (max-width: 700px) {
+  .bi-v3__evolution-panel .bi-v3__chart-inner { height: 340px; }
+  .bi-v3__evolution-panel .bi-v3__chart-body { padding: 12px 10px 16px; }
+}

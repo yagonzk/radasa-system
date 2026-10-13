@@ -4334,7 +4334,7 @@ export default function Abastecimentos() {
           <Filter className="h-3.5 w-3.5" />
           <span>Indicadores calculados sobre {filteredItems.length} abastecimento(s) conforme todos os filtros ativos.</span>
         </div>
-        <div className="radasa-kpi-grid mb-6">
+        <div className="radasa-kpi-grid radasa-compact-kpis kpi-cols-7 mb-4">
           <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-3 2xl:p-4">
             <p className="flex min-h-8 items-start gap-2 text-[11px] font-semibold uppercase leading-4 text-muted-foreground 2xl:text-xs"><Fuel className="mt-0.5 h-4 w-4 shrink-0" /> <span>Litros Diesel</span></p>
             <p className="mt-1 truncate text-xl font-bold tabular-nums 2xl:text-2xl" title={formatLitros(totals.litros)}>{formatLitros(totals.litros)}</p>

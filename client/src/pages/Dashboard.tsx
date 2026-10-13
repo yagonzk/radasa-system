@@ -134,7 +134,7 @@ export default function Dashboard() {
         {error && <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-700 dark:text-red-300">{error}</div>}
         {data?.parcial && <div role="status" className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300">Alguns indicadores operacionais não responderam nesta atualização ({(data.indisponiveis || []).join(", ")}). Os demais dados continuam disponíveis.</div>}
 
-        <section aria-label="Indicadores principais" className="radasa-kpi-grid radasa-stagger">
+        <section aria-label="Indicadores principais" className="radasa-kpi-grid radasa-stagger radasa-compact-kpis kpi-cols-6">
           {cards.map(({ label, value, format, loading: cardLoading, icon: Icon, tone, tint }) => (
             <Card key={label} className="card-hover radasa-interactive-card min-w-0 gap-0 rounded-[1.6rem] py-0">
               <CardContent className="flex h-full min-w-0 flex-col gap-5 p-4 sm:p-5">

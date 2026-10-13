@@ -217,7 +217,7 @@ export default function AgroEstoque() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["Produtos ativos", totals.ativos, Boxes], ["Com saldo", totals.comSaldo, Archive], ["Abaixo do mínimo", totals.baixos, AlertTriangle], ["Valor em estoque", formatAgroCurrency(totals.valor), Layers3]].map(([label, value, Icon]: any) => <Card key={label}><CardContent className="flex items-center justify-between p-4"><div><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 text-2xl font-bold">{value}</div></div><Icon className="h-5 w-5 text-primary" /></CardContent></Card>)}</div>
+        <div className="radasa-compact-kpis kpi-cols-4">{[["Produtos ativos", totals.ativos, Boxes], ["Com saldo", totals.comSaldo, Archive], ["Abaixo do mínimo", totals.baixos, AlertTriangle], ["Valor em estoque", formatAgroCurrency(totals.valor), Layers3]].map(([label, value, Icon]: any) => <Card key={label}><CardContent className="flex items-center justify-between p-4"><div><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 text-2xl font-bold">{value}</div></div><Icon className="h-5 w-5 text-primary" /></CardContent></Card>)}</div>
 
         <div className="flex flex-col gap-2 rounded-xl border bg-card p-3 md:flex-row md:items-center">
           <div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={view === "mapa" ? "Buscar pallet, setor, produto ou lote..." : "Buscar produto, código, fabricante ou localização..."} /></div>
