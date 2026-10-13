@@ -2379,17 +2379,8 @@ export default function Romaneios() {
           <span>Indicadores calculados sobre {filtered.length} romaneio(s) conforme todos os filtros ativos.</span>
         </div>
 
-        <div className="radasa-kpi-grid radasa-compact-kpis kpi-cols-6 mb-4">
-          <div className="radasa-kpi-card min-h-0 min-w-0 rounded-xl border border-border/80 bg-card/90 p-3 shadow-sm">
-            <p className="flex min-h-7 items-start gap-1.5 text-[10px] font-semibold uppercase leading-snug text-muted-foreground">
-              <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>Romaneios</span>
-            </p>
-            <p className="mt-2 text-[clamp(0.82rem,1.08vw,1.15rem)] font-bold tabular-nums break-words" title={String(filtered.length)}>
-              {filtered.length}
-            </p>
-          </div>
-
+        <section className="romaneios-metrics-container mb-4" aria-label="Resumo financeiro dos romaneios">
+          <div className="romaneios-metrics-grid">
           {[
             {
               key: "Total Clientes",
@@ -2430,9 +2421,9 @@ export default function Romaneios() {
             const isVisible = Boolean(visibleSummaryValues[key]);
 
             return (
-              <div key={key} className="radasa-kpi-card relative min-h-0 min-w-0 rounded-xl border border-border/80 bg-card/90 p-3 shadow-sm">
-                <div className="min-h-7 pr-7">
-                  <p className="flex min-w-0 items-start gap-1.5 text-[10px] font-semibold uppercase leading-snug text-muted-foreground">
+              <div key={key} className="radasa-kpi-card romaneios-metric-card relative min-w-0 rounded-xl border border-border/80 bg-card/90 p-3 shadow-sm">
+                <div className="min-h-8 pr-7">
+                  <p className="flex min-w-0 items-start gap-2 text-[11px] font-semibold uppercase leading-snug text-muted-foreground">
                     <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>{label}</span>
                   </p>
@@ -2446,13 +2437,14 @@ export default function Romaneios() {
                 >
                   {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
-                <p className={`mt-2 text-[clamp(0.82rem,1.08vw,1.15rem)] font-bold tabular-nums break-words ${valueClass ?? ""}`} title={isVisible ? value : "Valor oculto"}>
+                <p className={`romaneios-metric-value mt-2 font-bold tabular-nums ${valueClass ?? ""}`} title={isVisible ? value : "Valor oculto"}>
                   {isVisible ? value : "R$ ••••••"}
                 </p>
               </div>
             );
           })}
-        </div>
+          </div>
+        </section>
 
         <div className="mb-5 flex flex-col gap-3 rounded-3xl border border-border/80 bg-card/70 p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:p-4">
           <div className="relative w-full min-w-0 flex-1 sm:basis-[300px]">

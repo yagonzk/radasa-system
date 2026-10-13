@@ -533,7 +533,7 @@ body {
    O grid encaixa todos os indicadores na largura disponível; somente em
    telas realmente estreitas as células passam para a linha seguinte. */
 .radasa-compact-kpis {
-  --radasa-kpi-min: 142px;
+  --radasa-kpi-min: 160px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--radasa-kpi-min)), 1fr));
   gap: 8px;
@@ -543,10 +543,10 @@ body {
   overflow: visible;
 }
 .radasa-compact-kpis.kpi-cols-3 { --radasa-kpi-min: 185px; }
-.radasa-compact-kpis.kpi-cols-4 { --radasa-kpi-min: 160px; }
-.radasa-compact-kpis.kpi-cols-5 { --radasa-kpi-min: 148px; }
-.radasa-compact-kpis.kpi-cols-6 { --radasa-kpi-min: 132px; }
-.radasa-compact-kpis.kpi-cols-7 { --radasa-kpi-min: 122px; }
+.radasa-compact-kpis.kpi-cols-4 { --radasa-kpi-min: 175px; }
+.radasa-compact-kpis.kpi-cols-5 { --radasa-kpi-min: 160px; }
+.radasa-compact-kpis.kpi-cols-6 { --radasa-kpi-min: 150px; }
+.radasa-compact-kpis.kpi-cols-7 { --radasa-kpi-min: 145px; }
 .radasa-compact-kpis > * {
   min-width: 0;
   min-height: 0 !important;
@@ -558,15 +558,15 @@ body {
 }
 .radasa-compact-kpis > [data-slot="card"] > [data-slot="card-content"] {
   min-height: 0 !important;
-  padding: 9px 10px;
-  gap: 6px;
+  padding: 11px 12px;
+  gap: 8px;
 }
 .radasa-compact-kpis > :not([data-slot="card"]) {
   min-height: 0 !important;
-  padding: 9px 10px;
+  padding: 11px 12px;
 }
 .radasa-compact-kpis > * :is(.text-2xl, .text-3xl, .text-xl, .text-lg) {
-  font-size: clamp(0.82rem, 1.08vw, 1.15rem);
+  font-size: clamp(1rem, 1.4vw, 1.25rem);
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
@@ -580,5 +580,53 @@ body {
   border-radius: 10px;
 }
 @media (max-width: 700px) {
-  .radasa-compact-kpis { --radasa-kpi-min: 150px; }
+  .radasa-compact-kpis { --radasa-kpi-min: 160px; }
+}
+
+/* Romaneios: cinco indicadores financeiros legíveis, sem rolagem horizontal.
+   As colunas são ajustadas pela largura real do conteúdo, não pela tela inteira. */
+.romaneios-metrics-container {
+  container: romaneios-metrics / inline-size;
+  width: 100%;
+  min-width: 0;
+}
+.romaneios-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+  min-width: 0;
+  width: 100%;
+}
+.romaneios-metric-card {
+  min-height: 106px;
+  padding: 13px 14px;
+}
+.romaneios-metric-value {
+  font-size: clamp(1.08rem, 1.55vw, 1.32rem);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+@container romaneios-metrics (max-width: 930px) {
+  .romaneios-metrics-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .romaneios-metric-card { grid-column: span 2; }
+  .romaneios-metric-card:nth-last-child(-n+2) { grid-column: span 3; }
+}
+@container romaneios-metrics (max-width: 570px) {
+  .romaneios-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .romaneios-metric-card { grid-column: auto; padding: 12px; }
+  .romaneios-metric-card:nth-last-child(-n+2) { grid-column: auto; }
+  .romaneios-metric-card:last-child { grid-column: 1 / -1; }
+}
+@container romaneios-metrics (max-width: 340px) {
+  .romaneios-metrics-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .romaneios-metric-card:last-child { grid-column: auto; }
 }
