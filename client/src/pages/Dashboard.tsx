@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
 import {
   Truck, WalletCards, TrendingUp, Fuel, Route, AlertTriangle,
@@ -97,13 +98,13 @@ export default function Dashboard() {
     } finally { setRankingsLoading(false); }
   };
 
-  const cards: Array<{ label: string; value: string; icon: LucideIcon; tone: string; tint: string }> = [
-    { label: "Faturamento do mês", value: financeLoading ? "…" : money(financeiro?.receitas || 0), icon: TrendingUp, tone: "text-violet-600 dark:text-violet-300", tint: "bg-violet-100 dark:bg-violet-400/15" },
-    { label: "Resultado", value: financeLoading ? "…" : money(financeiro?.resultado || 0), icon: WalletCards, tone: "text-pink-600 dark:text-pink-300", tint: "bg-pink-100 dark:bg-pink-400/15" },
-    { label: "Acertos de viagem", value: String(data?.operacao?.emAndamento || 0), icon: Route, tone: "text-sky-600 dark:text-sky-300", tint: "bg-sky-100 dark:bg-sky-400/15" },
-    { label: "KM rodado", value: `${num(data?.operacao?.km || 0)} km`, icon: Truck, tone: "text-indigo-600 dark:text-indigo-300", tint: "bg-indigo-100 dark:bg-indigo-400/15" },
-    { label: "Combustível", value: money(data?.operacao?.combustivel || 0), icon: Fuel, tone: "text-amber-600 dark:text-amber-300", tint: "bg-amber-100 dark:bg-amber-400/15" },
-    { label: "OS abertas", value: String(data?.frota?.osAbertas || 0), icon: Wrench, tone: "text-emerald-600 dark:text-emerald-300", tint: "bg-emerald-100 dark:bg-emerald-400/15" },
+  const cards: Array<{ label: string; value: number; format: (value: number) => string; loading?: boolean; icon: LucideIcon; tone: string; tint: string }> = [
+    { label: "Faturamento do mês", value: financeiro?.receitas || 0, format: money, loading: financeLoading, icon: TrendingUp, tone: "text-primary", tint: "bg-primary/10" },
+    { label: "Resultado", value: financeiro?.resultado || 0, format: money, loading: financeLoading, icon: WalletCards, tone: "text-amber-600 dark:text-amber-300", tint: "bg-amber-100 dark:bg-amber-400/15" },
+    { label: "Acertos de viagem", value: data?.operacao?.emAndamento || 0, format: (n) => String(Math.round(n)), icon: Route, tone: "text-sky-600 dark:text-sky-300", tint: "bg-sky-100 dark:bg-sky-400/15" },
+    { label: "KM rodado", value: data?.operacao?.km || 0, format: (n) => `${num(n)} km`, icon: Truck, tone: "text-primary", tint: "bg-primary/10" },
+    { label: "Combustível", value: data?.operacao?.combustivel || 0, format: money, icon: Fuel, tone: "text-amber-600 dark:text-amber-300", tint: "bg-amber-100 dark:bg-amber-400/15" },
+    { label: "OS abertas", value: data?.frota?.osAbertas || 0, format: (n) => String(Math.round(n)), icon: Wrench, tone: "text-emerald-600 dark:text-emerald-300", tint: "bg-emerald-100 dark:bg-emerald-400/15" },
   ];
 
   return (
@@ -133,14 +134,14 @@ export default function Dashboard() {
         {error && <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-700 dark:text-red-300">{error}</div>}
         {data?.parcial && <div role="status" className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300">Alguns indicadores operacionais não responderam nesta atualização ({(data.indisponiveis || []).join(", ")}). Os demais dados continuam disponíveis.</div>}
 
-        <section aria-label="Indicadores principais" className="radasa-kpi-grid">
-          {cards.map(({ label, value, icon: Icon, tone, tint }) => (
-            <Card key={label} className="card-hover min-w-0 gap-0 rounded-[1.6rem] py-0">
+        <section aria-label="Indicadores principais" className="radasa-kpi-grid radasa-stagger">
+          {cards.map(({ label, value, format, loading: cardLoading, icon: Icon, tone, tint }) => (
+            <Card key={label} className="card-hover radasa-interactive-card min-w-0 gap-0 rounded-[1.6rem] py-0">
               <CardContent className="flex h-full min-w-0 flex-col gap-5 p-4 sm:p-5">
                 <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${tint} ${tone}`}><Icon className="h-5 w-5" /></div>
                 <div className="min-w-0">
                   <p className="text-[11px] font-semibold tracking-wide text-muted-foreground">{label}</p>
-                  <p className="mt-1.5 break-words text-[clamp(1rem,1.35vw,1.4rem)] font-bold tracking-tight tabular-nums text-foreground">{value}</p>
+                  <p className="mt-1.5 break-words text-[clamp(1rem,1.35vw,1.4rem)] font-bold tracking-tight tabular-nums text-foreground">{cardLoading ? "…" : <AnimatedNumber value={value} format={format} />}</p>
                 </div>
               </CardContent>
             </Card>

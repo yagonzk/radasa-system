@@ -14,6 +14,7 @@ import {
 import { Link } from "wouter";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { Badge } from "@/components/ui/badge";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
@@ -44,12 +45,12 @@ type AdminSummary = {
 
 function MetricCard({ label, value, hint, icon }: { label: string; value: number; hint: string; icon: ReactNode }) {
   return (
-    <Card>
+    <Card className="radasa-interactive-card">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums">{value.toLocaleString("pt-BR")}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums"><AnimatedNumber value={value} format={(n) => Math.round(n).toLocaleString("pt-BR")} /></p>
             <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
           </div>
           <div className="rounded-xl bg-primary/10 p-2.5 text-primary">{icon}</div>
@@ -105,7 +106,7 @@ export default function AdminHome() {
           </Button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="radasa-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard label="Usuários" value={s?.usuarios.total ?? 0} hint={`${s?.usuarios.ativos ?? 0} ativos • ${s?.usuarios.pendentes ?? 0} pendentes`} icon={<Users className="h-5 w-5" />} />
           <MetricCard label="Transportes liberado" value={s?.licencas.transportesAtivas ?? 0} hint="contas com acesso vigente" icon={<Truck className="h-5 w-5" />} />
           <MetricCard label="Agro liberado" value={s?.licencas.agroAtivas ?? 0} hint="contas com acesso vigente" icon={<Leaf className="h-5 w-5" />} />

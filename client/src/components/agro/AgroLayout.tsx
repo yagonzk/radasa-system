@@ -116,8 +116,9 @@ export default function AgroLayout({ children }: { children: ReactNode }) {
               key={item.href}
               href={item.href}
               onClick={() => setMobileMenuOpen(false)}
+              data-active={active ? "true" : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-2xl px-3 py-3 text-[13px] font-medium transition-all",
+                "radasa-nav-item flex items-center gap-3 rounded-2xl px-3 py-3 text-[13px] font-medium transition-all",
                 active
                   ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
                   : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
@@ -212,7 +213,7 @@ export default function AgroLayout({ children }: { children: ReactNode }) {
         </header>
 
         <main data-radasa-agro-main className="min-h-0 min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 md:p-6 lg:p-7 xl:p-8">
-          <div className="w-full min-w-0 max-w-full">{children}</div>
+          <div className="radasa-page-enter w-full min-w-0 max-w-full">{children}</div>
         </main>
 
         <footer className="mx-3 mb-3 mt-2 flex items-center justify-between gap-3 border-t border-border/40 px-3 py-3 sm:mx-4 sm:px-4 md:mx-6 md:px-6 xl:mx-8 xl:px-8">

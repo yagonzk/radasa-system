@@ -378,3 +378,153 @@ body {
 /* Popovers não podem ultrapassar a tela em celulares estreitos. */
 [data-radix-popper-content-wrapper] { max-width: calc(100vw - 0.75rem); }
 [data-slot="popover-content"] { max-width: calc(100vw - 1rem); }
+
+/* Motion system: conteúdos, abas e indicadores, sem mexer nos fundos. */
+@keyframes radasa-enter {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes radasa-soft-appear {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes radasa-bar-grow {
+  from { transform: scaleY(0.03); opacity: 0.6; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+@keyframes radasa-progress-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes radasa-tab-accent {
+  from { transform: translateX(-50%) scaleX(0); opacity: 0; }
+  to { transform: translateX(-50%) scaleX(1); opacity: 1; }
+}
+
+.radasa-page-enter {
+  animation: radasa-enter 380ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+.radasa-stagger > :nth-child(-n + 8) {
+  animation: radasa-enter 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.radasa-stagger > :nth-child(1) { animation-delay: 35ms; }
+.radasa-stagger > :nth-child(2) { animation-delay: 85ms; }
+.radasa-stagger > :nth-child(3) { animation-delay: 135ms; }
+.radasa-stagger > :nth-child(4) { animation-delay: 185ms; }
+.radasa-stagger > :nth-child(5) { animation-delay: 235ms; }
+.radasa-stagger > :nth-child(6) { animation-delay: 285ms; }
+.radasa-stagger > :nth-child(7) { animation-delay: 335ms; }
+.radasa-stagger > :nth-child(8) { animation-delay: 385ms; }
+
+/* Os botões e navegação recebem feedback sem deslocar tabelas ou layouts. */
+.radasa-nav-item {
+  position: relative;
+  isolation: isolate;
+  transition: color 200ms ease, background-color 200ms ease, box-shadow 200ms ease;
+}
+.radasa-nav-item::before {
+  content: "";
+  position: absolute;
+  top: 24%;
+  bottom: 24%;
+  left: 0;
+  width: 3px;
+  border-radius: 10px;
+  background: var(--chart-2);
+  transform: scaleY(0);
+  transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+.radasa-nav-item[data-active="true"]::before { transform: scaleY(1); }
+.radasa-nav-item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.module-agro .radasa-nav-item::before { background: var(--chart-1); }
+
+/* O fundo das abas continua igual; a barra marca a seleção com as cores da logo. */
+[data-slot="tabs-trigger"] {
+  position: relative;
+  transition: color 190ms ease, background-color 190ms ease,
+    box-shadow 190ms ease, transform 190ms ease;
+}
+[data-slot="tabs-trigger"][data-state="active"] {
+  color: var(--primary);
+  box-shadow: 0 4px 16px -10px color-mix(in srgb, var(--primary) 40%, transparent);
+}
+[data-slot="tabs-trigger"][data-state="active"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: min(42px, 45%);
+  height: 3px;
+  border-radius: 999px;
+  background: var(--chart-2);
+  transform: translateX(-50%);
+  animation: radasa-tab-accent 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  pointer-events: none;
+}
+.module-agro [data-slot="tabs-trigger"][data-state="active"]::after {
+  background: var(--chart-1);
+}
+[data-slot="tabs-content"][data-state="active"] {
+  animation: radasa-soft-appear 320ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+/* Abas artesanais (BI Gerencial) seguem a mesma identidade. */
+.radasa-manual-tab {
+  position: relative;
+  transition: color 200ms ease, background-color 200ms ease,
+    box-shadow 200ms ease, transform 200ms ease;
+}
+.radasa-manual-tab[data-active="true"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 8px 18px -12px var(--primary);
+}
+.radasa-manual-tab[data-active="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  height: 2.5px;
+  width: 38%;
+  border-radius: 999px;
+  background: var(--chart-2);
+  animation: radasa-tab-accent 260ms ease-out both;
+  pointer-events: none;
+}
+.radasa-manual-tab:hover:not([data-active="true"]) { color: var(--primary); }
+.radasa-interactive-card {
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .radasa-interactive-card:hover {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+    box-shadow: 0 16px 28px -22px var(--primary);
+  }
+  .radasa-nav-item:hover svg { transform: translateX(2px); }
+  .radasa-nav-item svg { transition: transform 200ms ease; }
+  .radasa-manual-tab:hover { transform: translateY(-1px); }
+}
+.radasa-animated-bars > * > .radasa-bar {
+  transform-origin: bottom;
+  animation: radasa-bar-grow 750ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.radasa-progress-animated { transform-origin: left; animation: radasa-progress-fill 850ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .radasa-page-enter,
+  .radasa-stagger > :nth-child(-n + 8),
+  [data-slot="tabs-content"][data-state="active"],
+  [data-slot="tabs-trigger"][data-state="active"]::after,
+  .radasa-manual-tab[data-active="true"]::after,
+  .radasa-animated-bars > * > .radasa-bar,
+  .radasa-progress-animated {
+    animation: none !important;
+  }
+  .radasa-nav-item, .radasa-nav-item::before,
+  .radasa-nav-item svg, [data-slot="tabs-trigger"],
+  .radasa-manual-tab, .radasa-interactive-card {
+    transition: none !important;
+  }
+}

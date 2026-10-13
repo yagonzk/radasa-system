@@ -134,8 +134,9 @@ export default function Layout({ children }: { children: ReactNode }) {
           {transportEnabled && canAccessStandalone("demandas") && <Link
             href="/demandas"
             onClick={() => setMobileMenuOpen(false)}
+            data-active={location.startsWith("/demandas") ? "true" : undefined}
             className={cn(
-              "flex items-center gap-3 rounded-2xl px-3 py-3 text-[13px] font-medium transition-all",
+              "radasa-nav-item flex items-center gap-3 rounded-2xl px-3 py-3 text-[13px] font-medium transition-all",
               location.startsWith("/demandas") ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
             )}
           >
@@ -147,8 +148,9 @@ export default function Layout({ children }: { children: ReactNode }) {
           {transportEnabled && canAccessStandalone("dashboard") && <Link
             href="/"
             onClick={() => setMobileMenuOpen(false)}
+            data-active={location === "/" ? "true" : undefined}
             className={cn(
-              "flex items-center gap-3 rounded-2xl px-3 py-3 text-[13px] font-medium transition-all",
+              "radasa-nav-item flex items-center gap-3 rounded-2xl px-3 py-3 text-[13px] font-medium transition-all",
               location === "/" ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
             )}
           >
@@ -165,8 +167,10 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   onClick={() => setOpenGroups(current => ({ ...current, [group.label]: !open }))}
+                  data-active={groupActive ? "true" : undefined}
+                  aria-expanded={open}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-[13px] font-medium transition-all",
+                    "radasa-nav-item flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-[13px] font-medium transition-all",
                     groupActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
                   )}
                 >
@@ -179,8 +183,8 @@ export default function Layout({ children }: { children: ReactNode }) {
                     {group.items.map(item => {
                       const active = isActive(item);
                       return (
-                        <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)} className={cn(
-                          "flex items-center gap-2 rounded-xl px-3 py-2.5 text-[12px] font-medium transition-colors",
+                        <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)} data-active={active ? "true" : undefined} className={cn(
+                          "radasa-nav-item flex items-center gap-2 rounded-xl px-3 py-2.5 text-[12px] font-medium transition-colors",
                           active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
                         )}>
                           {item.icon}{item.label}
@@ -249,7 +253,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </header>
 
         <main data-radasa-main className="min-h-0 min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 md:p-6 lg:p-7 xl:p-8">
-          <div className="w-full min-w-0 max-w-full">{children}</div>
+          <div className="radasa-page-enter w-full min-w-0 max-w-full">{children}</div>
         </main>
 
         {/* Footer with theme toggle */}
