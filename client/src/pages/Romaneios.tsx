@@ -2380,12 +2380,12 @@ export default function Romaneios() {
         </div>
 
         <div className="radasa-kpi-grid radasa-compact-kpis kpi-cols-6 mb-4">
-          <div className="radasa-kpi-card min-h-[136px] min-w-0 rounded-3xl border border-border/80 bg-card/90 p-4 shadow-sm">
-            <p className="flex min-h-8 items-start gap-2 text-[11px] font-semibold uppercase leading-5 text-muted-foreground">
-              <FileText className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="radasa-kpi-card min-h-0 min-w-0 rounded-xl border border-border/80 bg-card/90 p-3 shadow-sm">
+            <p className="flex min-h-7 items-start gap-1.5 text-[10px] font-semibold uppercase leading-snug text-muted-foreground">
+              <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>Romaneios</span>
             </p>
-            <p className="mt-3 text-xl font-bold tabular-nums break-words" title={String(filtered.length)}>
+            <p className="mt-2 text-[clamp(0.82rem,1.08vw,1.15rem)] font-bold tabular-nums break-words" title={String(filtered.length)}>
               {filtered.length}
             </p>
           </div>
@@ -2430,23 +2430,23 @@ export default function Romaneios() {
             const isVisible = Boolean(visibleSummaryValues[key]);
 
             return (
-              <div key={key} className="radasa-kpi-card relative min-h-[136px] min-w-0 rounded-3xl border border-border/80 bg-card/90 p-4 shadow-sm">
-                <div className="min-h-9 pr-9">
-                  <p className="flex min-w-0 items-start gap-2 text-[11px] font-semibold uppercase leading-5 text-muted-foreground">
-                    <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+              <div key={key} className="radasa-kpi-card relative min-h-0 min-w-0 rounded-xl border border-border/80 bg-card/90 p-3 shadow-sm">
+                <div className="min-h-7 pr-7">
+                  <p className="flex min-w-0 items-start gap-1.5 text-[10px] font-semibold uppercase leading-snug text-muted-foreground">
+                    <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>{label}</span>
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => toggleSummaryValue(key)}
-                  className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring 2xl:right-4 2xl:top-4"
+                  className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={isVisible ? `Ocultar ${label}` : `Mostrar ${label}`}
                   title={isVisible ? "Ocultar valor" : "Mostrar valor"}
                 >
                   {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
-                <p className={`mt-3 text-[clamp(1.05rem,1.6vw,1.5rem)] font-bold tabular-nums break-words ${valueClass ?? ""}`} title={isVisible ? value : "Valor oculto"}>
+                <p className={`mt-2 text-[clamp(0.82rem,1.08vw,1.15rem)] font-bold tabular-nums break-words ${valueClass ?? ""}`} title={isVisible ? value : "Valor oculto"}>
                   {isVisible ? value : "R$ ••••••"}
                 </p>
               </div>

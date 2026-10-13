@@ -529,27 +529,24 @@ body {
   }
 }
 
-/* Mini-dashboards: uma faixa compacta, com rolagem quando não houver largura suficiente.
-   A classe é aplicada apenas aos indicadores, nunca aos formulários ou tabelas. */
+/* Mini-dashboards compactos: células flexíveis SEM barra de rolagem.
+   O grid encaixa todos os indicadores na largura disponível; somente em
+   telas realmente estreitas as células passam para a linha seguinte. */
 .radasa-compact-kpis {
-  --radasa-kpi-count: 4;
+  --radasa-kpi-min: 142px;
   display: grid;
-  grid-template-columns: repeat(var(--radasa-kpi-count), minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--radasa-kpi-min)), 1fr));
   gap: 8px;
   align-items: stretch;
   min-width: 0;
   max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 5px;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
+  overflow: visible;
 }
-.radasa-compact-kpis.kpi-cols-3 { --radasa-kpi-count: 3; }
-.radasa-compact-kpis.kpi-cols-4 { --radasa-kpi-count: 4; }
-.radasa-compact-kpis.kpi-cols-5 { --radasa-kpi-count: 5; }
-.radasa-compact-kpis.kpi-cols-6 { --radasa-kpi-count: 6; }
-.radasa-compact-kpis.kpi-cols-7 { --radasa-kpi-count: 7; }
+.radasa-compact-kpis.kpi-cols-3 { --radasa-kpi-min: 185px; }
+.radasa-compact-kpis.kpi-cols-4 { --radasa-kpi-min: 160px; }
+.radasa-compact-kpis.kpi-cols-5 { --radasa-kpi-min: 148px; }
+.radasa-compact-kpis.kpi-cols-6 { --radasa-kpi-min: 132px; }
+.radasa-compact-kpis.kpi-cols-7 { --radasa-kpi-min: 122px; }
 .radasa-compact-kpis > * {
   min-width: 0;
   min-height: 0 !important;
@@ -561,16 +558,16 @@ body {
 }
 .radasa-compact-kpis > [data-slot="card"] > [data-slot="card-content"] {
   min-height: 0 !important;
-  padding: 11px 12px;
-  gap: 7px;
+  padding: 9px 10px;
+  gap: 6px;
 }
 .radasa-compact-kpis > :not([data-slot="card"]) {
   min-height: 0 !important;
-  padding: 11px 12px;
+  padding: 9px 10px;
 }
 .radasa-compact-kpis > * :is(.text-2xl, .text-3xl, .text-xl, .text-lg) {
-  font-size: clamp(1rem, 1.25vw, 1.22rem);
-  line-height: 1.3;
+  font-size: clamp(0.82rem, 1.08vw, 1.15rem);
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 .radasa-compact-kpis > * :is(.mt-3, .mt-2, .mt-1\.5) { margin-top: 4px; }
@@ -583,5 +580,5 @@ body {
   border-radius: 10px;
 }
 @media (max-width: 700px) {
-  .radasa-compact-kpis { grid-template-columns: repeat(var(--radasa-kpi-count), minmax(170px, 1fr)); }
+  .radasa-compact-kpis { --radasa-kpi-min: 150px; }
 }
