@@ -33,7 +33,8 @@
     "hyperdrive:configurar": "node scripts/configurar-hyperdrive.mjs",
     "precheck": "node scripts/limpar-modulo-multas-obsoleto.mjs",
     "prebuild:cloudflare": "node scripts/limpar-modulo-multas-obsoleto.mjs",
-    "db:nfe-romaneios": "prisma db execute --file prisma/migrations/20260915101500_link_nfe_manifesto_safe/migration.sql --schema prisma/schema.prisma"
+    "db:nfe-romaneios": "prisma db execute --file prisma/migrations/20260915101500_link_nfe_manifesto_safe/migration.sql --schema prisma/schema.prisma",
+    "security:scan": "node scripts/verificar-seguranca.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

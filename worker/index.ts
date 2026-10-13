@@ -29,8 +29,6 @@ type RealtimeBindings = WorkerRuntimeBindings & {
   REALTIME_HUB?: DurableObjectNamespaceLike;
 };
 
-type RealtimeTokenPayload = { sub?: string; email?: string; role?: string };
-
 function websocketToken(request: Request) {
   const protocols = String(request.headers.get("Sec-WebSocket-Protocol") || "")
     .split(",")
@@ -44,8 +42,10 @@ function realtimeAuthorized(request: Request) {
   const token = websocketToken(request);
   if (!token) return false;
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET) as RealtimeTokenPayload;
-    return Boolean(payload?.sub);
+    const payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] });
+    return typeof payload !== "string" &&
+      typeof payload.sub === "string" && payload.sub.length > 0 &&
+      ["ADMIN", "GERENTE", "BORRACHARIA", "MANUTENCAO", "VISUALIZACAO", "USER"].includes(String(payload.role));
   } catch {
     return false;
   }
@@ -157,7 +157,7 @@ async function broadcastMutation(request: Request, response: Response, bindings:
       resources,
       path: url.pathname,
       method: request.method.toUpperCase(),
-      sourceClientId: String(request.headers.get("X-Radasa-Client-Id") || ""),
+      sourceClientId: String(request.headers.get("X-Radasa-Client-Id") || "").slice(0, 96),
       at: Date.now(),
     }),
   });

@@ -1,3 +1,4 @@
+import { escapeHtml } from "./escapeHtml";
 import type { Fechamento, Motorista, Local, Viagem } from "./store";
 import { expandirViagensFechamento, formatFechamentoViagemLabel } from "./fechamentoViagem";
 
@@ -84,7 +85,11 @@ export function exportToCSV(
 
   const csv = [headers, ...rows]
     .map((row) =>
-      row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(",")
+      row.map((cell) => {
+        // Evita execução de fórmulas em planilhas ao abrir texto de usuários.
+        const text = /^[\s\u0000-\u001f]*[=+@-]/.test(cell) ? `'${cell}` : cell;
+        return `"${text.replace(/"/g, '""')}"`;
+      }).join(",")
     )
     .join("\n");
 
@@ -119,7 +124,7 @@ export function exportToPDF(
         .map((v) => {
           const local = locais.find((l) => l.id === v.localId);
           return `<tr><td style="padding:4px 8px;border:1px solid #ddd;">${
-            formatFechamentoViagemLabel(v.dataViagem, local ? local.cidade : v.cidade || "—")
+            escapeHtml(formatFechamentoViagemLabel(v.dataViagem, local ? local.cidade : v.cidade || "—"))
           }</td><td style="padding:4px 8px;border:1px solid #ddd;text-align:right;">${
             local ? formatBRL(local.valorComissao) : "—"
           }</td></tr>`;
@@ -128,8 +133,8 @@ export function exportToPDF(
       const totalViagens = expandirViagensFechamento(f, viagensCadastradas, locais).length;
       return `
         <div style="margin-bottom:24px;padding:16px;border:1px solid #ddd;border-radius:8px;">
-          <h3 style="margin:0 0 8px;color:#0062B1;">${motorista?.nome || "—"}</h3>
-          <p style="margin:0 0 4px;font-size:13px;color:#555;">CPF: ${motorista?.cpf || "—"}</p>
+          <h3 style="margin:0 0 8px;color:#0062B1;">${escapeHtml(motorista?.nome || "—")}</h3>
+          <p style="margin:0 0 4px;font-size:13px;color:#555;">CPF: ${escapeHtml(motorista?.cpf || "—")}</p>
           <p style="margin:0 0 12px;font-size:13px;color:#555;">Período: ${formatDate(f.dataInicio)} a ${formatDate(f.dataFim)}</p>
           <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
             <thead>

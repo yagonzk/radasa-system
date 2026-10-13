@@ -1,3 +1,4 @@
+import { escapeHtml } from "@/lib/escapeHtml";
 import { useMemo, useState } from "react";
 import {
   Download,
@@ -48,7 +49,7 @@ function printCiot(item: Ciot) {
   printWindow.document.write(`
     <html>
       <head>
-        <title>CIOT #${item.idSequencial}</title>
+        <title>CIOT #${escapeHtml(item.idSequencial)}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 32px; color: #111827; }
           h1 { margin-bottom: 8px; }
@@ -63,17 +64,17 @@ function printCiot(item: Ciot) {
         <h1>Comprovante CIOT</h1>
         <p class="muted">Documento interno do Radasa System</p>
         <div class="grid">
-          <div class="field"><span class="label">ID interno</span><span class="value">#${item.idSequencial}</span></div>
-          <div class="field"><span class="label">Número CIOT ANTT</span><span class="value">${item.numeroCiot ?? "—"}</span></div>
-          <div class="field"><span class="label">Código verificador</span><span class="value">${item.codigoVerificador ?? "—"}</span></div>
-          <div class="field"><span class="label">Protocolo</span><span class="value">${item.protocolo ?? "—"}</span></div>
+          <div class="field"><span class="label">ID interno</span><span class="value">#${escapeHtml(item.idSequencial)}</span></div>
+          <div class="field"><span class="label">Número CIOT ANTT</span><span class="value">${escapeHtml(item.numeroCiot ?? "—")}</span></div>
+          <div class="field"><span class="label">Código verificador</span><span class="value">${escapeHtml(item.codigoVerificador ?? "—")}</span></div>
+          <div class="field"><span class="label">Protocolo</span><span class="value">${escapeHtml(item.protocolo ?? "—")}</span></div>
           <div class="field"><span class="label">Status</span><span class="value">${labels[item.status]}</span></div>
-          <div class="field"><span class="label">Contratante</span><span class="value">${item.contratanteRazaoSocial || "—"} • ${item.contratanteCnpj || "—"}</span></div>
-          <div class="field"><span class="label">Contratado</span><span class="value">${item.contratadoRazaoSocial || "—"} • ${item.contratadoCnpj || "—"}</span></div>
-          <div class="field"><span class="label">Origem</span><span class="value">${item.origemCidade}/${item.origemUf}</span></div>
-          <div class="field"><span class="label">Destino</span><span class="value">${item.destinoCidade}/${item.destinoUf}</span></div>
+          <div class="field"><span class="label">Contratante</span><span class="value">${escapeHtml(item.contratanteRazaoSocial || "—")} • ${escapeHtml(item.contratanteCnpj || "—")}</span></div>
+          <div class="field"><span class="label">Contratado</span><span class="value">${escapeHtml(item.contratadoRazaoSocial || "—")} • ${escapeHtml(item.contratadoCnpj || "—")}</span></div>
+          <div class="field"><span class="label">Origem</span><span class="value">${escapeHtml(item.origemCidade)}/${escapeHtml(item.origemUf)}</span></div>
+          <div class="field"><span class="label">Destino</span><span class="value">${escapeHtml(item.destinoCidade)}/${escapeHtml(item.destinoUf)}</span></div>
           <div class="field"><span class="label">Valor do frete</span><span class="value">${formatMoney(item.valorFrete)}</span></div>
-          <div class="field"><span class="label">RNTRC</span><span class="value">${item.rntrc}</span></div>
+          <div class="field"><span class="label">RNTRC</span><span class="value">${escapeHtml(item.rntrc)}</span></div>
         </div>
       </body>
     </html>

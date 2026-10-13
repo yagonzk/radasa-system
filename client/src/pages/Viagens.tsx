@@ -1232,7 +1232,7 @@ export default function Viagens() {
         <DialogContent className="max-h-[90vh] max-w-6xl overflow-hidden">
           <DialogHeader><DialogTitle>Importar pedágios e chapas do TruckPag</DialogTitle></DialogHeader>
           {extratoPreview&&<div className="space-y-4 overflow-hidden">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
               <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Pedágios</div><div className="text-lg font-bold">{extratoPreview.resumo.pedagios}</div><div className="text-xs">{formatBRL(extratoPreview.resumo.valorPedagios)}</div></div>
               <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Chapas</div><div className="text-lg font-bold">{extratoPreview.resumo.chapas}</div><div className="text-xs">{formatBRL(extratoPreview.resumo.valorChapas)}</div></div>
               <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Vinculados</div><div className="text-lg font-bold">{extratoPreview.items.filter(x=>x.viagemId&&!x.duplicado).length}</div></div>

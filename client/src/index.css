@@ -282,3 +282,69 @@ body {
   .card-hover { transition: none; }
   .card-hover:hover { transform: none; }
 }
+
+/* Adaptação por espaço disponível: KPIs nunca são comprimidos em seis colunas fixas. */
+@layer components {
+  .radasa-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr));
+    gap: 0.875rem;
+    align-items: stretch;
+  }
+  .radasa-kpi-card {
+    box-shadow: 0 6px 22px rgba(15, 23, 42, 0.045);
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+  .radasa-kpi-card:hover {
+    border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  }
+  .radasa-table-scroll { overscroll-behavior-inline: contain; }
+  .radasa-table-scroll:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+  .radasa-table-scroll table th, .radasa-table-scroll table td { vertical-align: middle; }
+}
+
+/* Controles e contêineres compartilhados nos módulos Transportes, Agro e Admin. */
+[data-radasa-main], [data-radasa-agro-main], [data-radasa-admin-main] {
+  min-width: 0;
+  width: 100%;
+}
+[data-radasa-main] :is(.grid, .flex),
+[data-radasa-agro-main] :is(.grid, .flex),
+[data-radasa-admin-main] :is(.grid, .flex) { min-width: 0; }
+[data-radasa-main] :is(button, a),
+[data-radasa-agro-main] :is(button, a),
+[data-radasa-admin-main] :is(button, a) { touch-action: manipulation; }
+:is([data-radasa-main], [data-radasa-agro-main], [data-radasa-admin-main]) :is(table th, table td) { vertical-align: middle; }
+:is([data-radasa-main], [data-radasa-agro-main], [data-radasa-admin-main]) :is(input, select, textarea) { max-width: 100%; }
+
+@media (max-width: 639px) {
+  [data-radasa-main], [data-radasa-agro-main], [data-radasa-admin-main] { padding-inline: 0.75rem; }
+  :is([data-radasa-main], [data-radasa-agro-main], [data-radasa-admin-main]) :is(h1, h2) { overflow-wrap: anywhere; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .radasa-kpi-card { transition: none; }
+}
+
+/* Tabs horizontais em resoluções menores, sem apertar/encavalá-las. */
+@media (max-width: 767px) {
+  [data-slot="tabs-list"] {
+    max-width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+  [data-slot="tabs-list"] > [data-slot="tabs-trigger"] { flex: 0 0 auto; }
+}
+/* Diálogos grandes mantêm todos os controles acessíveis em notebooks e telas baixas. */
+@media (max-height: 800px) {
+  [data-slot="dialog-content"] {
+    max-height: calc(100dvh - 1.5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+/* Popovers não podem ultrapassar a tela em celulares estreitos. */
+[data-radix-popper-content-wrapper] { max-width: calc(100vw - 0.75rem); }
+[data-slot="popover-content"] { max-width: calc(100vw - 1rem); }

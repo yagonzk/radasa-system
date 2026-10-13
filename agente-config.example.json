@@ -1,0 +1,9 @@
+{
+  "apiUrl": "http://ENDERECO-DO-SERVIDOR:3001",
+  "token": "INSIRA-CHAVE-ALEATORIA-CONFIGURADA-NO-SERVIDOR",
+  "cnpj": "00000000000000",
+  "folderPath": "C:\\SSAgro\\Server\\Bin\\Docs\\NFe\\Empresa",
+  "intervalSeconds": 30,
+  "stabilityMs": 1000,
+  "maxFileMb": 5
+}
