@@ -11,16 +11,16 @@ const tabs = [
 export default function CiotSubtabs() {
   const [location] = useLocation();
   return (
-    <div className="radasa-workspace-nav" role="navigation" aria-label="Áreas do CIOT">
-      <div className="flex w-full min-w-max gap-2">
+    <div className="overflow-x-auto rounded-xl border bg-card p-1">
+      <div className="flex min-w-max gap-1">
         {tabs.map(({ href, label, icon: Icon }) => {
           const active = location.startsWith(href);
           return (
             <Link key={href} href={href} className={cn(
-              "radasa-workspace-nav__item min-h-[56px]",
-              active ? "!border-primary/30 !bg-primary/10 !text-primary" : "",
+              "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}>
-              <span className="radasa-workspace-nav__icon"><Icon className="size-[18px]" /></span><span className="radasa-workspace-nav__label">{label}</span>
+              <Icon className="h-4 w-4" />{label}
             </Link>
           );
         })}

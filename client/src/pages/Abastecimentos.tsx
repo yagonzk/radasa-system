@@ -1,4 +1,3 @@
-import { WorkspaceNavigation, WorkspacePanel } from "@/components/ui/workspace-navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import Layout from "@/components/Layout";
@@ -35,8 +34,6 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
-  ArrowRight,
-  Search,
   Banknote,
   Check,
   ChevronDown,
@@ -3216,7 +3213,6 @@ function formatSubcategoriaVeiculo(value: unknown) {
 }
 
 export default function Abastecimentos() {
-  const [workspaceTab, setWorkspaceTab] = useState<"resumo" | "registros">("resumo");
   const { items, create, update, remove, removeMany, refresh, loadRange } = useAbastecimentos();
   const { items: clientes, create: createCliente } = useClientes();
   const { items: produtos } = useProdutos();
@@ -4334,16 +4330,6 @@ export default function Abastecimentos() {
           </div>
         </div>
 
-        <WorkspaceNavigation
-          className="mb-5"
-          value={workspaceTab}
-          onValueChange={(next) => setWorkspaceTab(next as "resumo" | "registros")}
-          items={[
-            {value:"resumo",label:"Visão geral",description:"Indicadores e totais",icon:Fuel},
-            {value:"registros",label:"Lançamentos",description:"Pesquisar, filtrar e gerenciar",icon:Search}
-          ]}
-        />
-        <WorkspacePanel active={workspaceTab === "resumo"} className="space-y-4">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Filter className="h-3.5 w-3.5" />
           <span>Indicadores calculados sobre {filteredItems.length} abastecimento(s) conforme todos os filtros ativos.</span>
@@ -4422,13 +4408,6 @@ export default function Abastecimentos() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/70 p-4">
-          <div><strong className="block text-sm">Visão geral atualizada</strong><p className="mt-1 text-xs text-muted-foreground">Os valores seguem os filtros ativos. A gestão completa fica separada dos indicadores.</p></div>
-          <Button type="button" onClick={() => setWorkspaceTab("registros")}>Abrir abastecimentos <ArrowRight className="ml-1 size-4" /></Button>
-        </div>
-        </WorkspacePanel>
-        <WorkspacePanel active={workspaceTab === "registros"} className="space-y-4">
-          <div className="radasa-section-heading"><div><h2>Gestão de abastecimentos</h2><p className="text-xs text-muted-foreground">Registros, filtros e ações</p></div></div>
         <div className="mb-3 flex flex-wrap justify-end gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -4713,7 +4692,6 @@ export default function Abastecimentos() {
             </Button>
           </div>
         </div>
-        </WorkspacePanel>
       </div>
 
       <Dialog open={statusOpen} onOpenChange={setStatusOpen}>

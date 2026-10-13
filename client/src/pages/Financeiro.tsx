@@ -1,4 +1,3 @@
-import { WorkspaceNavigation } from "@/components/ui/workspace-navigation";
 import Layout from "@/components/Layout";
 import { api } from "@/lib/api";
 import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
@@ -663,14 +662,21 @@ export default function Financeiro() {
           </Button>
         </div>
 
-        <WorkspaceNavigation value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}
-          items={[
-            {value:"GERAL",label:"Visão geral",description:"DRE, fluxo e indicadores",icon:TrendingUp},
-            {value:"RECEBER",label:"A receber",description:"Recebimentos previstos",icon:WalletCards},
-            {value:"PAGAR",label:"A pagar",description:"Contas e despesas",icon:ReceiptText},
-            {value:"MOVIMENTACOES",label:"Movimentações",description:"Lançamentos financeiros",icon:History},
-            {value:"CENTROS",label:"Centros de custos",description:"Categorias e distribuição",icon:Landmark}
-          ]} />
+        <div className="rounded-xl border bg-card p-1">
+          <div className="flex flex-wrap gap-1">
+            {([
+              ["GERAL", "Geral"],
+              ["RECEBER", "Contas a Receber"],
+              ["PAGAR", "Contas a Pagar"],
+              ["MOVIMENTACOES", "Movimentações"],
+              ["CENTROS", "Centro de Custos"],
+            ] as const).map(([key, label]) => (
+              <Button key={key} size="sm" variant={activeTab === key ? "default" : "ghost"} onClick={() => setActiveTab(key)}>
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
 
         <Card>
           <CardContent className="p-4">

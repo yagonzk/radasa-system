@@ -1,4 +1,3 @@
-import { WorkspaceNavigation, WorkspacePanel } from "@/components/ui/workspace-navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
@@ -84,7 +83,6 @@ function formatDate(value: string | null) {
 }
 
 export default function Administracao() {
-  const [workspaceTab, setWorkspaceTab] = useState<"resumo" | "contas">("resumo");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -167,12 +165,6 @@ export default function Administracao() {
           </Button>
         </div>
 
-        <WorkspaceNavigation value={workspaceTab} onValueChange={(value) => setWorkspaceTab(value as "resumo" | "contas")}
-          items={[
-            {value:"resumo",label:"Visão geral",description:"Contas, acessos e licenças",icon:ShieldCheck},
-            {value:"contas",label:"Usuários",description:"Consultar e administrar",icon:Users}
-          ]} />
-        <WorkspacePanel active={workspaceTab === "resumo"} className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
             [Users, "Contas", stats.total],
@@ -191,9 +183,6 @@ export default function Administracao() {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/70 p-4"><p className="text-sm text-muted-foreground">Acesse a lista para pesquisar e administrar as contas do sistema.</p><Button onClick={() => setWorkspaceTab("contas")}>Abrir usuários <Users className="ml-2 size-4" /></Button></div>
-        </WorkspacePanel>
-        <WorkspacePanel active={workspaceTab === "contas"} className="space-y-4">
         <Card>
           <CardContent className="space-y-3 p-4">
             <div className="relative">
@@ -291,7 +280,6 @@ export default function Administracao() {
             </table>
           </div>
         </div>
-        </WorkspacePanel>
       </div>
     </AdminLayout>
   );

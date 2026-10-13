@@ -33,7 +33,7 @@ export default function Cadastros() {
 
   return (
     <Layout>
-      <div className="radasa-page-layout mx-auto w-full min-w-0 max-w-7xl">
+      <div className="mx-auto w-full min-w-0 max-w-6xl">
         <div className="mb-6">
           <h1 className="font-display text-2xl font-bold text-foreground">
             Cadastros
@@ -45,7 +45,7 @@ export default function Cadastros() {
 
         <Tabs value={activeTab} onValueChange={(tab) => navigate(`/cadastros/${tab}`)} className="w-full">
           <div className="overflow-x-auto pb-1">
-            <TabsList className="inline-flex h-auto min-h-12 min-w-max items-center justify-start gap-1.5 rounded-2xl border border-border/70 bg-muted/60 p-1.5">
+            <TabsList className="inline-flex h-10 min-w-max items-center justify-start gap-1 rounded-lg bg-muted/60 p-1">
               <TabsTrigger value="motoristas">Motoristas</TabsTrigger>
               <TabsTrigger value="chapas">Chapas</TabsTrigger>
               <TabsTrigger value="veiculos">Veículos</TabsTrigger>
@@ -57,28 +57,28 @@ export default function Cadastros() {
             </TabsList>
           </div>
 
-          <TabsContent value="motoristas" className="mt-4 min-w-0">
+          <TabsContent value="motoristas" className="mt-6">
             <MotoristaTab />
           </TabsContent>
-          <TabsContent value="chapas" className="mt-4 min-w-0">
+          <TabsContent value="chapas" className="mt-6">
             <ChapaTab />
           </TabsContent>
-          <TabsContent value="clientes" className="mt-4 min-w-0">
+          <TabsContent value="clientes" className="mt-6">
             <ClienteTab />
           </TabsContent>
-          <TabsContent value="fornecedores" className="mt-4 min-w-0">
+          <TabsContent value="fornecedores" className="mt-6">
             <FornecedorTab />
           </TabsContent>
-          <TabsContent value="produtos" className="mt-4 min-w-0">
+          <TabsContent value="produtos" className="mt-6">
             <ProdutoTab />
           </TabsContent>
-          <TabsContent value="locais" className="mt-4 min-w-0">
+          <TabsContent value="locais" className="mt-6">
             <LocaisTab />
           </TabsContent>
-          <TabsContent value="veiculos" className="mt-4 min-w-0">
+          <TabsContent value="veiculos" className="mt-6">
             <VeiculoTab />
           </TabsContent>
-          <TabsContent value="empresa" className="mt-4 min-w-0">
+          <TabsContent value="empresa" className="mt-6">
             <EmpresaTab />
           </TabsContent>
         </Tabs>

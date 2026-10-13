@@ -1,4 +1,3 @@
-import { WorkspaceNavigation } from "@/components/ui/workspace-navigation";
 import { formatBrazilianPhoneInput } from "@/lib/phoneMask";
 import { formatCpfCnpjInput } from "@/lib/documentMasks";
 import CnpjLookupButton from "@/components/cadastros/CnpjLookupButton";
@@ -29,6 +28,9 @@ import {
   Eye,
   FilePlus2,
   FileText,
+  CalendarClock,
+  LayoutGrid,
+  List,
   Paperclip,
   Pencil,
   Plus,
@@ -103,7 +105,6 @@ export default function Manutencao() {
   const { items: produtosEstoque } = useEstoqueProdutos();
   const { items: fornecedores, create: createFornecedor, refresh: refreshFornecedores } = useFornecedores();
   const { items: motoristas } = useMotoristas();
-  const [tab, setTab] = useState<"OS" | "PLANOS" | "DOCS">("OS");
   const [dash, setDash] = useState<any>({});
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [ordens, setOrdens] = useState<OS[]>([]);
@@ -285,7 +286,7 @@ export default function Manutencao() {
   const totalOrderPages = Math.max(1, Math.ceil(displayedOrdens.length / ordersPerPage));
   const currentOrderPage = Math.min(orderPage, totalOrderPages);
   const pageOrdens = useMemo(() => displayedOrdens.slice((currentOrderPage - 1) * ordersPerPage, currentOrderPage * ordersPerPage), [displayedOrdens, currentOrderPage]);
-  useEffect(() => { setOrderPage(1); }, [query, columnFilters, osStatusFilter, tab]);
+  useEffect(() => { setOrderPage(1); }, [query, columnFilters, osStatusFilter]);
   const statusCounts = useMemo(() => ({
     all: ordens.length,
     pending: ordens.filter((os) => os.status !== "CONCLUIDA" && os.status !== "CANCELADA").length,
@@ -531,45 +532,53 @@ export default function Manutencao() {
     }
   };
 
-  return <Layout><div className="space-y-5 p-4 md:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">Manutenção</h1>
-        <p className="text-sm text-muted-foreground">Ordens de serviço, preventivas e documentos da frota em um só lugar.</p>
+  return <Layout><div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-5 pb-8">
+    <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-card px-4 py-5 shadow-sm sm:px-6 sm:py-6">
+      <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full bg-primary/[0.07] blur-3xl" />
+      <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10 text-primary"><Wrench className="h-6 w-6" /></span>
+          <div className="min-w-0 space-y-1">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Gestão da frota</p>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-[28px]">Manutenção</h1>
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">Acompanhe custos e pendências, gerencie ordens e mantenha as revisões em dia.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button className="min-h-10 shadow-sm" onClick={() => abrir("OS")}><Plus className="h-4 w-4" />Nova manutenção</Button>
+          <Button variant="outline" className="min-h-10" onClick={() => abrir("PLANO")}><CalendarClock className="h-4 w-4" />Programar preventiva</Button>
+          <Button variant="outline" className="min-h-10" onClick={() => abrir("DOC")}><FilePlus2 className="h-4 w-4" />Documento</Button>
+        </div>
       </div>
-      <Button className="min-h-10" onClick={() => abrir(tab === "OS" ? "OS" : tab === "PLANOS" ? "PLANO" : "DOC")}>
-        <Plus className="mr-2 h-4 w-4" />{tab === "OS" ? "Nova manutenção" : tab === "PLANOS" ? "Novo plano preventivo" : "Novo documento"}
-      </Button>
-    </div>
+    </header>
 
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <section aria-label="Resumo da manutenção" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {[
-        { icon: Wrench, name: "Ordens pendentes", value: statusCounts.pending, help: "OS ainda não concluídas" },
-        { icon: CheckCircle2, name: "OS concluídas", value: statusCounts.done, help: "No histórico carregado" },
-        { icon: ClipboardList, name: "Planos preventivos", value: dash.planosAtivos || 0, help: "Planos ativos" },
-        { icon: FileText, name: "Custos de manutenção", value: money(dash.custoTotal || 0), help: "Conforme painel de manutenção" },
-      ].map(({ icon: Icon, name, value, help }) => <Card key={name} className="border-border/70"><CardContent className="flex items-start justify-between gap-3 p-4">
-        <div><p className="text-xs font-medium text-muted-foreground">{name}</p><p className="mt-2 text-xl font-bold tabular-nums">{value}</p><p className="mt-1 text-[11px] text-muted-foreground">{help}</p></div>
-        <span className="rounded-lg bg-muted p-2"><Icon className="h-4 w-4 text-muted-foreground" /></span>
+        { icon: Wrench, name: "OS pendentes", value: statusCounts.pending, help: "Aguardando conclusão", tone: "text-amber-600 dark:text-amber-400", surface: "bg-amber-500/10" },
+        { icon: CheckCircle2, name: "OS concluídas", value: statusCounts.done, help: "No histórico carregado", tone: "text-emerald-600 dark:text-emerald-400", surface: "bg-emerald-500/10" },
+        { icon: ClipboardList, name: "Preventivas ativas", value: dash.planosAtivos || 0, help: "Revisões programadas", tone: "text-primary", surface: "bg-primary/10" },
+        { icon: FileText, name: "Custos de manutenção", value: money(dash.custoTotal || 0), help: "Total conforme painel", tone: "text-primary", surface: "bg-primary/10" },
+      ].map(({ icon: Icon, name, value, help, tone, surface }) => <Card key={name} className="min-w-0 gap-0 overflow-hidden border-border/70 py-0 shadow-sm transition-colors hover:border-primary/25"><CardContent className="flex min-w-0 items-start justify-between gap-3 p-4 sm:p-5">
+        <div className="min-w-0"><p className="text-xs font-semibold text-muted-foreground">{name}</p><p className="mt-2 break-words text-xl font-bold tracking-tight tabular-nums sm:text-2xl">{value}</p><p className="mt-1 text-xs text-muted-foreground">{help}</p></div>
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${surface}`}><Icon className={`h-5 w-5 ${tone}`} /></span>
       </CardContent></Card>)}
-    </div>
+    </section>
 
-    {dash.alertas?.length > 0 && <details className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3">
-      <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium"><AlertTriangle className="h-4 w-4 text-amber-500" />{dash.alertas.length} alerta(s) de manutenção <span className="ml-auto text-xs text-muted-foreground">Mostrar detalhes</span></summary>
-      <div className="mt-3 grid gap-2 md:grid-cols-2">{dash.alertas.slice(0, 8).map((a: any, i: number) => <div key={i} className="rounded-lg border bg-background p-3 text-sm"><span className="font-medium">{placa(a.veiculoId)}</span><span className="ml-2 text-muted-foreground">{a.titulo || "Alerta"} · {a.detalhe || "Verifique este alerta"}</span></div>)}</div>
+    {dash.alertas?.length > 0 && <details className="group rounded-2xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 sm:px-5">
+      <summary className="flex cursor-pointer list-none items-center gap-3 text-sm font-medium [&::-webkit-details-marker]:hidden"><span className="rounded-xl bg-amber-500/10 p-2"><AlertTriangle className="h-4 w-4 text-amber-500" /></span><span className="min-w-0 flex-1">{dash.alertas.length} alerta(s) de manutenção <span className="hidden font-normal text-muted-foreground sm:inline">· confira as revisões e vencimentos</span></span><ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" /></summary>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">{dash.alertas.slice(0, 8).map((a: any, i: number) => <div key={i} className="rounded-xl border border-border/70 bg-card p-3 text-sm"><span className="font-semibold">{placa(a.veiculoId)}</span><span className="ml-2 text-muted-foreground">{a.titulo || "Alerta"} · {a.detalhe || "Verifique este alerta"}</span></div>)}</div>
     </details>}
 
-    <WorkspaceNavigation label="Seções de manutenção" value={tab} onValueChange={(value) => setTab(value as typeof tab)}
-      items={[
-        {value:"OS",label:"Ordens de serviço",description:"Registros e histórico",icon:Wrench},
-        {value:"PLANOS",label:"Preventivas",description:"Planos por veículo",icon:ClipboardList},
-        {value:"DOCS",label:"Documentos",description:"Vencimentos e arquivos",icon:FileText}
-      ]} />
+    <section className="space-y-4 rounded-3xl border border-border/70 bg-card p-3 shadow-sm sm:p-5" aria-label="Painel de ordens de serviço">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <div><h2 className="flex items-center gap-2 text-lg font-bold tracking-tight"><ClipboardList className="h-5 w-5 text-primary" />Ordens de serviço</h2><p className="mt-0.5 text-xs text-muted-foreground">Consulte, filtre e conclua as manutenções sem sair do painel.</p></div>
+        <span className="rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-semibold text-muted-foreground">{displayedOrdens.length} de {ordens.length} OS</span>
+      </div>
 
-    {tab === "OS" && <div className="space-y-3">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[230px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar placa, OS, fornecedor ou serviço..." aria-label="Pesquisar manutenções" /></div>
-        <Button size="sm" variant="outline" onClick={() => setOrderView(orderView === "RESUMIDA" ? "DETALHADA" : "RESUMIDA")}>{orderView === "RESUMIDA" ? "Tabela detalhada" : "Visão simplificada"}</Button>
+        <div className="relative min-w-0 flex-[1_1_250px]"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar placa, OS, fornecedor ou serviço..." aria-label="Pesquisar manutenções" /></div>
+        <Button size="sm" variant="outline" className="gap-2" onClick={() => setOrderView(orderView === "RESUMIDA" ? "DETALHADA" : "RESUMIDA")}>{orderView === "RESUMIDA" ? <List className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}{orderView === "RESUMIDA" ? "Exibir tabela" : "Exibir cartões"}</Button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {[
@@ -584,12 +593,12 @@ export default function Manutencao() {
         <Button size="sm" variant="outline" onClick={toggleAllFilteredOs} disabled={!selectableFilteredOsIds.length || bulkCompleting}>{allFilteredSelected ? "Desmarcar pendentes" : `Selecionar pendentes (${selectableFilteredOsIds.length})`}</Button>
         {selectedOsIds.size > 0 && <Button size="sm" onClick={() => void concluirSelecionadas()} disabled={bulkCompleting}><CheckCircle2 className="mr-1.5 h-4 w-4" />{bulkCompleting ? "Concluindo..." : `Concluir selecionadas (${selectedOsIds.size})`}</Button>}
       </div>
-    </div>}
+    </div>
 
-    {tab === "OS" && orderView === "RESUMIDA" && <section aria-label="Ordens de serviço" className="grid gap-3 lg:grid-cols-2">
+    {orderView === "RESUMIDA" && <section aria-label="Ordens de serviço" className="grid gap-3 xl:grid-cols-2">
       {pageOrdens.map((os) => {
         const selectable = os.status !== "CONCLUIDA" && os.status !== "CANCELADA";
-        return <Card key={os.id} className="border-border/70 transition-colors hover:border-primary/40"><CardContent className="space-y-3 p-4">
+        return <Card key={os.id} className="min-w-0 gap-0 border-border/70 py-0 shadow-none transition-colors hover:border-primary/35 hover:bg-muted/20"><CardContent className="space-y-3 p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="font-semibold">{os.numero}</span><Badge variant={os.status === "CONCLUIDA" ? "default" : "secondary"}>{statusLabel(os.status)}</Badge></div><p className="mt-0.5 text-xs text-muted-foreground">{dateBr(os.dataAbertura)} · {tipoLabel(os.tipo)}{os.numeroFornecedor ? ` · Oficina ${os.numeroFornecedor}` : ""}</p></div>
             <Checkbox aria-label={`Selecionar ${os.numero}`} checked={selectedOsIds.has(os.id)} disabled={!selectable || bulkCompleting} onCheckedChange={(checked) => toggleOsSelection(os.id, checked === true)} />
@@ -603,8 +612,8 @@ export default function Manutencao() {
       {pageOrdens.length === 0 && <div className="col-span-full rounded-xl border border-dashed px-5 py-12 text-center"><Wrench className="mx-auto mb-2 h-6 w-6 text-muted-foreground" /><p className="font-medium">Nenhuma manutenção encontrada</p><p className="mt-1 text-sm text-muted-foreground">Tente alterar os filtros ou cadastre uma nova OS.</p></div>}
     </section>}
 
-    {(tab !== "OS" || orderView === "DETALHADA") && <Card><CardContent className="overflow-x-auto p-4">
-      {tab === "OS" && <table className="w-full min-w-[1250px] table-fixed text-sm">
+    {orderView === "DETALHADA" && <Card className="gap-0 overflow-hidden rounded-2xl py-0 shadow-none"><CardContent className="overflow-x-auto p-0">
+      <table className="w-full min-w-[1250px] table-fixed text-sm">
         <colgroup><col className="w-[52px]" /><col className="w-[120px]" /><col className="w-[110px]" /><col className="w-[120px]" /><col className="w-[170px]" /><col className="w-[120px]" /><col className="w-[260px]" /><col className="w-[160px]" /><col className="w-[140px]" /><col className="w-[120px]" /><col className="w-[132px]" /></colgroup>
         <thead><tr className="border-b text-muted-foreground">
           <th className="px-4 py-3 text-center align-middle"><Checkbox aria-label="Selecionar todas as OS visíveis" checked={allFilteredSelected ? true : selectedOsIds.size > 0 && selectableFilteredOsIds.some((id) => selectedOsIds.has(id)) ? "indeterminate" : false} onCheckedChange={() => toggleAllFilteredOs()} disabled={!selectableFilteredOsIds.length || bulkCompleting} /></th>
@@ -648,12 +657,42 @@ export default function Manutencao() {
           <td className="whitespace-nowrap px-4 py-3 text-right align-middle font-medium tabular-nums">{money(x.valorTotal)}</td>
           <td className="px-4 py-3 text-right align-middle"><div className="inline-flex items-center justify-end gap-1"><Button size="icon" variant="ghost" title="Abrir OS" aria-label="Abrir OS" onClick={() => void openDetail(x.id)} disabled={detailLoading}><Eye className="h-4 w-4 text-blue-500" /></Button><Button size="icon" variant="ghost" title="Editar OS" aria-label="Editar OS" onClick={() => void openEdit(x.id)} disabled={detailLoading}><Pencil className="h-4 w-4 text-amber-500" /></Button><Button size="icon" variant="ghost" title="Excluir OS" aria-label="Excluir OS" onClick={() => void removeOs(x)}><Trash2 className="h-4 w-4 text-destructive" /></Button></div></td>
         </tr>}) : <tr><td colSpan={11} className="py-12 text-center text-muted-foreground">Nenhuma Ordem de Serviço encontrada.</td></tr>}</tbody>
-      </table>}
-      {tab === "PLANOS" && <table className="w-full min-w-[700px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Veículo</th><th>Serviço</th><th>Intervalo</th><th>Próximo KM</th><th>Próxima data</th><th /></tr></thead><tbody>{planos.map((x) => <tr className="border-b" key={x.id}><td className="py-3">{placa(x.veiculoId)}</td><td className="font-medium">{x.nome}</td><td>{x.intervaloKm ? `${x.intervaloKm} km` : "—"}</td><td>{x.proximoKm ?? "—"}</td><td>{dateBr(x.proximaData)}</td><td className="text-right"><Button size="icon" variant="ghost" onClick={async () => { await api.delete(`/manutencao/planos/${x.id}`); await load(); }}><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table>}
-      {tab === "DOCS" && <table className="w-full min-w-[650px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="pb-2">Veículo</th><th>Documento</th><th>Número</th><th>Validade</th><th /></tr></thead><tbody>{docs.map((x) => <tr className="border-b" key={x.id}><td className="py-3">{placa(x.veiculoId)}</td><td className="font-medium">{x.tipo}</td><td>{x.numero || "—"}</td><td>{dateBr(x.validade)}</td><td className="text-right"><Button size="icon" variant="ghost" onClick={async () => { await api.delete(`/manutencao/documentos/${x.id}`); await load(); }}><Trash2 className="h-4 w-4" /></Button></td></tr>)}</tbody></table>}
+      </table>
     </CardContent></Card>}
 
-    {tab === "OS" && displayedOrdens.length > ordersPerPage && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm"><span className="text-muted-foreground">Mostrando {(currentOrderPage - 1) * ordersPerPage + 1}–{Math.min(currentOrderPage * ordersPerPage, displayedOrdens.length)} de {displayedOrdens.length}</span><div className="flex gap-2"><Button size="sm" variant="outline" disabled={currentOrderPage <= 1} onClick={() => setOrderPage((n) => Math.max(1, n - 1))}>Anterior</Button><span className="self-center text-xs">{currentOrderPage} / {totalOrderPages}</span><Button size="sm" variant="outline" disabled={currentOrderPage >= totalOrderPages} onClick={() => setOrderPage((n) => n + 1)}>Próxima</Button></div></div>}
+    {displayedOrdens.length > ordersPerPage && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm"><span className="text-muted-foreground">Mostrando {(currentOrderPage - 1) * ordersPerPage + 1}–{Math.min(currentOrderPage * ordersPerPage, displayedOrdens.length)} de {displayedOrdens.length}</span><div className="flex gap-2"><Button size="sm" variant="outline" disabled={currentOrderPage <= 1} onClick={() => setOrderPage((n) => Math.max(1, n - 1))}>Anterior</Button><span className="self-center text-xs">{currentOrderPage} / {totalOrderPages}</span><Button size="sm" variant="outline" disabled={currentOrderPage >= totalOrderPages} onClick={() => setOrderPage((n) => n + 1)}>Próxima</Button></div></div>}
+
+    </section>
+
+    <section className="grid min-w-0 gap-4 xl:grid-cols-2" aria-label="Planejamento e documentos">
+      <details className="group min-w-0 overflow-hidden rounded-3xl border border-border/70 bg-card shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center gap-3 p-4 sm:p-5 [&::-webkit-details-marker]:hidden">
+          <span className="rounded-2xl bg-primary/10 p-3 text-primary"><CalendarClock className="h-5 w-5" /></span>
+          <span className="min-w-0 flex-1"><span className="block font-bold">Manutenções preventivas</span><span className="text-xs text-muted-foreground">{planos.length} plano(s) cadastrados · clique para consultar</span></span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="border-t border-border/60 p-4 sm:p-5">
+          <div className="mb-3 flex justify-end"><Button size="sm" variant="outline" onClick={() => abrir("PLANO")}><Plus className="h-4 w-4" />Novo plano</Button></div>
+          <div className="max-h-96 overflow-auto rounded-xl border border-border/70">
+            <table className="w-full min-w-[640px] text-sm"><thead className="bg-muted/60"><tr className="border-b text-left text-muted-foreground"><th className="px-3 py-3">Veículo</th><th>Serviço</th><th>Intervalo</th><th>Próximo KM</th><th>Próxima data</th><th className="pr-3 text-right">Ações</th></tr></thead><tbody>{planos.map((x) => <tr className="border-b last:border-b-0" key={x.id}><td className="px-3 py-3 font-semibold">{placa(x.veiculoId)}</td><td>{x.nome}</td><td>{x.intervaloKm ? `${x.intervaloKm} km` : "—"}</td><td>{x.proximoKm ?? "—"}</td><td>{dateBr(x.proximaData)}</td><td className="pr-3 text-right"><Button size="icon-sm" variant="ghost" title="Excluir plano" aria-label={`Excluir plano ${x.nome}`} onClick={async () => { if (!window.confirm(`Excluir o plano ${x.nome}?`)) return; try { await api.delete(`/manutencao/planos/${x.id}`); await load(); toast.success("Plano excluído."); } catch { toast.error("Não foi possível excluir o plano."); } }}><Trash2 className="h-4 w-4 text-destructive" /></Button></td></tr>)}{!planos.length && <tr><td colSpan={6} className="p-6 text-center text-sm text-muted-foreground">Nenhum plano preventivo cadastrado.</td></tr>}</tbody></table>
+          </div>
+        </div>
+      </details>
+
+      <details className="group min-w-0 overflow-hidden rounded-3xl border border-border/70 bg-card shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center gap-3 p-4 sm:p-5 [&::-webkit-details-marker]:hidden">
+          <span className="rounded-2xl bg-primary/10 p-3 text-primary"><FileText className="h-5 w-5" /></span>
+          <span className="min-w-0 flex-1"><span className="block font-bold">Documentos da frota</span><span className="text-xs text-muted-foreground">{docs.length} documento(s) · clique para consultar</span></span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="border-t border-border/60 p-4 sm:p-5">
+          <div className="mb-3 flex justify-end"><Button size="sm" variant="outline" onClick={() => abrir("DOC")}><Plus className="h-4 w-4" />Novo documento</Button></div>
+          <div className="max-h-96 overflow-auto rounded-xl border border-border/70">
+            <table className="w-full min-w-[580px] text-sm"><thead className="bg-muted/60"><tr className="border-b text-left text-muted-foreground"><th className="px-3 py-3">Veículo</th><th>Documento</th><th>Número</th><th>Validade</th><th className="pr-3 text-right">Ações</th></tr></thead><tbody>{docs.map((x) => <tr className="border-b last:border-b-0" key={x.id}><td className="px-3 py-3 font-semibold">{placa(x.veiculoId)}</td><td>{x.tipo}</td><td>{x.numero || "—"}</td><td>{dateBr(x.validade)}</td><td className="pr-3 text-right"><Button size="icon-sm" variant="ghost" title="Excluir documento" aria-label={`Excluir documento ${x.tipo}`} onClick={async () => { if (!window.confirm(`Excluir o documento ${x.tipo}?`)) return; try { await api.delete(`/manutencao/documentos/${x.id}`); await load(); toast.success("Documento excluído."); } catch { toast.error("Não foi possível excluir o documento."); } }}><Trash2 className="h-4 w-4 text-destructive" /></Button></td></tr>)}{!docs.length && <tr><td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">Nenhum documento cadastrado.</td></tr>}</tbody></table>
+          </div>
+        </div>
+      </details>
+    </section>
 
     <Dialog open={modal === "OS"} onOpenChange={(open) => !open && setModal("")}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-4xl">

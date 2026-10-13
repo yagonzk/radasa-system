@@ -1,4 +1,3 @@
-import { WorkspaceNavigation, WorkspacePanel } from "@/components/ui/workspace-navigation";
 import Layout from "@/components/Layout";
 import { api } from "@/lib/api";
 import { useCallback, useEffect, useState } from "react";
@@ -9,7 +8,7 @@ import { AnimatedNumber } from "@/components/ui/animated-number";
 import { REALTIME_CHANGE_EVENT, realtimeChangeTouches } from "@/lib/realtime";
 import {
   Truck, WalletCards, TrendingUp, Fuel, Route, AlertTriangle,
-  Wrench, ArrowRight, Building2, CalendarDays, Activity, BarChart3,
+  Wrench, ArrowRight, Building2, CalendarDays, Activity,
   type LucideIcon,
 } from "lucide-react";
 
@@ -35,7 +34,6 @@ type RankingRow = { id: string; nome: string; margem?: number; viagens?: number;
 type Rankings = { rankingVeiculos?: RankingRow[]; rankingClientes?: RankingRow[] };
 
 export default function Dashboard() {
-  const [workspaceTab, setWorkspaceTab] = useState<"resumo" | "analises" | "viagens">("resumo");
   const [data, setData] = useState<DashboardData | null>(null);
   const [financeiro, setFinanceiro] = useState<Financeiro | null>(null);
   const [alertas, setAlertas] = useState<Alerta[] | null>(null);
@@ -136,13 +134,6 @@ export default function Dashboard() {
         {error && <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-700 dark:text-red-300">{error}</div>}
         {data?.parcial && <div role="status" className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300">Alguns indicadores operacionais não responderam nesta atualização ({(data.indisponiveis || []).join(", ")}). Os demais dados continuam disponíveis.</div>}
 
-        <WorkspaceNavigation value={workspaceTab} onValueChange={(value) => setWorkspaceTab(value as "resumo" | "analises" | "viagens")}
-          items={[
-            {value:"resumo",label:"Visão geral",description:"Indicadores e alertas",icon:Activity},
-            {value:"analises",label:"Rentabilidade",description:"Veículos e clientes",icon:BarChart3},
-            {value:"viagens",label:"Acertos recentes",description:"Últimas operações",icon:Truck}
-          ]} />
-        <WorkspacePanel active={workspaceTab === "resumo"} className="space-y-5">
         <section aria-label="Indicadores principais" className="radasa-kpi-grid radasa-stagger">
           {cards.map(({ label, value, format, loading: cardLoading, icon: Icon, tone, tint }) => (
             <Card key={label} className="card-hover radasa-interactive-card min-w-0 gap-0 rounded-[1.6rem] py-0">
@@ -191,9 +182,6 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        </WorkspacePanel>
-        <WorkspacePanel active={workspaceTab === "analises"} className="space-y-4">
-          <div className="radasa-section-heading"><div><h2>Análises de rentabilidade</h2><p className="text-sm text-muted-foreground">Compare resultados de veículos e clientes</p></div></div>
         <div className="grid gap-4 xl:grid-cols-2">
           {rankings
             ? <><Ranking title="Rentabilidade por caminhão" icon={Truck} rows={rankings.rankingVeiculos || []} /><Ranking title="Rentabilidade por cliente" icon={Building2} rows={rankings.rankingClientes || []} /></>
@@ -206,8 +194,6 @@ export default function Dashboard() {
               </Card>}
         </div>
 
-        </WorkspacePanel>
-        <WorkspacePanel active={workspaceTab === "viagens"} className="space-y-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-3"><CardTitle className="text-base">Acertos de viagem recentes</CardTitle><Link href="/viagens" className="shrink-0 text-xs font-semibold text-primary hover:underline">Abrir acertos</Link></CardHeader>
           <CardContent className="min-w-0 overflow-x-auto">
@@ -219,7 +205,6 @@ export default function Dashboard() {
             </table>
           </CardContent>
         </Card>
-        </WorkspacePanel>
       </div>
     </Layout>
   );

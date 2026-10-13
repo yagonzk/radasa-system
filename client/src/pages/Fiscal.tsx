@@ -344,7 +344,7 @@ export default function Fiscal() {
         </Card>
 
         <Tabs defaultValue="visao-geral" className="space-y-4">
-          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1.5 rounded-2xl p-1.5 sm:w-fit">
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 sm:w-fit">
             <TabsTrigger value="visao-geral">Visão geral</TabsTrigger>
             <TabsTrigger value="analise-romaneios">Análise Romaneios</TabsTrigger>
           </TabsList>

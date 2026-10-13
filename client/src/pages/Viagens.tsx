@@ -1,4 +1,3 @@
-import { WorkspaceNavigation, WorkspacePanel } from "@/components/ui/workspace-navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
 import { useViagens, useMotoristas, useVeiculos, useAbastecimentos, useLocais, type Motorista, type Veiculo, type Viagem } from "@/lib/store";
@@ -24,7 +23,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Check, ChevronDown, Plus, Trash2, Edit3, Eye, FileText, LoaderCircle, Search, X, ReceiptText, CircleAlert, Route, BarChart3 } from "lucide-react";
+import { Check, ChevronDown, Plus, Trash2, Edit3, Eye, FileText, LoaderCircle, Search, X, ReceiptText, CircleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 
@@ -348,7 +347,6 @@ function previousDistanceForCity(city: string, viagens: Viagem[]) {
 }
 
 export default function Viagens() {
-  const [workspaceTab, setWorkspaceTab] = useState<"resumo" | "viagens">("resumo");
   const { items: viagens, create, update, remove, loadRange } = useViagens();
   const { items: motoristas } = useMotoristas();
 
@@ -967,12 +965,6 @@ export default function Viagens() {
           )}
         </div>
 
-        <WorkspaceNavigation className="mb-5" value={workspaceTab} onValueChange={(value) => setWorkspaceTab(value as "resumo" | "viagens")}
-          items={[
-            {value:"resumo",label:"Visão geral",description:"Custos e lucro bruto",icon:BarChart3},
-            {value:"viagens",label:"Acertos e viagens",description:"Pesquisar e gerenciar",icon:Route}
-          ]} />
-        <WorkspacePanel active={workspaceTab === "resumo"} className="space-y-4">
         {/* Summary cards */}
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-xl border border-border bg-card p-4">
@@ -1006,10 +998,6 @@ export default function Viagens() {
           </div>
         </div>
 
-          <div className="flex justify-end"><Button onClick={() => setWorkspaceTab("viagens")}>Consultar acertos <Route className="ml-2 h-4 w-4" /></Button></div>
-        </WorkspacePanel>
-        <WorkspacePanel active={workspaceTab === "viagens"} className="space-y-4">
-          <div className="radasa-section-heading"><div><h2>Acertos de viagem</h2><p className="text-xs text-muted-foreground">Confira, edite e acompanhe as operações</p></div></div>
         {/* Viagens table */}
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="overflow-x-auto">
@@ -1237,7 +1225,6 @@ export default function Viagens() {
             </table>
           </div>
         </div>
-        </WorkspacePanel>
       </div>
 
       {/* Form dialog */}

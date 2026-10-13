@@ -643,7 +643,7 @@ export default function Estoque() {
 
         <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <TabsList className="grid h-auto w-full max-w-2xl grid-cols-3 gap-1.5 rounded-2xl p-1.5">
+            <TabsList className="grid w-full max-w-xl grid-cols-3">
               <TabsTrigger value="ESTOQUE">Estoque</TabsTrigger>
               <TabsTrigger value="ENTRADAS">Entrada</TabsTrigger>
               <TabsTrigger value="SAIDAS">Saída</TabsTrigger>

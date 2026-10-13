@@ -1,4 +1,3 @@
-import { WorkspaceNavigation, WorkspacePanel } from "@/components/ui/workspace-navigation";
 import { escapeHtml } from "@/lib/escapeHtml";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
@@ -35,7 +34,6 @@ const EXPECTED_ROMANEIO_PARSER_VERSION = "2026.08.11.07";
 import { formatBRL, formatDate } from "@/lib/exportUtils";
 import {
   ArrowLeft,
-  ArrowRight,
   Check,
   ChevronDown,
   CircleDollarSign,
@@ -409,7 +407,6 @@ function SearchableSelect({
 }
 
 export default function Romaneios() {
-  const [workspaceTab, setWorkspaceTab] = useState<"resumo" | "registros">("resumo");
   const [visibleSummaryValues, setVisibleSummaryValues] = useState<Record<string, boolean>>({});
 
   const toggleSummaryValue = (label: string) => {
@@ -2377,16 +2374,6 @@ export default function Romaneios() {
           </div>
         </div>
 
-        <WorkspaceNavigation
-          className="mb-5"
-          value={workspaceTab}
-          onValueChange={(next) => setWorkspaceTab(next as "resumo" | "registros")}
-          items={[
-            {value:"resumo",label:"Visão geral",description:"Indicadores e totais",icon:FileText},
-            {value:"registros",label:"Romaneios",description:"Pesquisar, filtrar e gerenciar",icon:Search}
-          ]}
-        />
-        <WorkspacePanel active={workspaceTab === "resumo"} className="space-y-4">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Filter className="h-3.5 w-3.5" />
           <span>Indicadores calculados sobre {filtered.length} romaneio(s) conforme todos os filtros ativos.</span>
@@ -2467,13 +2454,6 @@ export default function Romaneios() {
           })}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/70 p-4">
-          <div><strong className="block text-sm">Visão geral atualizada</strong><p className="mt-1 text-xs text-muted-foreground">Os valores seguem os filtros ativos. A gestão completa fica separada dos indicadores.</p></div>
-          <Button type="button" onClick={() => setWorkspaceTab("registros")}>Abrir romaneios <ArrowRight className="ml-1 size-4" /></Button>
-        </div>
-        </WorkspacePanel>
-        <WorkspacePanel active={workspaceTab === "registros"} className="space-y-4">
-          <div className="radasa-section-heading"><div><h2>Gestão de romaneios</h2><p className="text-xs text-muted-foreground">Registros, filtros e ações</p></div></div>
         <div className="mb-5 flex flex-col gap-3 rounded-3xl border border-border/80 bg-card/70 p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:p-4">
           <div className="relative w-full min-w-0 flex-1 sm:basis-[300px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -2711,7 +2691,6 @@ export default function Romaneios() {
             </Button>
           </div>
         </div>
-        </WorkspacePanel>
       </div>
 
       <Dialog

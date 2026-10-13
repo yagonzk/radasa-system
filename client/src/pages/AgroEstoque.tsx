@@ -1,4 +1,3 @@
-import { WorkspaceNavigation } from "@/components/ui/workspace-navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Archive, Boxes, CalendarClock, Layers3, List, MapPin, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -211,18 +210,13 @@ export default function AgroEstoque() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Agro / Estoque</p><h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Estoque do barracão</h1><p className="mt-2 text-sm text-muted-foreground">Consulte o saldo em lista ou visualize fisicamente onde cada produto e lote está armazenado.</p></div>
           <div className="flex flex-wrap gap-2">
-
+            <div className="flex rounded-md border bg-card p-1"><Button size="sm" variant={view === "lista" ? "default" : "ghost"} onClick={() => changeView("lista")}><List className="mr-2 h-4 w-4" />Lista</Button><Button size="sm" variant={view === "mapa" ? "default" : "ghost"} onClick={() => changeView("mapa")}><MapPin className="mr-2 h-4 w-4" />Mapa do barracão</Button></div>
             <select className="h-9 rounded-md border bg-background px-3 text-sm" value={localId} onChange={(e) => setLocalId(e.target.value)}><option value="">{view === "mapa" ? "Selecione um barracão" : "Todos os locais"}</option>{locations.filter((l) => l.ativo).map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}</select>
             {view === "mapa" && <Button variant="outline" onClick={newPosition} disabled={!localId}><Plus className="mr-2 h-4 w-4" />Novo pallet</Button>}
             <Button onClick={newProduct}><Plus className="mr-2 h-4 w-4" />Novo produto</Button>
           </div>
         </div>
 
-        <WorkspaceNavigation value={view} onValueChange={(value) => changeView(value as StockView)}
-          items={[
-            {value:"lista",label:"Produtos e saldos",description:"Cadastro, estoque e lotes",icon:List},
-            {value:"mapa",label:"Mapa do barracão",description:"Posições e pallets",icon:MapPin}
-          ]} />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["Produtos ativos", totals.ativos, Boxes], ["Com saldo", totals.comSaldo, Archive], ["Abaixo do mínimo", totals.baixos, AlertTriangle], ["Valor em estoque", formatAgroCurrency(totals.valor), Layers3]].map(([label, value, Icon]: any) => <Card key={label}><CardContent className="flex items-center justify-between p-4"><div><div className="text-xs text-muted-foreground">{label}</div><div className="mt-1 text-2xl font-bold">{value}</div></div><Icon className="h-5 w-5 text-primary" /></CardContent></Card>)}</div>
 
         <div className="flex flex-col gap-2 rounded-xl border bg-card p-3 md:flex-row md:items-center">
