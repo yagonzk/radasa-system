@@ -4,7 +4,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useClientes, useProdutos, type Manifesto } from "@/lib/store";
 import { api, getResourceRange } from "@/lib/api";
 import { canonicalClientIdentity, canonicalProductIdentity, formatPlate, mergeStagingBiFacts, readStagingBiFacts, type StagingBiFact } from "@/lib/bi-staging";
-import { BarChart3, Check, ChevronDown, Database, FileSpreadsheet, RotateCcw, Search, ClipboardCopy, Activity } from "lucide-react";
+import { BarChart3, Check, ChevronDown, Database, FileSpreadsheet, RotateCcw, Search, ClipboardCopy, Activity, SlidersHorizontal } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -90,6 +90,8 @@ export default function BIGerencial(){
  const [tableQuery,setTableQuery]=useState("");
  const [tab,setTab]=useState("geral"),[columnFilters,setColumnFilters]=useState<Record<string,string[]>>({}),[sort,setSort]=useState("data-desc");
  const [tabProdutos,setTabProdutos]=useState<string[]>([]),[tabClientes,setTabClientes]=useState<string[]>([]),[tabPlacas,setTabPlacas]=useState<string[]>([]);
+ const [advancedFiltersOpen,setAdvancedFiltersOpen]=useState(false);
+ const [showEvolution,setShowEvolution]=useState(false);
  const clienteMap=useMemo(()=>new Map(clientes.map(c=>[c.id,c])),[clientes]); const produtoMap=useMemo(()=>new Map(produtos.map(p=>[p.id,p])),[produtos]);
  const clienteLookup=useMemo(()=>{const m=new Map<string,(typeof clientes)[number]>();for(const c of clientes)for(const n of [c.nomeFantasia,c.razaoSocial]){const k=norm(n);if(k&&!m.has(k))m.set(k,c)}return m},[clientes]);
  const clienteByCode=useMemo(()=>{const m=new Map<string,(typeof clientes)[number]>();for(const c of clientes){const key=canonicalClientIdentity(c.codigoInterno,"","");if(c.codigoInterno&&!m.has(key))m.set(key,c)}return m},[clientes]);
@@ -234,10 +236,9 @@ export default function BIGerencial(){
     <div className="bi-v3__inner">
      <header className="bi-v3__hero">
       <div className="bi-v3__identity">
-       <div className="bi-v3__logo" aria-hidden="true"><BarChart3 className="h-6 w-6" /></div>
+       <div className="bi-v3__logo" aria-hidden="true"><BarChart3 className="h-5 w-5" /></div>
        <div className="min-w-0">
         <h1 className="bi-v3__title">BI Gerencial</h1>
-        <p className="bi-v3__subtitle">Faturamento, fretes e desempenho da operação em um painel organizado e responsivo.</p>
        </div>
       </div>
       <div className="bi-v3__hero-actions">
@@ -258,8 +259,8 @@ export default function BIGerencial(){
         </PopoverContent>
        </Popover>
        <span className="bi-v3__status" title="Registros consolidados disponíveis para análise">
-        <Database className="h-4 w-4" />
-        {loading || romaneiosLoading ? "Atualizando dados..." : `${facts.length.toLocaleString("pt-BR")} registros consolidados`}
+        <Database className="h-3.5 w-3.5" />
+        {loading || romaneiosLoading ? "Atualizando..." : `${facts.length.toLocaleString("pt-BR")} registros`}
         {!loading && !romaneiosLoading && !romaneiosError && <i className="bi-v3__status-dot" aria-label="Consulta concluída" />}
        </span>
       </div>
@@ -277,24 +278,27 @@ export default function BIGerencial(){
      )}
 
      <section className="bi-v3__panel bi-v3__filter-panel" aria-label="Filtros gerais">
-      <div className="bi-v3__filter-head">
-       <div><h2>Filtros da análise</h2><p>Escolha o período e refine os resultados por veículo, cliente ou produto.</p></div>
-       <span className="text-xs font-medium text-muted-foreground">{filtered.length.toLocaleString("pt-BR")} registros no período</span>
-      </div>
       <div className="bi-v3__filter-grid">
        <div className="bi-v3__field">
-        <label htmlFor="bi-data-inicial">Data inicial</label>
+        <label htmlFor="bi-data-inicial">De</label>
         <input id="bi-data-inicial" type="date" lang="pt-BR" value={from} onChange={(event) => setFrom(event.target.value)} className="bi-v3__input" />
        </div>
        <div className="bi-v3__field">
-        <label htmlFor="bi-data-final">Data final</label>
+        <label htmlFor="bi-data-final">Até</label>
         <input id="bi-data-final" type="date" lang="pt-BR" value={to} onChange={(event) => setTo(event.target.value)} className="bi-v3__input" />
        </div>
+       <Button type="button" variant="outline" size="sm" className="bi-v3__filters-toggle" aria-controls={advancedFiltersOpen ? "bi-filtros-adicionais" : undefined} aria-expanded={advancedFiltersOpen} onClick={() => setAdvancedFiltersOpen(current => !current)}>
+        <SlidersHorizontal className="h-4 w-4" /> Filtros{placas.length + clienteIds.length + produtoKeys.length > 0 ? ` (${placas.length + clienteIds.length + produtoKeys.length})` : ""}
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${advancedFiltersOpen ? "rotate-180" : ""}`} />
+       </Button>
+       <span className="bi-v3__filter-count">{filtered.length.toLocaleString("pt-BR")} registros</span>
+       <Button type="button" variant="ghost" size="sm" className="bi-v3__filter-clear" onClick={clear}><RotateCcw className="h-3.5 w-3.5" /> Limpar</Button>
+      </div>
+      {advancedFiltersOpen && <div id="bi-filtros-adicionais" className="bi-v3__advanced-filters">
        <MultiFilter label="Placa" values={placas} onChange={setPlacas} options={plateOptions} />
        <MultiFilter label="Cliente" values={clienteIds} onChange={setClienteIds} options={clientOptions} />
        <MultiFilter label="Produto" values={produtoKeys} onChange={setProdutoKeys} options={productOptions} />
-       <Button type="button" variant="outline" className="bi-v3__filter-clear" onClick={clear}><RotateCcw className="h-4 w-4" /> Limpar filtros</Button>
-      </div>
+      </div>}
      </section>
 
      <nav className="bi-v3__navigation" aria-label="Análises do BI Gerencial">
@@ -311,13 +315,12 @@ export default function BIGerencial(){
 
      {tab === "geral" && <>
       <BiMetrics totals={totals} />
-      <section className="bi-v3__panel">
-       <header className="bi-v3__panel-heading">
-        <p className="bi-v3__overline">Histórico financeiro</p>
-        <h2>Evolução por mês</h2>
-        <p className="bi-v3__secondary">Comparação entre faturamento e valor de frete dentro do período selecionado.</p>
-       </header>
-       <div className="bi-v3__chart-body">
+      <section className="bi-v3__panel bi-v3__evolution-panel">
+       <button type="button" className="bi-v3__evolution-toggle" aria-expanded={showEvolution} onClick={() => setShowEvolution((value) => !value)}>
+        <span>Evolução por mês</span>
+        <ChevronDown className={`h-4 w-4 transition-transform ${showEvolution ? "rotate-180" : ""}`} />
+       </button>
+       {showEvolution && <div className="bi-v3__chart-body">
         {byMonth.length === 0 ? <div className="bi-v3__empty">Não há dados para o período selecionado.</div> :
          <div className="bi-v3__chart-frame"><div className="bi-v3__chart-inner">
           <ResponsiveContainer width="100%" height="100%">
@@ -332,15 +335,14 @@ export default function BIGerencial(){
            </LineChart>
           </ResponsiveContainer>
          </div></div>}
-       </div>
+       </div>}
       </section>
      </>}
 
      {tab === "produtos" && <>
-      <BiMetrics totals={productTabTotals} testId="produtos-mini-dashboard" />
+      <details className="bi-v3__metrics-disclosure"><summary>Indicadores desta análise <ChevronDown className="h-3.5 w-3.5" /></summary><BiMetrics totals={productTabTotals} testId="produtos-mini-dashboard" /></details>
       <section className="bi-v3__panel">
        <header className="bi-v3__panel-heading">
-        <p className="bi-v3__overline">Comparativo operacional</p>
         <h2>Análise por Produtos</h2>
         <p className="bi-v3__secondary">Os dez produtos com maior faturamento, comparados ao frete associado.</p>
         <div className="bi-v3__analysis-controls"><MultiFilter label="Filtrar produtos nesta análise" values={tabProdutos} onChange={setTabProdutos} options={productOptions} /></div>
@@ -350,10 +352,9 @@ export default function BIGerencial(){
      </>}
 
      {tab === "clientes" && <>
-      <BiMetrics totals={clientTabTotals} testId="clientes-mini-dashboard" />
+      <details className="bi-v3__metrics-disclosure"><summary>Indicadores desta análise <ChevronDown className="h-3.5 w-3.5" /></summary><BiMetrics totals={clientTabTotals} testId="clientes-mini-dashboard" /></details>
       <section className="bi-v3__panel">
        <header className="bi-v3__panel-heading">
-        <p className="bi-v3__overline">Relacionamento comercial</p>
         <h2>Análise por Clientes</h2>
         <p className="bi-v3__secondary">Comparativo dos dez clientes com maior faturamento.</p>
         <div className="bi-v3__analysis-controls"><MultiFilter label="Filtrar clientes nesta análise" values={tabClientes} onChange={setTabClientes} options={clientOptions} /></div>
@@ -363,10 +364,9 @@ export default function BIGerencial(){
      </>}
 
      {tab === "placas" && <>
-      <BiMetrics totals={plateTabTotals} testId="placas-mini-dashboard" />
+      <details className="bi-v3__metrics-disclosure"><summary>Indicadores desta análise <ChevronDown className="h-3.5 w-3.5" /></summary><BiMetrics totals={plateTabTotals} testId="placas-mini-dashboard" /></details>
       <section className="bi-v3__panel">
        <header className="bi-v3__panel-heading">
-        <p className="bi-v3__overline">Desempenho da frota</p>
         <h2>Análise por Veículos / Placas</h2>
         <p className="bi-v3__secondary">Faturamento e frete por placa, com os valores completos de cada veículo.</p>
         <div className="bi-v3__analysis-controls"><MultiFilter label="Filtrar placas nesta análise" values={tabPlacas} onChange={setTabPlacas} options={plateOptions} /></div>
@@ -376,13 +376,13 @@ export default function BIGerencial(){
      </>}
 
      {tab === "consulta" && <>
-      <BiMetrics totals={tableTotals} testId="consulta-mini-dashboard" />
-      <div className="bi-v3__panel p-4 sm:p-5">
+      <details className="bi-v3__metrics-disclosure"><summary>Indicadores desta análise <ChevronDown className="h-3.5 w-3.5" /></summary><BiMetrics totals={tableTotals} testId="consulta-mini-dashboard" /></details>
+      <div className="bi-v3__panel bi-v3__search-panel">
        <label className="bi-v3__field" htmlFor="bi-consulta-busca">
-        <span className="bi-v3__field-label">Pesquisar na Consulta Geral</span>
+        <span className="sr-only">Pesquisar na Consulta Geral</span>
         <div className="relative w-full">
          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-         <input id="bi-consulta-busca" type="search" value={tableQuery} onChange={(event) => setTableQuery(event.target.value)} placeholder="NF, cliente, produto, código, placa, município ou data..." className="bi-v3__input pl-10" />
+         <input id="bi-consulta-busca" type="search" value={tableQuery} onChange={(event) => setTableQuery(event.target.value)} placeholder="Buscar NF, cliente, produto ou placa..." className="bi-v3__input pl-10" />
         </div>
        </label>
       </div>

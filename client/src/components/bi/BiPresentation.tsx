@@ -29,16 +29,20 @@ const metricDefinitions = [
 ] as const;
 
 export function BiMetrics({ totals, testId }: { totals: BiTotals; testId?: string }) {
+  const [showMore, setShowMore] = useState(false);
+  const principalKeys = new Set(["faturamento", "frete", "quantidade", "percentual"]);
   return (
     <section className="bi-v3__metrics" data-testid={testId} aria-label="Indicadores do BI">
-      {metricDefinitions.map((item) => (
+      {metricDefinitions.filter((item) => showMore || principalKeys.has(item.key)).map((item) => (
         <div key={item.key} className={`bi-v3__metric bi-v3__metric--${item.accent}`}>
           <span className="bi-v3__metric-accent" aria-hidden="true" />
           <p className="bi-v3__metric-label">{item.label}</p>
           <strong className="bi-v3__metric-value" title={item.format(totals[item.key])}>{item.format(totals[item.key])}</strong>
-          <p className="bi-v3__metric-subtitle">{item.subtitle}</p>
         </div>
       ))}
+      <button type="button" className="bi-v3__more-metrics" onClick={() => setShowMore((value) => !value)} aria-expanded={showMore}>
+        {showMore ? "Menos indicadores" : "Mais indicadores"}<ChevronDown className={cn("h-3.5 w-3.5", showMore && "rotate-180")} />
+      </button>
     </section>
   );
 }

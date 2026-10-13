@@ -149,3 +149,132 @@
   .bi-v3__mobile-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .bi-v3__totals-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
+
+/* BI compacto: informações essenciais primeiro; filtros e indicadores adicionais sob demanda. */
+.bi-v3__inner { gap: 12px; max-width: 1500px; }
+.bi-v3__hero { gap: 8px 16px; padding: 0; }
+.bi-v3__identity { gap: 9px; }
+.bi-v3__logo { width: 36px; height: 36px; border-radius: 11px; box-shadow: none; }
+.bi-v3__title { font-size: clamp(1.2rem, 1.7vw, 1.55rem); line-height: 1.18; }
+.bi-v3__hero-actions { gap: 5px; }
+.bi-v3__hero-actions [data-slot="button"] { height: 32px; padding-inline: 10px; font-size: .76rem; }
+.bi-v3__status { gap: 5px; font-size: .72rem; white-space: nowrap; padding-inline: 4px; }
+.bi-v3__panel { border-radius: 14px; box-shadow: 0 5px 18px -19px rgba(4, 26, 51, .4); }
+
+/* Período sempre visível. Placas, clientes e produtos só quando o usuário solicitar. */
+.bi-v3__filter-panel { padding: 11px 13px; }
+.bi-v3__filter-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+.bi-v3__filter-grid .bi-v3__field { flex: 0 1 168px; min-width: 132px; gap: 4px; }
+.bi-v3__field > label, .bi-v3__field-label { font-size: .7rem; }
+.bi-v3__input, .bi-v3__select { height: 34px; border-radius: 9px; padding-inline: 9px; font-size: .78rem; }
+.bi-v3__filter-grid [data-slot="button"] { height: 34px; min-height: 34px; border-radius: 9px; }
+.bi-v3__filters-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.bi-v3__filter-count { margin-left: auto; align-self: center; font-size: .72rem; white-space: nowrap; color: var(--muted-foreground); }
+.bi-v3__filter-clear { width: auto; flex: 0 0 auto; padding-inline: 7px; }
+.bi-v3__advanced-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border);
+}
+.bi-v3__advanced-filters [data-slot="button"] { height: 35px; border-radius: 9px; }
+
+.bi-v3__navigation { flex-wrap: nowrap; gap: 3px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: thin; }
+.bi-v3__nav-item { min-height: 34px; padding: 7px 12px; border-radius: 9px; font-size: .79rem; white-space: nowrap; flex: 0 0 auto; }
+.bi-v3__nav-item[aria-current="page"]::after { bottom: -5px; left: 12px; right: 12px; height: 2px; }
+
+.bi-v3__metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.bi-v3__metric { gap: 3px; min-height: 70px; padding: 10px 13px; border-radius: 12px; box-shadow: none; }
+.bi-v3__metric-accent { width: 19px; height: 3px; margin-bottom: 2px; }
+.bi-v3__metric-label { font-size: .72rem; }
+.bi-v3__metric-value { font-size: clamp(.98rem, 1.55vw, 1.25rem); line-height: 1.3; }
+.bi-v3__more-metrics { grid-column: 1 / -1; display: inline-flex; align-items: center; gap: 4px; justify-self: end; font-size: .71rem; color: var(--primary); padding: 2px 3px; font-weight: 650; }
+.bi-v3__more-metrics:hover { text-decoration: underline; }
+.bi-v3__metrics-disclosure { min-width: 0; }
+.bi-v3__metrics-disclosure > summary { display: flex; align-items: center; width: fit-content; gap: 5px; cursor: pointer; font-size: .73rem; font-weight: 600; color: var(--muted-foreground); list-style: none; padding: 2px 4px; }
+.bi-v3__metrics-disclosure > summary::-webkit-details-marker { display: none; }
+.bi-v3__metrics-disclosure[open] > summary svg { transform: rotate(180deg); }
+.bi-v3__metrics-disclosure > .bi-v3__metrics { margin-top: 7px; }
+
+.bi-v3__panel-heading { padding: 12px 15px 10px; }
+.bi-v3__panel-heading h2 { font-size: .93rem; }
+.bi-v3__overline { font-size: .58rem; margin-bottom: 2px; }
+.bi-v3__secondary { font-size: .72rem; margin-top: 3px; }
+.bi-v3__chart-body { padding: 10px 14px 13px; }
+.bi-v3__chart-inner { height: 214px; min-width: 390px; }
+.bi-v3__analysis-controls { margin-top: 8px; max-width: 340px; }
+.bi-v3__analysis-controls [data-slot="button"] { height: 35px; }
+.bi-v3__ranking { max-height: 450px; }
+.bi-v3__rank { padding: 9px 0; }
+.bi-v3__rank-heading { margin-bottom: 6px; }
+.bi-v3__rank-bars { gap: 4px; }
+.bi-v3__bar-track { height: 7px; }
+.bi-v3__legend { margin-bottom: 6px; gap: 12px; }
+
+.bi-v3__search-panel { padding: 10px 12px; }
+.bi-v3__search-panel .bi-v3__field { max-width: 540px; }
+.bi-v3__search-panel .bi-v3__input { height: 36px; }
+.bi-v3__search-panel .relative svg { top: 9px; }
+.bi-v3__consultation .bi-v3__panel-heading { gap: 8px; }
+.bi-v3__table-controls { gap: 6px; align-items: center; }
+.bi-v3__table-controls [data-slot="button"] { height: 33px; }
+.bi-v3__select-label { gap: 3px; }
+.bi-v3__table th { padding: 9px 10px; font-size: .76rem; }
+.bi-v3__table td { padding: 9px 10px; font-size: .78rem; }
+.bi-v3__totals-strip { padding: 10px 14px; gap: 8px; }
+.bi-v3__totals-strip > span { gap: 2px; }
+.bi-v3__totals-strip strong { font-size: .84rem; }
+.bi-v3__scroll-hint { padding: 7px 14px; font-size: .7rem; }
+.bi-v3__pagination { padding: 10px 14px; }
+.bi-v3__filter-tags { padding: 8px 14px; }
+.bi-v3__column-filter-panel { padding: 12px 14px; }
+
+/* Mostrar tabela sempre que o espaço útil comportar sua rolagem horizontal. */
+.bi-v3__desktop-table { display: block; }
+.bi-v3__scroll-hint { display: flex; }
+.bi-v3__mobile-rows { display: none; }
+
+@container bi-dashboard (max-width: 740px) {
+  .bi-v3__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bi-v3__advanced-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container bi-dashboard (max-width: 700px) {
+  .bi-v3__desktop-table, .bi-v3__scroll-hint { display: none; }
+  .bi-v3__mobile-rows { display: grid; gap: 7px; padding: 10px; }
+  .bi-v3__mobile-row { min-width: 0; padding: 11px; background: var(--card); border: 1px solid var(--border); border-radius: 11px; }
+  .bi-v3__mobile-row-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .bi-v3__mobile-row-heading strong { font-size: .84rem; overflow-wrap: anywhere; }
+  .bi-v3__mobile-row-heading span { flex: 0 0 auto; color: var(--muted-foreground); font-size: .71rem; }
+  .bi-v3__mobile-item { margin-top: 5px; font-size: .73rem; color: var(--muted-foreground); overflow-wrap: anywhere; }
+  .bi-v3__mobile-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; padding-top: 9px; }
+  .bi-v3__mobile-metrics span { display: grid; gap: 3px; color: var(--muted-foreground); font-size: .67rem; }
+  .bi-v3__mobile-metrics strong { color: var(--foreground); font-size: .82rem; overflow-wrap: anywhere; }
+  .bi-v3__detail-button { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--primary); font-size: .75rem; font-weight: 650; }
+  .bi-v3__mobile-row .bi-v3__details-grid { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+}
+@container bi-dashboard (max-width: 510px) {
+  .bi-v3__advanced-filters { grid-template-columns: minmax(0, 1fr); }
+  .bi-v3__filter-count { margin-left: 0; }
+  .bi-v3__filter-grid .bi-v3__field { flex: 1 1 calc(50% - 5px); min-width: 120px; }
+  .bi-v3__hero-actions { justify-content: flex-start; }
+  .bi-v3__hero-actions .bi-v3__status { width: 100%; }
+  .bi-v3__chart-inner { min-width: 350px; }
+  .bi-v3__totals-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .bi-v3__mobile-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bi-v3__filters-toggle svg, .bi-v3__metrics-disclosure svg { transition: none; }
+}
+
+.bi-v3__evolution-toggle { display: flex; width: 100%; min-height: 39px; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 14px; color: var(--foreground); font-size: .83rem; font-weight: 690; text-align: left; }
+.bi-v3__evolution-toggle:hover { background: color-mix(in srgb, var(--primary) 5%, transparent); border-radius: 14px; }
+.bi-v3__evolution-toggle svg { color: var(--muted-foreground); }
+.bi-v3__evolution-panel .bi-v3__chart-body { border-top: 1px solid var(--border); }
