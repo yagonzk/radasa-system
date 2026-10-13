@@ -274,7 +274,58 @@
   .bi-v3__filters-toggle svg, .bi-v3__metrics-disclosure svg { transition: none; }
 }
 
-.bi-v3__evolution-toggle { display: flex; width: 100%; min-height: 39px; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 14px; color: var(--foreground); font-size: .83rem; font-weight: 690; text-align: left; }
-.bi-v3__evolution-toggle:hover { background: color-mix(in srgb, var(--primary) 5%, transparent); border-radius: 14px; }
-.bi-v3__evolution-toggle svg { color: var(--muted-foreground); }
-.bi-v3__evolution-panel .bi-v3__chart-body { border-top: 1px solid var(--border); }
+.bi-v3__panel-heading--evolution {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+}
+.bi-v3__period-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--card) 90%, transparent);
+}
+.bi-v3__period-button {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  color: var(--muted-foreground);
+  font-size: .78rem;
+  font-weight: 650;
+  transition: background-color .18s ease, color .18s ease, box-shadow .18s ease;
+}
+.bi-v3__period-button:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+.bi-v3__period-button.is-active {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 26%, transparent);
+}
+.bi-v3__evolution-panel .bi-v3__chart-body {
+  border-top: 1px solid var(--border);
+}
+.bi-v3__chart-body--open {
+  padding-top: 14px;
+}
+@container bi-dashboard (max-width: 700px) {
+  .bi-v3__panel-heading--evolution {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .bi-v3__period-switch {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .bi-v3__period-button {
+    flex: 1 1 calc(50% - 6px);
+    justify-content: center;
+  }
+}

@@ -44,6 +44,10 @@ const formatDateBR=(v:string)=>{const m=String(v||"").match(/^(\d{4})-(\d{2})-(\
 const excelDate=(v:string)=>{const m=String(v||"").match(/^(\d{4})-(\d{2})-(\d{2})/);return m?(Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3]))-Date.UTC(1899,11,30))/86400000:null};
 const formatExcelDateColumn=(sheet:XLSX.WorkSheet,rows:number,col:number)=>{for(let r=1;r<rows;r++){const cell=sheet[XLSX.utils.encode_cell({r,c:col})];if(cell&&typeof cell.v==="number")cell.z="dd/mm/yyyy"}};
 const monthLabel=(v:string)=>v?`${v.slice(5,7)}/${v.slice(0,4)}`:"—";
+const parseIsoDate=(value:string)=>{const [y,m,d]=String(value||"").split("-").map(Number);return y&&m&&d?new Date(y,m-1,d):null};
+const formatShortDate=(date:Date)=>`${String(date.getDate()).padStart(2,"0")}/${String(date.getMonth()+1).padStart(2,"0")}`;
+const startOfWeek=(date:Date)=>{const copy=new Date(date.getFullYear(),date.getMonth(),date.getDate());const day=(copy.getDay()+6)%7;copy.setDate(copy.getDate()-day);copy.setHours(0,0,0,0);return copy};
+const isoDay=(date:Date)=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 function currentMonthRange(){const d=new Date(),y=d.getFullYear(),m=d.getMonth(),pad=(n:number)=>String(n).padStart(2,"0");return{from:`${y}-${pad(m+1)}-01`,to:`${y}-${pad(m+1)}-${pad(new Date(y,m+1,0).getDate())}`}}
 function MultiFilter({label,values,onChange,options}:{label:string;values:string[];onChange:(v:string[])=>void;options:Option[]}){
  const [open,setOpen]=useState(false),[query,setQuery]=useState("");
@@ -91,7 +95,7 @@ export default function BIGerencial(){
  const [tab,setTab]=useState("geral"),[columnFilters,setColumnFilters]=useState<Record<string,string[]>>({}),[sort,setSort]=useState("data-desc");
  const [tabProdutos,setTabProdutos]=useState<string[]>([]),[tabClientes,setTabClientes]=useState<string[]>([]),[tabPlacas,setTabPlacas]=useState<string[]>([]);
  const [advancedFiltersOpen,setAdvancedFiltersOpen]=useState(false);
- const [showEvolution,setShowEvolution]=useState(false);
+ const [evolutionPeriod,setEvolutionPeriod]=useState<"dia"|"semana"|"mes"|"ano">("mes");
  const clienteMap=useMemo(()=>new Map(clientes.map(c=>[c.id,c])),[clientes]); const produtoMap=useMemo(()=>new Map(produtos.map(p=>[p.id,p])),[produtos]);
  const clienteLookup=useMemo(()=>{const m=new Map<string,(typeof clientes)[number]>();for(const c of clientes)for(const n of [c.nomeFantasia,c.razaoSocial]){const k=norm(n);if(k&&!m.has(k))m.set(k,c)}return m},[clientes]);
  const clienteByCode=useMemo(()=>{const m=new Map<string,(typeof clientes)[number]>();for(const c of clientes){const key=canonicalClientIdentity(c.codigoInterno,"","");if(c.codigoInterno&&!m.has(key))m.set(key,c)}return m},[clientes]);
@@ -121,7 +125,14 @@ export default function BIGerencial(){
  const productTabTotals=useMemo(()=>calcTotals(productTabFacts),[productTabFacts]);
  const clientTabTotals=useMemo(()=>calcTotals(clientTabFacts),[clientTabFacts]);
  const plateTabTotals=useMemo(()=>calcTotals(plateTabFacts),[plateTabFacts]);
- const byMonth=useMemo(()=>{const m=new Map<string,{mes:string;faturamento:number;frete:number}>();for(const x of filtered){const v=m.get(x.mes)||{mes:x.mes,faturamento:0,frete:0};v.faturamento+=x.faturamento;v.frete+=x.frete;m.set(x.mes,v)}return [...m.values()].sort((a,b)=>a.mes.localeCompare(b.mes)).map(x=>({...x,label:monthLabel(x.mes)}))},[filtered]);
+ const byEvolution=useMemo(()=>{const m=new Map<string,{key:string;sort:string;label:string;faturamento:number;frete:number}>();for(const x of filtered){const date=parseIsoDate(x.data);if(!date)continue;let key="",sort="",label="";
+  if(evolutionPeriod==="dia"){key=x.data;sort=x.data;label=formatDateBR(x.data)}
+  else if(evolutionPeriod==="semana"){const start=startOfWeek(date);const end=new Date(start);end.setDate(start.getDate()+6);key=`${start.getFullYear()}-W${String(Math.ceil((((start.getTime()-new Date(start.getFullYear(),0,1).getTime())/86400000)+1)/7)).padStart(2,"0")}`;sort=isoDay(start);label=`${formatShortDate(start)} a ${formatShortDate(end)}`}
+  else if(evolutionPeriod==="ano"){key=String(date.getFullYear());sort=key;label=key}
+  else {key=x.mes;sort=x.mes;label=monthLabel(x.mes)}
+  const v=m.get(key)||{key,sort,label,faturamento:0,frete:0};v.faturamento+=x.faturamento;v.frete+=x.frete;m.set(key,v)}
+  return [...m.values()].sort((a,b)=>a.sort.localeCompare(b.sort)).map(({sort,...rest})=>rest)
+ },[filtered,evolutionPeriod]);
  const byProduct=useMemo(()=>{const m=new Map<string,{name:string;faturamento:number;frete:number}>();for(const x of productTabFacts){const key=x.produtoKey||x.produto;const v=m.get(key)||{name:x.produto,faturamento:0,frete:0};v.faturamento+=x.faturamento;v.frete+=x.frete;m.set(key,v)}return [...m.values()].sort((a,b)=>b.faturamento-a.faturamento).slice(0,10)},[productTabFacts]);
  const byClient=useMemo(()=>{const m=new Map<string,{name:string;faturamento:number;frete:number}>();for(const x of clientTabFacts){const v=m.get(x.clienteId)||{name:x.cliente,faturamento:0,frete:0};v.faturamento+=x.faturamento;v.frete+=x.frete;m.set(x.clienteId,v)}return [...m.values()].sort((a,b)=>b.faturamento-a.faturamento).slice(0,10)},[clientTabFacts]);
  const byPlate=useMemo(()=>{const m=new Map<string,{name:string;faturamento:number;frete:number}>();for(const x of plateTabFacts){const k=x.placa||"Sem placa",v=m.get(k)||{name:k,faturamento:0,frete:0};v.faturamento+=x.faturamento;v.frete+=x.frete;m.set(k,v)}return [...m.values()].sort((a,b)=>b.faturamento-a.faturamento)},[plateTabFacts]);
@@ -316,15 +327,22 @@ export default function BIGerencial(){
      {tab === "geral" && <>
       <BiMetrics totals={totals} />
       <section className="bi-v3__panel bi-v3__evolution-panel">
-       <button type="button" className="bi-v3__evolution-toggle" aria-expanded={showEvolution} onClick={() => setShowEvolution((value) => !value)}>
-        <span>Evolução por mês</span>
-        <ChevronDown className={`h-4 w-4 transition-transform ${showEvolution ? "rotate-180" : ""}`} />
-       </button>
-       {showEvolution && <div className="bi-v3__chart-body">
-        {byMonth.length === 0 ? <div className="bi-v3__empty">Não há dados para o período selecionado.</div> :
+       <header className="bi-v3__panel-heading bi-v3__panel-heading--evolution">
+        <div>
+         <h2>Evolução</h2>
+         <p className="bi-v3__secondary">Acompanhe faturamento e frete por período.</p>
+        </div>
+        <div className="bi-v3__period-switch" role="tablist" aria-label="Período da evolução">
+         {([['dia','Dia'],['semana','Semana'],['mes','Mês'],['ano','Ano']] as const).map(([key,label]) => (
+          <button type="button" key={key} className={`bi-v3__period-button ${evolutionPeriod===key ? 'is-active' : ''}`} aria-pressed={evolutionPeriod===key} onClick={() => setEvolutionPeriod(key)}>{label}</button>
+         ))}
+        </div>
+       </header>
+       <div className="bi-v3__chart-body bi-v3__chart-body--open">
+        {byEvolution.length === 0 ? <div className="bi-v3__empty">Não há dados para o período selecionado.</div> :
          <div className="bi-v3__chart-frame"><div className="bi-v3__chart-inner">
           <ResponsiveContainer width="100%" height="100%">
-           <LineChart data={byMonth} margin={{ top: 14, right: 20, bottom: 12, left: 6 }}>
+           <LineChart data={byEvolution} margin={{ top: 14, right: 20, bottom: 12, left: 6 }}>
             <CartesianGrid stroke={isDark ? "#334155" : "#e2e8f0"} strokeDasharray="3 5" vertical={false} />
             <XAxis dataKey="label" fontSize={12} tickLine={false} axisLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b" }} />
             <YAxis width={68} fontSize={11} tickLine={false} axisLine={false} tick={{ fill: isDark ? "#cbd5e1" : "#64748b" }} tickFormatter={(value: number) => new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 }).format(value)} />
@@ -335,7 +353,7 @@ export default function BIGerencial(){
            </LineChart>
           </ResponsiveContainer>
          </div></div>}
-       </div>}
+       </div>
       </section>
      </>}
 
