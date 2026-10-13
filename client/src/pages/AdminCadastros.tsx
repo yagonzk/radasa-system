@@ -1,3 +1,4 @@
+import { WorkspaceNavigation, WorkspacePanel } from "@/components/ui/workspace-navigation";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { ArrowRight, Boxes, Leaf, RefreshCw, Truck } from "lucide-react";
 import { Link } from "wouter";
@@ -44,6 +45,7 @@ function DataSection({ title, badge, icon, items }: { title: string; badge: stri
 }
 
 export default function AdminCadastros() {
+  const [workspaceTab, setWorkspaceTab] = useState<"transportes" | "agro">("transportes");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -78,6 +80,12 @@ export default function AdminCadastros() {
           Os cadastros operacionais continuam sendo editados dentro do módulo responsável. Esta central evita duplicar regras: aqui você supervisiona os dados e abre diretamente a tela oficial de manutenção.
         </div>
 
+        <WorkspaceNavigation value={workspaceTab} onValueChange={(value) => setWorkspaceTab(value as "transportes" | "agro")}
+          items={[
+            {value:"transportes",label:"Transportes",description:"Cadastros e frota",icon:Truck},
+            {value:"agro",label:"Agro",description:"Fazendas e estoque",icon:Leaf}
+          ]} />
+        <WorkspacePanel active={workspaceTab === "transportes"}>
         <DataSection
           title="Transportes"
           badge="TMS"
@@ -92,6 +100,8 @@ export default function AdminCadastros() {
           ]}
         />
 
+        </WorkspacePanel>
+        <WorkspacePanel active={workspaceTab === "agro"}>
         <DataSection
           title="Agro"
           badge="Gestão agrícola"
@@ -104,6 +114,7 @@ export default function AdminCadastros() {
             { label: "Barracões", value: a?.barracoes ?? 0, href: "/agro/inventario", description: "Locais físicos de estoque e inventários." },
           ]}
         />
+        </WorkspacePanel>
       </div>
     </AdminLayout>
   );

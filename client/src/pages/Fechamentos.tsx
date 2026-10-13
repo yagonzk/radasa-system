@@ -1,3 +1,4 @@
+import { WorkspaceNavigation, WorkspacePanel } from "@/components/ui/workspace-navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
 import {
@@ -19,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileDown, FileText, ChevronRight } from "lucide-react";
+import { Plus, FileDown, FileText, ChevronRight, WalletCards, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import FechamentoForm from "@/components/fechamentos/FechamentoForm";
 import DetalheFechamento from "@/components/fechamentos/DetalheFechamento";
@@ -34,6 +35,7 @@ function currentMonthFechamentoRange() {
 }
 
 export default function Fechamentos() {
+  const [workspaceTab, setWorkspaceTab] = useState<"resumo" | "holerites">("resumo");
   const { items: fechamentos, create, update, remove, loadRange } = useFechamentos();
   const { items: motoristas } = useMotoristas();
   const { items: locais } = useLocais();
@@ -220,6 +222,21 @@ export default function Fechamentos() {
           </div>
         </div>
 
+        <WorkspaceNavigation className="mb-4" value={workspaceTab} onValueChange={(value) => setWorkspaceTab(value as "resumo" | "holerites")}
+          items={[
+            {value:"resumo",label:"Visão geral",description:"Valores e indicadores",icon:WalletCards},
+            {value:"holerites",label:"Holerites",description:"Registros e detalhamento",icon:ClipboardList}
+          ]} />
+        <WorkspacePanel active={workspaceTab === "resumo"} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-2xl border border-border/70 bg-card p-5"><p className="text-xs font-semibold text-muted-foreground">Holerites no período</p><p className="mt-3 text-3xl font-bold tabular-nums">{filteredFechamentos.length.toLocaleString("pt-BR")}</p></div>
+            <div className="rounded-2xl border border-border/70 bg-card p-5"><p className="text-xs font-semibold text-muted-foreground">Motoristas no período</p><p className="mt-3 text-3xl font-bold tabular-nums">{new Set(filteredFechamentos.map((item) => item.motoristaId)).size.toLocaleString("pt-BR")}</p></div>
+            <div className="rounded-2xl border border-border/70 bg-card p-5"><p className="text-xs font-semibold text-muted-foreground">Valor total dos holerites</p><p className="mt-3 break-words text-2xl font-bold text-primary tabular-nums">{formatBRL(filteredFechamentos.reduce((total, item) => total + Number(item.valorTotal || 0), 0))}</p></div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/70 p-4"><p className="text-sm text-muted-foreground">Filtre o período acima e acompanhe os valores antes de abrir os registros.</p><Button type="button" onClick={() => setWorkspaceTab("holerites")}>Consultar holerites <ChevronRight className="ml-1 size-4"/></Button></div>
+        </WorkspacePanel>
+        <WorkspacePanel active={workspaceTab === "holerites"} className="space-y-4">
+          <div className="radasa-section-heading"><div><h2>Holerites do período</h2><p className="text-xs text-muted-foreground">Detalhes, impressão e edição</p></div></div>
         {/* Fechamentos table */}
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="overflow-x-auto">
@@ -315,6 +332,7 @@ export default function Fechamentos() {
             {filteredFechamentos.length} holerite(s) nos filtros selecionados.
           </p>
         )}
+        </WorkspacePanel>
       </div>
 
       {/* Form dialog */}

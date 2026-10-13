@@ -1,3 +1,4 @@
+import { WorkspaceNavigation, WorkspacePanel } from "@/components/ui/workspace-navigation";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
@@ -61,6 +62,7 @@ function MetricCard({ label, value, hint, icon }: { label: string; value: number
 }
 
 export default function AdminHome() {
+  const [workspaceTab, setWorkspaceTab] = useState<"resumo" | "atividade">("resumo");
   const [summary, setSummary] = useState<AdminSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -106,6 +108,12 @@ export default function AdminHome() {
           </Button>
         </div>
 
+        <WorkspaceNavigation value={workspaceTab} onValueChange={(value) => setWorkspaceTab(value as "resumo" | "atividade")}
+          items={[
+            {value:"resumo",label:"Visão geral",description:"Usuários, acessos e módulos",icon:ShieldCheck},
+            {value:"atividade",label:"Atividade",description:"Auditoria e ações",icon:ScrollText}
+          ]} />
+        <WorkspacePanel active={workspaceTab === "resumo"} className="space-y-4">
         <div className="radasa-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard label="Usuários" value={s?.usuarios.total ?? 0} hint={`${s?.usuarios.ativos ?? 0} ativos • ${s?.usuarios.pendentes ?? 0} pendentes`} icon={<Users className="h-5 w-5" />} />
           <MetricCard label="Transportes liberado" value={s?.licencas.transportesAtivas ?? 0} hint="contas com acesso vigente" icon={<Truck className="h-5 w-5" />} />
@@ -169,6 +177,8 @@ export default function AdminHome() {
           </Card>
         </div>
 
+        </WorkspacePanel>
+        <WorkspacePanel active={workspaceTab === "atividade"} className="space-y-4">
         <div className="grid gap-4 lg:grid-cols-[1.4fr_0.6fr]">
           <Card>
             <CardHeader className="pb-3">
@@ -206,6 +216,7 @@ export default function AdminHome() {
           </Card>
         </div>
 
+        </WorkspacePanel>
         <div className="rounded-xl border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
           <span className="font-semibold text-foreground">Leitura administrativa:</span> os números desta tela são contagens leves do banco, sem carregar registros completos. Última leitura: {s?.generatedAt ? new Date(s.generatedAt).toLocaleString("pt-BR") : "—"}.
         </div>

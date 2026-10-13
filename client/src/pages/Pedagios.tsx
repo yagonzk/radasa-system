@@ -1,3 +1,4 @@
+import { WorkspaceNavigation } from "@/components/ui/workspace-navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "@/components/Layout";
 import { api } from "@/lib/api";
@@ -329,6 +330,11 @@ export default function Pedagios() {
 
   return <Layout><div className="mx-auto w-full min-w-0 max-w-[1500px] space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="font-display text-2xl font-bold">Rotas</h1><p className="mt-1 text-sm text-muted-foreground">Escolha a rota realmente utilizada na viagem e calcule os pedágios pela base própria Radasa.</p></div><Button variant={manageOpen ? "default" : "outline"} onClick={() => manageOpen ? setManageOpen(false) : openNewToll()}><Pencil className="mr-2 h-4 w-4"/>{manageOpen ? "Fechar edição" : "Editar Pedágios"}</Button></div>
+    <WorkspaceNavigation value={manageOpen ? "tarifas" : "rota"} onValueChange={(value) => setManageOpen(value === "tarifas")}
+      items={[
+        {value:"rota",label:"Traçar rota",description:"Cálculo, mapa e pedágios",icon:RouteIcon},
+        {value:"tarifas",label:"Gerenciar pedágios",description:"Revisar e cadastrar tarifas",icon:ReceiptText}
+      ]} />
     <Card><CardHeader className="pb-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle className="text-base">Calcular rota</CardTitle><p className="mt-1 text-xs text-muted-foreground">Digite origem e destino. Use “Passar por” para forçar a estrada/cidade realmente utilizada ou escolha uma das rotas alternativas.</p></div><Badge variant={providerConfigured ? "default" : "secondary"}>{providerConfigured === null ? "Verificando pedágios..." : providerConfigured ? "Base própria ativa" : "Base indisponível"}</Badge></div></CardHeader><CardContent><div className="flex flex-wrap items-end gap-4">
       <CityPicker className="w-full shrink-0 sm:w-[260px]" label="Origem" value={origin} onSelect={setOrigin} placeholder="Digite a cidade de origem"/>
       <div className="w-14 shrink-0 space-y-1.5"><Label className="invisible">Trocar</Label><Button className="h-[48px] w-full px-0" type="button" variant="outline" onClick={() => { const a = origin; setOrigin(destination); setDestination(a); }}><ArrowDownUp className="h-4 w-4 sm:rotate-90"/></Button></div>

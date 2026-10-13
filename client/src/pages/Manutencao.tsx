@@ -1,3 +1,4 @@
+import { WorkspaceNavigation } from "@/components/ui/workspace-navigation";
 import { formatBrazilianPhoneInput } from "@/lib/phoneMask";
 import { formatCpfCnpjInput } from "@/lib/documentMasks";
 import CnpjLookupButton from "@/components/cadastros/CnpjLookupButton";
@@ -558,11 +559,12 @@ export default function Manutencao() {
       <div className="mt-3 grid gap-2 md:grid-cols-2">{dash.alertas.slice(0, 8).map((a: any, i: number) => <div key={i} className="rounded-lg border bg-background p-3 text-sm"><span className="font-medium">{placa(a.veiculoId)}</span><span className="ml-2 text-muted-foreground">{a.titulo || "Alerta"} · {a.detalhe || "Verifique este alerta"}</span></div>)}</div>
     </details>}
 
-    <nav className="flex flex-wrap gap-1 rounded-lg border bg-muted/30 p-1" aria-label="Seções de manutenção">
-      {[["OS", "Ordens de serviço"], ["PLANOS", "Preventivas"], ["DOCS", "Documentos"]].map(([key, label]) =>
-        <Button key={key} size="sm" variant={tab === key ? "secondary" : "ghost"} className={tab === key ? "shadow-sm" : "text-muted-foreground"} onClick={() => setTab(key as typeof tab)}>{label}</Button>
-      )}
-    </nav>
+    <WorkspaceNavigation label="Seções de manutenção" value={tab} onValueChange={(value) => setTab(value as typeof tab)}
+      items={[
+        {value:"OS",label:"Ordens de serviço",description:"Registros e histórico",icon:Wrench},
+        {value:"PLANOS",label:"Preventivas",description:"Planos por veículo",icon:ClipboardList},
+        {value:"DOCS",label:"Documentos",description:"Vencimentos e arquivos",icon:FileText}
+      ]} />
 
     {tab === "OS" && <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">

@@ -1,3 +1,4 @@
+import { WorkspaceNavigation, WorkspacePanel } from "@/components/ui/workspace-navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight, BarChart3, Boxes, ClipboardList, Leaf, PackageCheck, Sprout, Tractor, TriangleAlert, Warehouse } from "lucide-react";
@@ -22,6 +23,7 @@ function firstDay() { const d = new Date(); return `${d.getFullYear()}-${String(
 function today() { return new Date().toISOString().slice(0, 10); }
 
 export default function AgroHome() {
+  const [workspaceTab, setWorkspaceTab] = useState<"resumo" | "operacao" | "analises">("resumo");
   const [data, setData] = useState<DashboardData | null>(null); const [report, setReport] = useState<AgroReport | null>(null); const [loading, setLoading] = useState(true);
   const load = useCallback(async (silent = false) => { if (!silent) setLoading(true); try { const response = await api.get<DashboardData>("/agro/dashboard"); setData(response.data); api.get<AgroReport>("/agro/relatorios", { params: { from: firstDay(), to: today() } }).then((r) => setReport(r.data)).catch(() => undefined); } catch (error) { console.error("Falha ao carregar Dashboard Agro", error); } finally { if (!silent) setLoading(false); } }, []);
   useEffect(() => { void load(); }, [load]);
@@ -38,10 +40,24 @@ export default function AgroHome() {
 
   return <AgroLayout><div className="space-y-6">
     <div><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary"><Leaf className="h-4 w-4" />Radasa Agro</div><h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Dashboard Agro</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">Estoque, custos e lavouras em uma visão rápida, com atualização automática entre computadores.</p></div>
+    <WorkspaceNavigation value={workspaceTab} onValueChange={(value) => setWorkspaceTab(value as "resumo" | "operacao" | "analises")}
+      items={[
+        {value:"resumo",label:"Visão geral",description:"Estoque e indicadores",icon:Leaf},
+        {value:"operacao",label:"Operações",description:"Acessos e movimentações",icon:ClipboardList},
+        {value:"analises",label:"Indicadores",description:"Consumo e custos",icon:BarChart3}
+      ]} />
+    <WorkspacePanel active={workspaceTab === "resumo"} className="space-y-4">
     <div className="radasa-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">{stats.map(({ label, value, format, detail, icon: Icon }) => <Card key={label} className="radasa-interactive-card"><CardContent className="flex items-center justify-between gap-4 p-5"><div><div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div><div className="mt-2 text-xl font-bold">{loading && !data ? "—" : <AnimatedNumber value={value} format={format} />}</div><div className="mt-1 text-xs text-muted-foreground">{detail}</div></div><Icon className="h-5 w-5 text-primary" /></CardContent></Card>)}</div>
+    <div className="flex justify-end"><button type="button" onClick={() => setWorkspaceTab("operacao")} className="rounded-xl border border-primary/20 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/10">Ver operações <ArrowRight className="ml-2 inline size-4" /></button></div>
+    </WorkspacePanel>
+    <WorkspacePanel active={workspaceTab === "operacao"} className="space-y-4">
     <div className="grid gap-5 xl:grid-cols-[1.15fr_1fr]"><div><h2 className="text-base font-semibold">Acesso rápido</h2><div className="radasa-stagger mt-3 grid gap-3 sm:grid-cols-2">{quickLinks.map(({ title, description, href, icon: Icon }) => <Link key={href} href={href} className="radasa-interactive-card group rounded-xl border bg-card p-4 transition hover:border-primary/30 hover:bg-accent/20"><div className="flex items-start justify-between"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="h-4 w-4" /></div><ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" /></div><div className="mt-3 font-semibold">{title}</div><p className="mt-1 text-sm text-muted-foreground">{description}</p></Link>)}</div></div>
       <div><div className="flex items-center justify-between"><h2 className="text-base font-semibold">Últimas movimentações</h2><Link href="/agro/movimentacoes" className="text-xs font-semibold text-primary hover:underline">Ver histórico</Link></div><div className="mt-3 overflow-hidden rounded-xl border bg-card">{(data?.recent || []).map((item) => <div key={item.id} className="flex items-center gap-3 border-b p-3 last:border-b-0"><div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${movementIsExit(item.tipo) ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}><ClipboardList className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{item.produto?.nome}</div><div className="text-xs text-muted-foreground">{movementLabel(item.tipo)} · {item.local?.nome || "Estoque"} · {formatAgroDate(item.data)}</div></div><div className="text-right text-sm font-semibold">{movementIsExit(item.tipo) ? "−" : "+"}{formatAgroNumber(item.quantidade)}<div className="text-[10px] font-normal text-muted-foreground">{item.produto?.unidadeMedida}</div></div></div>)}{!loading && (data?.recent?.length ?? 0) === 0 && <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma movimentação registrada ainda.</div>}</div></div></div>
+    </WorkspacePanel>
+    <WorkspacePanel active={workspaceTab === "analises"} className="space-y-4">
+    <div className="radasa-section-heading"><div><h2>Análise de consumo</h2><p className="text-sm text-muted-foreground">Custos por produto, fazenda e cultura no período</p></div></div>
     <div className="grid gap-4 lg:grid-cols-3"><MiniRanking title="Produtos mais consumidos" rows={report?.consumoPorProduto || []} /><MiniRanking title="Custo por fazenda" rows={report?.consumoPorFazenda || []} /><MiniRanking title="Custo por cultura" rows={report?.consumoPorCultura || []} /></div>
+    </WorkspacePanel>
   </div></AgroLayout>;
 }
 function MiniRanking({ title, rows }: { title: string; rows: Array<{ id: string; label: string; custo: number }> }) { return <Card><CardContent className="p-4"><div className="font-semibold">{title}</div><div className="mt-3 divide-y">{rows.slice(0, 5).map((r) => <div key={r.id} className="flex justify-between gap-3 py-2 text-sm"><span className="truncate">{r.label}</span><span className="shrink-0 font-semibold">{formatAgroCurrency(r.custo)}</span></div>)}{rows.length === 0 && <div className="py-6 text-center text-sm text-muted-foreground">Sem consumo no mês.</div>}</div></CardContent></Card>; }

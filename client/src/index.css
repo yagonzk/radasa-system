@@ -528,3 +528,147 @@ body {
     transition: none !important;
   }
 }
+
+/* Organização das áreas internas no mesmo padrão do módulo Pneus.
+   Utiliza as cores existentes da marca, sem modificar nenhum fundo global. */
+@layer components {
+  .radasa-workspace-nav {
+    display: flex;
+    align-items: stretch;
+    gap: .5rem;
+    width: 100%;
+    max-width: 100%;
+    padding: .4rem;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+    border: 1px solid var(--border);
+    border-radius: 1.35rem;
+    background: color-mix(in srgb, var(--card) 85%, transparent);
+    box-shadow: 0 4px 18px rgba(8, 20, 36, .045);
+  }
+  .radasa-workspace-nav__item {
+    position: relative;
+    display: inline-flex;
+    flex: 1 0 150px;
+    min-width: 0;
+    min-height: 58px;
+    align-items: center;
+    justify-content: flex-start;
+    gap: .7rem;
+    padding: .7rem .85rem;
+    text-align: left;
+    border-radius: .95rem;
+    border: 1px solid transparent;
+    color: var(--muted-foreground);
+    transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease, transform .18s ease;
+  }
+  .radasa-workspace-nav__item:hover {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+  .radasa-workspace-nav__item[data-state="active"] {
+    background: color-mix(in srgb, var(--primary) 10%, var(--card));
+    border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+    color: var(--foreground);
+    box-shadow: 0 4px 15px color-mix(in srgb, var(--primary) 10%, transparent);
+  }
+  .radasa-workspace-nav__item[data-state="active"]::after {
+    content: "";
+    position: absolute;
+    bottom: .35rem;
+    left: .85rem;
+    right: .85rem;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--primary), var(--chart-2));
+  }
+  .radasa-workspace-nav__icon {
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: .75rem;
+    color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 9%, transparent);
+  }
+  .radasa-workspace-nav__label {
+    display: block;
+    white-space: nowrap;
+    font-size: .82rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  .radasa-workspace-nav__description {
+    display: block;
+    margin-top: .2rem;
+    font-size: .7rem;
+    line-height: 1.3;
+    color: var(--muted-foreground);
+  }
+  .radasa-workspace-panel {
+    animation: radasa-workspace-in .22s ease-out both;
+  }
+  .radasa-workspace-panel[hidden] { display: none !important; }
+  @keyframes radasa-workspace-in {
+    from { opacity: .5; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .radasa-page-layout {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .radasa-section-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .radasa-section-heading h2 {
+    font-size: 1.08rem;
+    line-height: 1.4;
+    color: var(--foreground);
+    font-weight: 750;
+  }
+  /* Todas as abas Radix herdam o mesmo desenho de Pneus, sem afetar cálculos. */
+  [data-radasa-main] [data-slot="tabs-list"],
+  [data-radasa-agro-main] [data-slot="tabs-list"],
+  [data-radasa-admin-main] [data-slot="tabs-list"] {
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    border-radius: 1rem;
+    padding: .3rem;
+    max-width: 100%;
+    min-height: 44px;
+  }
+  [data-radasa-main] [data-slot="tabs-trigger"],
+  [data-radasa-agro-main] [data-slot="tabs-trigger"],
+  [data-radasa-admin-main] [data-slot="tabs-trigger"] {
+    border-radius: .75rem;
+    min-height: 36px;
+    gap: .45rem;
+    padding-inline: .75rem;
+  }
+  [data-radasa-main] [data-slot="tabs-trigger"][data-state="active"],
+  [data-radasa-agro-main] [data-slot="tabs-trigger"][data-state="active"],
+  [data-radasa-admin-main] [data-slot="tabs-trigger"][data-state="active"] {
+    color: var(--primary);
+    border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+    box-shadow: 0 3px 12px color-mix(in srgb, var(--primary) 9%, transparent);
+  }
+  @media (max-width: 639px) {
+    .radasa-workspace-nav__item { flex-basis: 138px; min-height: 52px; padding: .55rem; }
+    .radasa-workspace-nav__description { display: none; }
+    .radasa-workspace-nav__icon { width: 30px; height: 30px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .radasa-workspace-panel { animation: none; }
+    .radasa-workspace-nav__item { transition: none; }
+  }
+}

@@ -226,7 +226,7 @@ export default function AgroLavouras() {
 
         <Tabs value={tab} onValueChange={setTab}>
           <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 lg:flex-row lg:items-center lg:justify-between">
-            <TabsList><TabsTrigger value="lavouras"><Sprout />Lavouras</TabsTrigger><TabsTrigger value="operacoes"><ClipboardList />Operações</TabsTrigger></TabsList>
+            <TabsList className="flex h-auto w-full flex-wrap gap-1.5 rounded-2xl p-1.5 sm:w-auto"><TabsTrigger value="lavouras"><Sprout />Lavouras</TabsTrigger><TabsTrigger value="operacoes"><ClipboardList />Operações</TabsTrigger></TabsList>
             <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row lg:max-w-2xl"><div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" placeholder="Buscar fazenda, talhão, cultura ou responsável..." value={search} onChange={(e) => setSearch(e.target.value)} /></div><select className="h-9 rounded-md border bg-background px-3 text-sm" value={seasonFilter} onChange={(e) => setSeasonFilter(e.target.value)}><option value="TODAS">Todas as safras</option>{seasons.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
           </div>
 

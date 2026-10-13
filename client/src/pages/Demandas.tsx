@@ -1,3 +1,4 @@
+import { WorkspaceNavigation, WorkspacePanel } from "@/components/ui/workspace-navigation";
 import { useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import { useDemandas, type Demanda, type PrioridadeDemanda, type StatusDemanda } from "@/lib/store";
@@ -8,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, CalendarDays, UserRound, MoreHorizontal, Pencil, Trash2, ListTodo, Clock3 } from "lucide-react";
+import { Plus, Search, CalendarDays, UserRound, MoreHorizontal, Pencil, Trash2, ListTodo, Clock3, BarChart3, Columns3 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 
@@ -34,6 +35,7 @@ const priorityClass: Record<PrioridadeDemanda, string> = {
 const emptyForm = { titulo: "", descricao: "", status: "A_FAZER" as StatusDemanda, prioridade: "MEDIA" as PrioridadeDemanda, responsavel: "", etiquetas: "", dataPrazo: "" };
 
 export default function Demandas() {
+  const [workspaceTab, setWorkspaceTab] = useState<"resumo" | "quadro">("quadro");
   const { items, create, update, remove } = useDemandas();
   const [busca, setBusca] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -75,7 +77,7 @@ export default function Demandas() {
   const hoje = new Date().toISOString().slice(0,10);
 
   return <Layout>
-    <div className="flex h-[calc(100vh-112px)] min-h-[620px] flex-col gap-5 overflow-hidden">
+    <div className={workspaceTab === "quadro" ? "flex min-h-[600px] flex-col gap-5 lg:h-[calc(100vh-112px)]" : "radasa-page-layout"}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2"><ListTodo className="h-6 w-6 text-primary"/><h1 className="text-2xl font-bold tracking-tight">Demandas</h1></div>
@@ -84,6 +86,18 @@ export default function Demandas() {
         <Button onClick={() => openCreate()} className="gap-2"><Plus className="h-4 w-4"/>Nova demanda</Button>
       </div>
 
+      <WorkspaceNavigation value={workspaceTab} onValueChange={(value) => setWorkspaceTab(value as "resumo" | "quadro")}
+        items={[
+          {value:"quadro",label:"Quadro de demandas",description:"Kanban e organização",icon:Columns3},
+          {value:"resumo",label:"Visão geral",description:"Status e prioridades",icon:BarChart3}
+        ]} />
+      <WorkspacePanel active={workspaceTab === "resumo"} className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {COLUNAS.map((col) => <div key={col.value} className="rounded-2xl border border-border/80 bg-card p-4 shadow-sm"><span className="text-xs text-muted-foreground">{col.label}</span><strong className="mt-2 block text-3xl font-bold tabular-nums">{items.filter((item) => item.status === col.value).length}</strong><p className="mt-2 text-xs text-muted-foreground">{col.hint}</p></div>)}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/70 p-4"><p className="text-sm text-muted-foreground">{items.filter((d) => d.prioridade === "URGENTE" && d.status !== "CONCLUIDA").length} demanda(s) urgentes em aberto.</p><Button onClick={() => setWorkspaceTab("quadro")}>Abrir quadro <ListTodo className="ml-2 size-4" /></Button></div>
+      </WorkspacePanel>
+      <WorkspacePanel active={workspaceTab === "quadro"} className="flex min-h-[520px] flex-1 flex-col gap-4 overflow-hidden">
       <div className="flex items-center gap-3">
         <div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Pesquisar demandas..." className="pl-9"/></div>
         <div className="hidden text-sm text-muted-foreground md:block">{items.length} {items.length === 1 ? "cartão" : "cartões"}</div>
@@ -113,6 +127,7 @@ export default function Demandas() {
           </section>;
         })}
       </div>
+      </WorkspacePanel>
     </div>
 
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>{editing ? "Editar demanda" : "Nova demanda"}</DialogTitle></DialogHeader><div className="grid gap-4 py-2">
