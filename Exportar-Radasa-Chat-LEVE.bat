@@ -63,6 +63,8 @@ robocopy "%PROJECT%" "%TEMP_DIR%" ^
   /E /MAX:4194304 /R:1 /W:1 /NFL /NDL /NJH /NJS /NP ^
   /XD ^
     node_modules .git .github ^
+    .dnit-agent-profile .dnit-agent-cdp-profile ^
+    .senatran-agent-profile .senatran-agent-cdp-profile ^
     dist dist-sefaz-agent dist-dnit-agent dist-senatran-agent ^
     build out coverage ^
     .wrangler .turbo .cache cache caches ^
