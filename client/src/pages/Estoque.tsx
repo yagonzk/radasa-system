@@ -1501,7 +1501,18 @@ function ResumoTable({
       </div>
 
       <div className="overflow-x-auto rounded-xl border bg-card radasa-compact-table-shell">
-        <table className="w-full min-w-[980px] text-sm radasa-compact-table" data-radasa-min-readable-width="760">
+        <table className="w-full min-w-[980px] table-fixed text-sm radasa-compact-table radasa-estoque-resumo-table" data-radasa-min-readable-width="760">
+          <colgroup>
+            <col style={{ width: "20%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "7%" }} />
+            <col style={{ width: "7%" }} />
+            <col style={{ width: "7%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "15%" }} />
+          </colgroup>
           <thead className="bg-muted/30">
             <tr>
               {estoqueResumoColumns.map((column) => {
@@ -1509,7 +1520,7 @@ function ResumoTable({
                 const options = optionsFor(column.key);
 
                 return (
-                  <th key={column.key} className="px-4 py-3 font-semibold">
+                  <th key={column.key} scope="col" className={`px-3 py-3 align-middle font-semibold ${["entradas", "saidas", "saldo"].includes(column.key) ? "text-center" : column.key === "valorEstoque" ? "text-right" : "text-left"}`}>
                     <Popover
                       open={activeColumnFilter === column.key}
                       onOpenChange={(open) => {
@@ -1520,7 +1531,7 @@ function ResumoTable({
                       <PopoverTrigger asChild>
                         <button
                           type="button"
-                          className={`flex w-full items-center gap-1 rounded-sm text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary ${active ? "text-primary" : "text-muted-foreground"}`}
+                          className={`flex w-full min-w-0 items-center gap-1 rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary ${["entradas", "saidas", "saldo"].includes(column.key) ? "justify-center text-center" : column.key === "valorEstoque" ? "justify-end text-right" : "justify-start text-left"} ${active ? "text-primary" : "text-muted-foreground"}`}
                           title={`Filtrar por ${column.label}`}
                         >
                           <span>{column.label}</span>
@@ -1573,7 +1584,7 @@ function ResumoTable({
                   </th>
                 );
               })}
-              <th className="px-4 py-3 text-left text-muted-foreground">Ações</th>
+              <th scope="col" className="px-2 py-3 text-center align-middle text-muted-foreground">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -1583,15 +1594,15 @@ function ResumoTable({
                 <td className="px-4 py-3">{row.produto.codigoInterno}</td>
                 <td className="px-4 py-3">{row.produto.categoria || "—"}</td>
                 <td className="px-4 py-3">{row.produto.subcategoria || "—"}</td>
-                <td className="px-4 py-3 text-emerald-500">{row.entradas.toLocaleString("pt-BR")}</td>
-                <td className="px-4 py-3 text-amber-500">{row.saidas.toLocaleString("pt-BR")}</td>
-                <td className="px-4 py-3 font-bold text-primary">{row.estoque.toLocaleString("pt-BR")}</td>
-                <td className="px-4 py-3">{formatBRL(row.valorEstoque)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onViewProduct(row)} title="Visualizar produto" aria-label={`Visualizar produto ${row.produto.nome}`}><Eye className="h-4 w-4" /></Button>
-                    <Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onEditProduct(row.produto)} title="Editar produto"><Pencil className="h-4 w-4" /></Button>
-                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => void onDeleteProduct(row.produto)} title="Excluir produto"><Trash2 className="h-4 w-4" /></Button>
+                <td className="px-2 py-3 text-center align-middle tabular-nums text-emerald-500">{row.entradas.toLocaleString("pt-BR")}</td>
+                <td className="px-2 py-3 text-center align-middle tabular-nums text-amber-500">{row.saidas.toLocaleString("pt-BR")}</td>
+                <td className="px-2 py-3 text-center align-middle font-bold tabular-nums text-primary">{row.estoque.toLocaleString("pt-BR")}</td>
+                <td className="px-2 py-3 text-right align-middle tabular-nums">{formatBRL(row.valorEstoque)}</td>
+                <td className="px-1.5 py-2 text-center align-middle">
+                  <div className="radasa-table-actions flex items-center justify-center gap-1 whitespace-nowrap">
+                    <Button size="icon-sm" variant="ghost" className="size-7 shrink-0 text-blue-600" onClick={() => onViewProduct(row)} title="Visualizar produto" aria-label={`Visualizar produto ${row.produto.nome}`}><Eye className="h-4 w-4" /></Button>
+                    <Button size="icon-sm" variant="ghost" className="size-7 shrink-0 text-blue-600" onClick={() => onEditProduct(row.produto)} title="Editar produto" aria-label={`Editar produto ${row.produto.nome}`}><Pencil className="h-4 w-4" /></Button>
+                    <Button size="icon-sm" variant="ghost" className="size-7 shrink-0 text-destructive" onClick={() => void onDeleteProduct(row.produto)} title="Excluir produto" aria-label={`Excluir produto ${row.produto.nome}`}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </td>
               </tr>
@@ -1677,17 +1688,26 @@ function MovimentacoesTable({ rows, onView, onEdit, onPdf, onRemove }: { rows: E
         </div>
       </div>
       <div className="overflow-x-auto rounded-xl border bg-card radasa-compact-table-shell">
-        <table className="w-full min-w-[900px] text-sm radasa-compact-table" data-radasa-min-readable-width="760">
+        <table className="w-full min-w-[900px] table-fixed text-sm radasa-compact-table radasa-estoque-movimentos-table" data-radasa-min-readable-width="760">
+          <colgroup>
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "25%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "20%" }} />
+          </colgroup>
           <thead className="bg-muted/30">
             <tr>
               {movimentacaoColumns.map((column) => {
                 const active = Boolean(columnFilters[column.key]);
                 const options = optionsFor(column.key);
                 return (
-                  <th key={column.key} className="px-4 py-3 font-semibold">
+                  <th key={column.key} scope="col" className={`px-3 py-3 align-middle font-semibold ${column.key === "quantidade" ? "text-center" : ["valorUnitario", "valorTotal"].includes(column.key) ? "text-right" : "text-left"}`}>
                     <Popover open={activeColumnFilter === column.key} onOpenChange={(open) => { setActiveColumnFilter(open ? column.key : null); setColumnFilterSearch(""); }}>
                       <PopoverTrigger asChild>
-                        <button type="button" className={`flex w-full items-center gap-1 rounded-sm text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary ${active ? "text-primary" : "text-muted-foreground"}`} title={`Filtrar por ${column.label}`}>
+                        <button type="button" className={`flex w-full min-w-0 items-center gap-1 rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary ${column.key === "quantidade" ? "justify-center text-center" : ["valorUnitario", "valorTotal"].includes(column.key) ? "justify-end text-right" : "justify-start text-left"} ${active ? "text-primary" : "text-muted-foreground"}`} title={`Filtrar por ${column.label}`}>
                           <span>{column.label}</span><ChevronDown className="h-4 w-4 shrink-0" />
                         </button>
                       </PopoverTrigger>
@@ -1709,7 +1729,7 @@ function MovimentacoesTable({ rows, onView, onEdit, onPdf, onRemove }: { rows: E
                   </th>
                 );
               })}
-              <th className="px-4 py-3 text-left text-muted-foreground">Ações</th>
+              <th scope="col" className="px-2 py-3 text-center align-middle text-muted-foreground">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -1717,11 +1737,18 @@ function MovimentacoesTable({ rows, onView, onEdit, onPdf, onRemove }: { rows: E
               <tr key={item.id} className="border-t">
                 <td className="px-4 py-3">{formatDate(item.data)}</td>
                 <td className="px-4 py-3 font-medium">{item.produto.nome} - {item.produto.codigoInterno}</td>
-                <td className="px-4 py-3">{item.quantidade.toLocaleString("pt-BR")}</td>
-                <td className="px-4 py-3">{formatBRL(item.valorUnitario)}</td>
-                <td className="px-4 py-3">{formatBRL(item.valorTotal)}</td>
+                <td className="px-2 py-3 text-center align-middle tabular-nums">{item.quantidade.toLocaleString("pt-BR")}</td>
+                <td className="px-2 py-3 text-right align-middle tabular-nums">{formatBRL(item.valorUnitario)}</td>
+                <td className="px-2 py-3 text-right align-middle tabular-nums">{formatBRL(item.valorTotal)}</td>
                 <td className="px-4 py-3">{item.pdfUrl ? <button className="text-blue-600 hover:underline" onClick={() => onPdf({ url: item.pdfUrl!, title: item.pdfName || "Nota fiscal" })}>Visualizar</button> : <span className="text-muted-foreground">—</span>}</td>
-                <td className="px-4 py-3"><div className="flex gap-1"><Button size="icon" variant="ghost" className="text-blue-600" onClick={() => onView(item)} title="Visualizar"><Eye className="h-4 w-4" /></Button><Button size="icon" variant="ghost" className="text-amber-600" onClick={() => onEdit(item)} title="Corrigir movimentação"><Pencil className="h-4 w-4" /></Button>{item.pdfUrl && <Button size="icon" variant="ghost" className="text-emerald-600" onClick={() => downloadPdf(item.pdfUrl!, item.pdfName || `nf_${item.id}.pdf`)} title="Baixar PDF"><Download className="h-4 w-4" /></Button>}<Button size="icon" variant="ghost" className="text-destructive" title="Excluir movimentação" onClick={async () => { if (!window.confirm(`Excluir esta ${item.tipo === "ENTRADA" ? "entrada" : "saída"}? O saldo do estoque será recalculado automaticamente.`)) return; try { await onRemove(item.id); toast.success(item.tipo === "ENTRADA" ? "Entrada removida e saldo do estoque revertido." : "Saída removida e quantidade devolvida ao estoque."); } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível remover."); } }}><Trash2 className="h-4 w-4" /></Button></div></td>
+                <td className="px-1.5 py-2 text-center align-middle">
+                  <div className="radasa-table-actions flex items-center justify-center gap-1 whitespace-nowrap">
+                    <Button size="icon-sm" variant="ghost" className="size-7 shrink-0 text-blue-600" onClick={() => onView(item)} title="Visualizar" aria-label="Visualizar movimentação"><Eye className="h-4 w-4" /></Button>
+                    <Button size="icon-sm" variant="ghost" className="size-7 shrink-0 text-amber-600" onClick={() => onEdit(item)} title="Corrigir movimentação" aria-label="Corrigir movimentação"><Pencil className="h-4 w-4" /></Button>
+                    {item.pdfUrl && <Button size="icon-sm" variant="ghost" className="size-7 shrink-0 text-emerald-600" onClick={() => downloadPdf(item.pdfUrl!, item.pdfName || `nf_${item.id}.pdf`)} title="Baixar PDF" aria-label="Baixar PDF"><Download className="h-4 w-4" /></Button>}
+                    <Button size="icon-sm" variant="ghost" className="size-7 shrink-0 text-destructive" title="Excluir movimentação" aria-label="Excluir movimentação" onClick={async () => { if (!window.confirm(`Excluir esta ${item.tipo === "ENTRADA" ? "entrada" : "saída"}? O saldo do estoque será recalculado automaticamente.`)) return; try { await onRemove(item.id); toast.success(item.tipo === "ENTRADA" ? "Entrada removida e saldo do estoque revertido." : "Saída removida e quantidade devolvida ao estoque."); } catch (error: any) { toast.error(error?.response?.data?.message || "Não foi possível remover."); } }}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                </td>
               </tr>
             ))}
             {!filteredRows.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">{hasFilters || globalSearch ? "Nenhuma movimentação corresponde aos filtros." : "Nenhuma movimentação registrada."}</td></tr>}

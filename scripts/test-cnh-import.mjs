@@ -1,13 +1,15 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
-import ts from 'typescript';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const ts = require('typescript');
 
 // Testa apenas parser puro: não carrega documentos nem bibliotecas de OCR/PDF.
-const code = ts.transpileModule(fs.readFileSync('client/src/lib/cnhImport.ts', 'utf8'), {
+const code = ts.transpileModule(fs.readFileSync('client/src/lib/cnhCampos.ts', 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
-const context = { exports: {}, require(id) { if (id === 'pdfjs-dist') return { GlobalWorkerOptions: {}, getDocument: () => {} }; return {}; } };
+const context = { exports: {} };
 vm.runInNewContext(code, context);
 const parse = context.exports.interpretarCamposCnh;
 const { dados, avisos } = parse({
@@ -43,5 +45,5 @@ assert.equal(separated.dados.cpf, '52998224725');
 assert.equal(separated.dados.cnhCategoria, 'AD');
 const invalid = parse({ cpf: '4d CPF\n529.982.247-26', cnhCategoria: 'CAT HAB\nAD' });
 assert.equal(invalid.dados.cpf, undefined);
-assert.ok(invalid.avisos.some(aviso => aviso.includes('4d')));
+assert.ok(invalid.avisos.some(aviso => aviso.includes('CPF')));
 console.log('CNH parser: 16 verificações passaram.');

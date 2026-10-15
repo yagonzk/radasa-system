@@ -1,116 +1,22 @@
 /** Leitura local e assistida de CNH digital. Nunca grava um cadastro nem o PDF. */
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { identificarPerfilCnh, type CnhRegiao, type CnhPerfil } from "./cnhLayouts";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-export type CnhCampo = "nome" | "cpf" | "rg" | "dataNascimento" | "cnhNumero" | "cnhRegistro" | "cnhCategoria" | "cnhEmissao" | "cnhValidade" | "primeiraHabilitacao";
-export type DadosCnh = Partial<Record<CnhCampo, string>>;
-export type ResultadoCnh = { dados: DadosCnh; avisos: string[] };
+export { interpretarCamposCnh } from "./cnhCampos";
+export type { CnhCampo, DadosCnh, ResultadoCnh } from "./cnhCampos";
+import { interpretarCamposCnh, type CnhCampo, type ResultadoCnh } from "./cnhCampos";
 
-function somenteNumeros(value: string): string { return value.replace(/\D/g, ""); }
-function cpfValido(value: string): boolean {
-  const digits = somenteNumeros(value);
-  if (digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return false;
-  for (let length = 9; length <= 10; length += 1) {
-    let sum = 0;
-    for (let index = 0; index < length; index += 1) sum += Number(digits[index]) * (length + 1 - index);
-    if ((((sum * 10) % 11) % 10) !== Number(digits[length])) return false;
-  }
-  return true;
-}
-function dataBrasileira(value: string): string | undefined {
-  const fixed = value.replace(/[oO]/g, "0").replace(/[lI|]/g, "1");
-  const match = fixed.match(/(\d{2})\s*[\/\.\-]\s*(\d{2})\s*[\/\.\-]\s*(\d{4})/);
-  if (!match) return undefined;
-  const day = Number(match[1]), month = Number(match[2]), year = Number(match[3]);
-  if (year < 1900 || year > 2100) return undefined;
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return undefined;
-  return `${match[3]}-${match[2]}-${match[1]}`;
-}
-function nomeCnh(raw: string): string | undefined {
-  const line = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean).find(line => {
-    const compact = line.replace(/[^\p{L} ]/gu, "").trim();
-    return compact.length >= 8 && compact.split(/\s+/).length >= 2 && !/NOME|SOBRENOME|CARTEIRA|REPÚBLICA|PERMISO|LICEN[CS]E/i.test(compact);
-  });
-  if (!line) return undefined;
-  const candidate = line.toLocaleUpperCase("pt-BR").replace(/[^\p{L} ]/gu, " ").replace(/\s+/g, " ").trim();
-  return candidate.length >= 8 && candidate.length <= 100 ? candidate : undefined;
-}
-function numeroRegistro(raw: string): string | undefined {
-  const fixed = raw.replace(/[oO]/g, "0").replace(/[lI|]/g, "1");
-  return fixed.match(/(?:^|\D)(\d{11})(?!\d)/)?.[1];
-}
-function categoriaCnh(raw: string): string | undefined {
-  // Limita a análise ao valor do campo 9, não ao "D" grande da área ACC.
-  const clean = raw.toUpperCase().replace(/\b(?:CAT(?:EGORIA)?|HAB(?:ILITACAO)?|ACC)\b/g, " ")
-    .replace(/[^A-Z\s]/g, " ").replace(/\s+/g, " ").trim();
-  const allowed = new Set(["ACC", "A", "B", "C", "D", "E", "AB", "AC", "AD", "AE"]);
-  const tokens = clean.split(" ").filter(Boolean);
-  // A impressão ou o OCR pode separar "A D" em duas palavras/linhas.
-  for (let i = 0; i < tokens.length - 1; i++) {
-    const joined = tokens[i] + tokens[i + 1];
-    if (/^A[B-E]$/.test(joined)) return joined;
-  }
-  return tokens.reverse().find(token => allowed.has(token));
+/** Trata somente valores de categoria encontrados no recorte isolado. */
+function categoriaDoOcr(raw: string): string | undefined {
+  const value = raw.toUpperCase().replace(/[^A-Z]/g, "");
+  if (["ACC", "A", "B", "C", "D", "E", "AB", "AC", "AD", "AE"].includes(value)) return value;
+  return undefined;
 }
 
-function cpfsDoOcr(raw: string): string[] {
-  // Normaliza confusões de letras que aparecem em campos numéricos da CNH-e.
-  const digitsText = raw.toUpperCase().replace(/[OQ]/g, "0").replace(/[IL|]/g, "1")
-    .replace(/S/g, "5").replace(/B/g, "8");
-  const found: string[] = [];
-  // Aceita espaços e quebras de linha entre dígitos, sem capturar o rótulo "4d CPF".
-  for (const match of digitsText.matchAll(/(?:^|[^\d])((?:\d[.\s\-]*){10}\d)(?!\d)/g)) {
-    const value = somenteNumeros(match[1]);
-    if (!found.includes(value)) found.push(value);
-  }
-  return found;
-}
-
-/** Campos OCR de áreas isoladas da frente da CNH-e da CDT/SENATRAN. */
-export function interpretarCamposCnh(areas: Record<string, string>): ResultadoCnh {
-  const dados: DadosCnh = {};
-  const avisos: string[] = [];
-  dados.nome = nomeCnh(areas.nome ?? "");
-  const cpf = cpfsDoOcr(areas.cpf ?? "").find(cpfValido);
-  if (cpf) dados.cpf = cpf;
-  else avisos.push("CPF não reconhecido com segurança. Confira e preencha manualmente o campo 4d.");
-  const identidade = (areas.rg ?? "").replace(/[oO]/g, "0").match(/\d[\d.\-]{4,13}\d/);
-  if (identidade) dados.rg = somenteNumeros(identidade[0]);
-  dados.dataNascimento = dataBrasileira(areas.dataNascimento ?? "");
-  dados.primeiraHabilitacao = dataBrasileira(areas.primeiraHabilitacao ?? "");
-  dados.cnhEmissao = dataBrasileira(areas.cnhEmissao ?? "");
-  dados.cnhValidade = dataBrasileira(areas.cnhValidade ?? "");
-  const registro = numeroRegistro(areas.cnhRegistro ?? "");
-  if (registro) {
-    // "Número CNH" e "Registro CNH" referem-se ao número de registro (campo 5).
-    dados.cnhNumero = registro;
-    dados.cnhRegistro = registro;
-  }
-  dados.cnhCategoria = categoriaCnh(areas.cnhCategoria ?? "");
-  if (!dados.cnhCategoria) avisos.push("Categoria não identificada. Confira o campo 9 CAT. HAB. (não o D de ACC).");
-  for (const campo of Object.keys(dados) as CnhCampo[]) if (!dados[campo]) delete dados[campo];
-  if (!dados.cpf || !dados.nome || !dados.cnhRegistro) avisos.push("Alguns campos podem exigir preenchimento manual.");
-  return { dados, avisos };
-}
-
-// Posições relativas do anverso de CNH-e emitida pela CDT em página A4.
-// Deliberadamente exclui o QR Code, a fotografia e os dados de filiação.
-const REGIOES_CNH: Record<string, readonly [number, number, number, number]> = {
-  nome: [0.122, 0.129, 0.375, 0.142],
-  primeiraHabilitacao: [0.381, 0.131, 0.448, 0.142],
-  dataNascimento: [0.239, 0.149, 0.441, 0.159],
-  cnhEmissao: [0.237, 0.167, 0.297, 0.175],
-  cnhValidade: [0.308, 0.167, 0.369, 0.175],
-  rg: [0.238, 0.184, 0.440, 0.192],
-  cpf: [0.238, 0.196, 0.314, 0.211],
-  cnhRegistro: [0.314, 0.195, 0.390, 0.210],
-  cnhCategoria: [0.399, 0.196, 0.454, 0.211],
-};
-
-function recortar(canvas: HTMLCanvasElement, bounds: readonly [number, number, number, number]) {
+function recortar(canvas: HTMLCanvasElement, bounds: CnhRegiao) {
   const [x1, y1, x2, y2] = bounds;
   const crop = document.createElement("canvas");
   const sourceX = Math.round(canvas.width * x1), sourceY = Math.round(canvas.height * y1);
@@ -188,8 +94,28 @@ export async function lerCnhPdf(file: File, progresso?: (mensagem: string) => vo
     progresso?.("Carregando reconhecimento de texto...");
     ocrWorker = await createWorker("por", 1);
     await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, preserve_interword_spaces: "1" });
+    const detected = identificarPerfilCnh(pageCanvas);
+    progresso?.(`Modelo identificado: ${detected.nome}.`);
+    const result = await extrairPerfilCnh(pageCanvas, ocrWorker, PSM, detected, progresso);
+    const essential = ["nome", "cpf", "cnhRegistro"].filter(field => result.dados[field as CnhCampo]);
+    if (!essential.length) throw new Error("Não foi possível identificar os dados da CNH. Confira se o PDF é uma CNH-e digital legível.");
+    return result;
+  } finally {
+    pageCanvas && (pageCanvas.width = pageCanvas.height = 1);
+    await ocrWorker?.terminate();
+    await loading.destroy();
+  }
+}
+
+async function extrairPerfilCnh(
+  pageCanvas: HTMLCanvasElement,
+  ocrWorker: Awaited<ReturnType<typeof import("tesseract.js")["createWorker"]>>,
+  PSM: typeof import("tesseract.js")["PSM"],
+  perfil: CnhPerfil,
+  progresso?: (mensagem: string) => void,
+): Promise<ResultadoCnh> {
     const areas: Record<string, string> = {};
-    const entries = Object.entries(REGIOES_CNH);
+    const entries = Object.entries(perfil.regioes);
     for (let index = 0; index < entries.length; index++) {
       const [field, coords] = entries[index];
       progresso?.(`Lendo os dados da CNH (${index + 1}/${entries.length})...`);
@@ -202,12 +128,12 @@ export async function lerCnhPdf(file: File, progresso?: (mensagem: string) => vo
             if (redOnly) {
               await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_WORD, tessedit_char_whitelist: "ABCDE" });
               const redText = (await ocrWorker.recognize(redOnly)).data.text.trim();
-              if (categoriaCnh(redText)) areas[field] = redText;
-              if (categoriaCnh(redText) === "D") {
+              if (categoriaDoOcr(redText)) areas[field] = redText;
+              if (categoriaDoOcr(redText) === "D") {
                 // Uma leitura de "AD" pode perder o A. Releia antes de aceitar D.
                 await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: "ABCDE" });
                 const another = (await ocrWorker.recognize(redOnly)).data.text.trim();
-                if (categoriaCnh(another)?.length === 2) areas[field] = another;
+                if (categoriaDoOcr(another)?.length === 2) areas[field] = another;
               }
             }
             if (!areas[field]) {
@@ -215,10 +141,32 @@ export async function lerCnhPdf(file: File, progresso?: (mensagem: string) => vo
               areas[field] = (await ocrWorker.recognize(crop)).data.text.trim();
             }
           } finally { if (redOnly) redOnly.width = redOnly.height = 1; }
+        } else if (perfil.id === "cnh-e-verde" && field === "cnhValidade") {
+          // No modelo antigo, a validade também é impressa em tinta clara.
+          const redOnly = realcarVermelho(crop);
+          try {
+            await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: "0123456789/.-" });
+            areas[field] = (await ocrWorker.recognize(redOnly || crop)).data.text.trim();
+            if (!interpretarCamposCnh({ cnhValidade: areas[field] }).dados.cnhValidade) {
+              areas[field] += "\n" + (await ocrWorker.recognize(crop)).data.text.trim();
+            }
+          } finally { if (redOnly) redOnly.width = redOnly.height = 1; }
+        } else if (perfil.id === "cnh-e-verde" && field === "cnhRegistro") {
+          // O registro do modelo verde aparece em tinta alaranjada, pouco
+          // contrastante; separar essa tinta reduz erros com os contornos.
+          const redOnly = realcarVermelho(crop);
+          try {
+            await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: "0123456789" });
+            areas[field] = (await ocrWorker.recognize(redOnly || crop)).data.text.trim();
+            if (!/\d{11}/.test(areas[field])) {
+              await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: "0123456789" });
+              areas[field] += "\n" + (await ocrWorker.recognize(crop)).data.text.trim();
+            }
+          } finally { if (redOnly) redOnly.width = redOnly.height = 1; }
         } else if (field === "cpf") {
           await ocrWorker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: "0123456789.- " });
           areas[field] = (await ocrWorker.recognize(crop)).data.text.trim();
-          if (!cpfsDoOcr(areas[field]).some(cpfValido)) {
+          if (!interpretarCamposCnh({ cpf: areas[field] }).dados.cpf) {
             // Não inventa números: tenta uma segunda imagem, e aceita só CPF válido.
             const enhanced = altoContraste(crop);
             try {
@@ -235,12 +183,5 @@ export async function lerCnhPdf(file: File, progresso?: (mensagem: string) => vo
       } finally { crop.width = crop.height = 1; }
     }
     const result = interpretarCamposCnh(areas);
-    const essential = ["nome", "cpf", "cnhRegistro"].filter(field => result.dados[field as CnhCampo]);
-    if (!essential.length) throw new Error("Não foi possível identificar os dados da CNH. Confira se o PDF é uma CNH-e digital legível.");
-    return result;
-  } finally {
-    pageCanvas && (pageCanvas.width = pageCanvas.height = 1);
-    await ocrWorker?.terminate();
-    await loading.destroy();
-  }
+    return { ...result, modelo: perfil.nome };
 }

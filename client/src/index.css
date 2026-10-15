@@ -991,3 +991,76 @@ table.radasa-adaptive-card :is(input, select, textarea, button) {
     width: 1.6rem !important;
   }
 }
+
+
+/* Alinhamento de tabelas do sistema: sem cortar a coluna de ações.
+   Respeita os cartões responsivos quando a largura deixa de ser suficiente. */
+.radasa-compact-table:not(.radasa-adaptive-card) > :is(thead, tbody, tfoot) > tr > :is(th, td) {
+  vertical-align: middle;
+}
+
+.radasa-compact-table:not(.radasa-adaptive-card) > tbody > tr > td {
+  font-variant-numeric: tabular-nums;
+}
+
+.radasa-table-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+}
+
+.radasa-table-actions > :is(button, a) {
+  flex: 0 0 auto;
+}
+
+.radasa-estoque-resumo-table:not(.radasa-adaptive-card) > tbody > tr > td:first-child,
+.radasa-estoque-movimentos-table:not(.radasa-adaptive-card) > tbody > tr > td:nth-child(2) {
+  overflow-wrap: anywhere;
+}
+
+/* As tabelas do Almoxarifado não reduzem a coluna Ações ao distribuir larguras. */
+.radasa-estoque-resumo-table:not(.radasa-adaptive-card) > :is(thead, tbody) > tr > :last-child,
+.radasa-estoque-movimentos-table:not(.radasa-adaptive-card) > :is(thead, tbody) > tr > :last-child {
+  text-align: center;
+}
+
+.radasa-cadastro-table-has-actions:not(.radasa-adaptive-card) > thead > tr > th:last-child {
+  min-width: 98px;
+  width: 98px;
+}
+
+/* Ao usar cartões em telas realmente estreitas, duas colunas reduzem a altura.
+   Em celulares pequenos, os detalhes continuam legíveis em uma coluna. */
+@container radasa-compact-table (min-width: 620px) {
+  .radasa-compact-table.radasa-adaptive-card > tbody > tr:not(:has(td[colspan])) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    column-gap: 14px;
+  }
+  :is(.radasa-estoque-resumo-table, .radasa-estoque-movimentos-table, .radasa-cadastro-table-has-actions, .radasa-table-with-actions).radasa-adaptive-card > tbody > tr:not(:has(td[colspan])) > td:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+
+/* Ações permanecem lado a lado nas demais listagens compactas do TMS. */
+.radasa-table-with-actions:not(.radasa-adaptive-card) > thead > tr > th:last-child {
+  width: 140px;
+  min-width: 140px;
+  text-align: center;
+}
+
+.radasa-table-with-actions:not(.radasa-adaptive-card) > tbody > tr > td:last-child {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.radasa-table-with-actions:not(.radasa-adaptive-card) > tbody > tr > td:last-child > :is(.flex, div) {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+}

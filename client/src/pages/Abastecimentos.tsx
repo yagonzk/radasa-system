@@ -4462,20 +4462,20 @@ export default function Abastecimentos() {
 
         <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card radasa-compact-table-shell">
           <div className="w-full min-w-0 overflow-x-auto radasa-compact-table-scroll">
-            <table className="w-full min-w-[1180px] table-fixed text-xs radasa-compact-table" data-radasa-min-readable-width="760">
+            <table className="w-full min-w-[1180px] table-fixed text-xs radasa-compact-table radasa-table-with-actions" data-radasa-min-readable-width="760">
               <colgroup>
                 {/* Seleção + 9 dados + Ações. */}
                 <col style={{ width: "3%" }} />  {/* Seleção */}
-                <col style={{ width: "15%" }} /> {/* Posto */}
-                <col style={{ width: "8%" }} />  {/* Emissão */}
-                <col style={{ width: "8%" }} />  {/* Produtos */}
-                <col style={{ width: "10%" }} /> {/* Diesel / ARLA */}
+                <col style={{ width: "13%" }} /> {/* Posto */}
+                <col style={{ width: "7%" }} />  {/* Emissão */}
+                <col style={{ width: "7%" }} />  {/* Produtos */}
+                <col style={{ width: "9%" }} /> {/* Diesel / ARLA */}
                 <col style={{ width: "9%" }} />  {/* Valor unitário Diesel */}
-                <col style={{ width: "8%" }} />  {/* Valor desconto */}
+                <col style={{ width: "7%" }} />  {/* Valor desconto */}
                 <col style={{ width: "9%" }} />  {/* Valor total */}
-                <col style={{ width: "10%" }} /> {/* Placa / Modelo */}
-                <col style={{ width: "10%" }} /> {/* Odômetro */}
-                <col style={{ width: "10%" }} /> {/* Ações */}
+                <col style={{ width: "9%" }} /> {/* Placa / Modelo */}
+                <col style={{ width: "9%" }} /> {/* Odômetro */}
+                <col style={{ width: "18%" }} /> {/* Ações */}
               </colgroup>
               <thead className="border-b border-border bg-muted/30">
                 <tr>

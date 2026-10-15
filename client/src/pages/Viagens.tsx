@@ -1001,7 +1001,7 @@ export default function Viagens() {
         {/* Viagens table */}
         <div className="overflow-hidden rounded-xl border border-border bg-card radasa-compact-table-shell">
           <div className="overflow-x-auto radasa-compact-table-scroll">
-            <table className="w-full text-sm radasa-compact-table" data-radasa-min-readable-width="760">
+            <table className="w-full text-sm radasa-compact-table radasa-table-with-actions" data-radasa-min-readable-width="760">
               <thead className="bg-muted/30 text-xs uppercase text-muted-foreground">
                 <tr className="border-b border-border">
                   {viagemColumns.map((column) => {
