@@ -75,7 +75,7 @@ export default function AprovacaoContas() {
     try {
       await api.patch(`/usuarios/${account.id}/approve`);
       setPending((items) => items.filter((item) => item.id !== account.id));
-      toast.success(`Conta de ${account.name} aprovada.`);
+      toast.success(`Conta de ${account.name} aprovada. Transportes e Agro continuam bloqueados até a liberação da licença.`);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Não foi possível aprovar a conta.");
     } finally {
@@ -125,7 +125,7 @@ export default function AprovacaoContas() {
               <h1 className="font-display text-2xl font-bold">Aprovação de contas</h1>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Novos usuários só conseguem entrar no sistema depois da aprovação de um administrador.
+              Aprovar uma conta libera o login, mas não libera os módulos. Transportes (TMS) e Agro precisam de licenças independentes, configuradas em Usuários e licenças.
             </p>
           </div>
           <Button variant="outline" onClick={() => void loadPending()} disabled={loading}>

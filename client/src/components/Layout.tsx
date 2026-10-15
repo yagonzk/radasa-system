@@ -5,7 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Link, useLocation } from "wouter";
 import { type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { hasModuleAccess } from "@/lib/module-access";
+import { getModuleLicense, hasModuleAccess, moduleStatusLabel, remainingModuleDays } from "@/lib/module-access";
 
 interface NavItem {
   label: string;
@@ -68,6 +68,8 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isDark = theme === "dark";
   const transportEnabled = hasModuleAccess(user, "TRANSPORTES");
+  const transportLicense = getModuleLicense(user, "TRANSPORTES");
+  const remainingDays = remainingModuleDays(transportLicense);
   const configuredPermissions = user?.permissoes && Object.keys(user.permissoes).length > 0;
   const permissionFor = (href: string) => href.startsWith("/demandas") ? "demandas" : href.startsWith("/romaneios") ? "romaneios" : href.startsWith("/viagens") || href.startsWith("/pedagios") ? "viagens" : href.startsWith("/abastecimentos") ? "abastecimentos" : href.startsWith("/manutencao") || href.startsWith("/pneus") ? "frota" : href.startsWith("/financeiro") || href.startsWith("/fechamentos") || href.startsWith("/holerite") ? "financeiro" : href.startsWith("/ciot") || href.startsWith("/fiscal") ? "fiscal" : href.startsWith("/comercial") ? "comercial" : href.startsWith("/bi") ? "bi" : href.startsWith("/cadastros") || href.startsWith("/estoque") ? "cadastros" : href.startsWith("/portal-motorista") ? "portal_motorista" : href.startsWith("/alertas") ? "dashboard" : "dashboard";
   const canAccessItem = (item: NavItem) => user?.role === "ADMIN" || !configuredPermissions || user?.permissoes?.[permissionFor(item.href)] === true;
@@ -200,6 +202,15 @@ export default function Layout({ children }: { children: ReactNode }) {
 
         {/* User profile */}
         <div className="border-t border-sidebar-border/80 px-4 py-4 bg-sidebar/60">
+          <div className="mb-3 rounded-2xl border border-sidebar-border bg-sidebar-accent/30 px-3 py-2.5" aria-label="Situação da licença Transportes">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Licença Transportes</div>
+            <div className="mt-0.5 truncate text-[11px] font-semibold text-sidebar-foreground" title={transportLicense?.expiresAt ? `Vencimento: ${new Date(transportLicense.expiresAt).toLocaleDateString("pt-BR")}` : undefined}>
+              {user?.role === "ADMIN" ? "Sem vencimento" : moduleStatusLabel(transportLicense)}
+            </div>
+            {transportEnabled && remainingDays !== null && remainingDays <= 7 && (
+              <div className="mt-1 text-[10px] font-medium text-amber-600 dark:text-amber-400">Licença próxima do vencimento</div>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

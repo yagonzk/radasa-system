@@ -122,11 +122,13 @@ export const authService = {
         passwordHash: await hashPassword(input.password),
         role: "VISUALIZACAO",
         active: false,
+        // Nenhuma licença é criada aqui. Aprovação da conta é independente
+        // da contratação de Transportes (TMS) ou Agro.
       },
     });
 
     return {
-      message: "Conta criada com sucesso e enviada para aprovação do administrador.",
+      message: "Conta criada e enviada para aprovação. Depois da aprovação, o acesso aos módulos dependerá da liberação de uma licença.",
     };
   },
 

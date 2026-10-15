@@ -33,6 +33,8 @@ export const usuariosService = {
     if (!user) throw new AppError(404, "Usuário não encontrado.");
     if (user.active) return user;
 
+    // Aprovar autoriza o login, não a utilização do TMS/Agro.
+    // As licenças continuam bloqueadas até liberação explícita pelo administrador.
     return prisma.user.update({
       where: { id },
       select,

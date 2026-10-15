@@ -103,8 +103,19 @@ function moduleDisplayName(module: LicenseModule) {
   return module === "TRANSPORTES" ? "Transportes" : "Agro";
 }
 
-export async function assertUserModuleAccess(userId: string, role: string, module: LicenseModule) {
-  if (role === "ADMIN") {
+export async function assertUserModuleAccess(userId: string, _jwtRole: string, module: LicenseModule) {
+  // A autorização usa SEMPRE o perfil e a licença atuais do banco, não o perfil
+  // de um token que pode ter sido emitido antes de uma alteração administrativa.
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      active: true,
+      role: true,
+      moduleLicenses: { where: { module } },
+    },
+  });
+  if (!user || !user.active) throw new AppError(401, "Conta desativada ou não encontrada.");
+  if (user.role === "ADMIN") {
     return {
       module,
       status: "ILIMITADA" as LicenseStatus,
@@ -115,10 +126,8 @@ export async function assertUserModuleAccess(userId: string, role: string, modul
     };
   }
 
-  const row = await prisma.moduleLicense.findUnique({
-    where: { userId_module: { userId, module } },
-  });
-  const summary = licenseSummary(module, row);
+  // Ausência de registro = não contratado, mesmo com a conta já aprovada.
+  const summary = licenseSummary(module, user.moduleLicenses[0]);
 
   if (summary.status === "ATIVA" || summary.status === "ILIMITADA") return summary;
 
