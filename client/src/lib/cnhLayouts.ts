@@ -41,7 +41,9 @@ export const PERFIL_CNH_VERDE: CnhPerfil = {
     cnhValidade: [0.251, 0.261, 0.339, 0.277],
     primeiraHabilitacao: [0.339, 0.261, 0.435, 0.277],
     // Verso verde, dentro da mesma página, abaixo da assinatura.
-    cnhEmissao: [0.340, 0.413, 0.436, 0.425],
+    // Campo DATA EMISSÃO fica na parte inferior direita do verso verde.
+    // Margem mais justa, preservando todos os dígitos e evitando o QR Code.
+    cnhEmissao: [0.339, 0.412, 0.431, 0.423],
   },
 };
 

@@ -141,6 +141,27 @@ async function extrairPerfilCnh(
               areas[field] = (await ocrWorker.recognize(crop)).data.text.trim();
             }
           } finally { if (redOnly) redOnly.width = redOnly.height = 1; }
+        } else if (perfil.id === "cnh-e-verde" && field === "cnhEmissao") {
+          // No verso da CNH-e verde, DATA EMISSÃO fica abaixo da assinatura,
+          // à direita de LOCAL. Os números são claros e podem perder as barras.
+          await ocrWorker.setParameters({
+            tessedit_pageseg_mode: PSM.SINGLE_LINE,
+            tessedit_char_whitelist: "0123456789/.- ",
+          });
+          const primeiraLeitura = (await ocrWorker.recognize(crop)).data.text.trim();
+          areas[field] = primeiraLeitura;
+          if (!interpretarCamposCnh({ cnhEmissao: primeiraLeitura }).dados.cnhEmissao) {
+            // Segunda leitura em preto e branco, sem utilizar outros campos.
+            const enhanced = altoContraste(crop);
+            try {
+              await ocrWorker.setParameters({
+                tessedit_pageseg_mode: PSM.SINGLE_LINE,
+                tessedit_char_whitelist: "0123456789/.- ",
+              });
+              const segundaLeitura = (await ocrWorker.recognize(enhanced)).data.text.trim();
+              areas[field] = [primeiraLeitura, segundaLeitura].filter(Boolean).join("\n");
+            } finally { enhanced.width = enhanced.height = 1; }
+          }
         } else if (perfil.id === "cnh-e-verde" && field === "cnhValidade") {
           // No modelo antigo, a validade também é impressa em tinta clara.
           const redOnly = realcarVermelho(crop);

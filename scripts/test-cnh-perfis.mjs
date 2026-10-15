@@ -63,6 +63,15 @@ assert.equal(exemplo.dados.primeiraHabilitacao, "2003-08-20");
 assert.equal(exemplo.dados.dataNascimento, "1985-03-12");
 assert.equal(exemplo.dados.rg, "12345678");
 
+// DATA EMISSÃO no verso inferior da CNH verde (não confundir com validade).
+const emissaoVerde = PERFIL_CNH_VERDE.regioes.cnhEmissao;
+assert.ok(emissaoVerde[0] > 0.30 && emissaoVerde[1] > 0.40 && emissaoVerde[2] < 0.45);
+for (const texto of ["16/12/2021", "16 12 2021", "16122021", "DATA EMISSÃO\n16/12/2021"]) {
+  assert.equal(interpretarCamposCnh({ cnhEmissao: texto }).dados.cnhEmissao, "2021-12-16");
+}
+assert.equal(interpretarCamposCnh({ cnhEmissao: "31 02 2021" }).dados.cnhEmissao, undefined);
+assert.equal(interpretarCamposCnh({ cnhEmissao: "16242021" }).dados.cnhEmissao, undefined);
+
 const incompleto = interpretarCamposCnh({ nome: "JOAO DA SILVA", cpf: "123.456.789-00", cnhValidade: "35/13/2026" });
 assert.equal(incompleto.dados.cpf, undefined);
 assert.equal(incompleto.dados.cnhValidade, undefined);

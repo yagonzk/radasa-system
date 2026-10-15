@@ -24,6 +24,22 @@ function dataBrasileira(value: string): string | undefined {
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return undefined;
   return `${match[3]}-${match[2]}-${match[1]}`;
 }
+/** Leitura tolerante apenas para a emissão: a impressão clara pode perder as barras no OCR. */
+function dataEmissaoCnh(raw: string): string | undefined {
+  const usual = dataBrasileira(raw);
+  if (usual) return usual;
+  const fixed = raw.toUpperCase().replace(/[OQ]/g, "0").replace(/[IL|]/g, "1");
+  for (const line of fixed.split(/\r?\n/)) {
+    // Aceita 16 12 2021 ou 16122021 somente no campo já recortado DATA EMISSÃO.
+    const match = line.match(/(?:^|\D)(\d{2})\s+(\d{2})\s+(\d{4})(?!\d)/)
+      || line.match(/(?:^|\D)(\d{2})(\d{2})(\d{4})(?!\d)/);
+    if (!match) continue;
+    const result = dataBrasileira(`${match[1]}/${match[2]}/${match[3]}`);
+    if (result) return result;
+  }
+  return undefined;
+}
+
 function nomeCnh(raw: string): string | undefined {
   const line = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean).find(line => {
     const compact = line.replace(/[^\p{L} ]/gu, "").trim();
@@ -76,7 +92,7 @@ export function interpretarCamposCnh(areas: Record<string, string>): ResultadoCn
   if (identidade) dados.rg = somenteNumeros(identidade[0]);
   dados.dataNascimento = dataBrasileira(areas.dataNascimento ?? "");
   dados.primeiraHabilitacao = dataBrasileira(areas.primeiraHabilitacao ?? "");
-  dados.cnhEmissao = dataBrasileira(areas.cnhEmissao ?? "");
+  dados.cnhEmissao = dataEmissaoCnh(areas.cnhEmissao ?? "");
   dados.cnhValidade = dataBrasileira(areas.cnhValidade ?? "");
   const registro = numeroRegistro(areas.cnhRegistro ?? "");
   if (registro) {
