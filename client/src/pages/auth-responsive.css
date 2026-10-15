@@ -1,0 +1,162 @@
+/* Login, cadastro e recuperação: permitem rolagem vertical real quando a
+   altura útil do navegador diminui por zoom, barras ou teclado virtual. */
+.radasa-auth-screen {
+  min-height: 100vh;
+  min-height: 100svh;
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  padding: 20px 16px;
+  overflow-x: clip;
+  overflow-y: visible;
+  box-sizing: border-box;
+}
+
+.radasa-auth-screen .radasa-auth-card {
+  flex: none;
+  min-width: 0;
+  width: 100%;
+  max-width: 520px;
+}
+
+.radasa-auth-screen .radasa-auth-card--secondary {
+  max-width: 500px;
+}
+
+.radasa-auth-screen .radasa-auth-field input {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 16px;
+}
+
+/* Em telas de notebook a altura é mais importante do que a largura.
+   A redução abaixo é local ao login, sem afetar os componentes do sistema. */
+@media (max-height: 750px) {
+  .radasa-auth-screen {
+    padding-block: 12px;
+  }
+
+  .radasa-auth-screen .radasa-auth-card {
+    padding: 17px 26px;
+    border-radius: 20px;
+  }
+
+  .radasa-auth-screen .radasa-auth-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 15px;
+  }
+
+  .radasa-auth-screen .radasa-auth-logo svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .radasa-auth-screen .radasa-auth-title {
+    margin-top: 9px;
+    font-size: 23px;
+    line-height: 29px;
+  }
+
+  .radasa-auth-screen .radasa-auth-subtitle {
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .radasa-auth-screen .radasa-auth-tabs {
+    margin-top: 14px;
+  }
+
+  .radasa-auth-screen .radasa-auth-tabs > button {
+    height: 37px;
+  }
+
+  .radasa-auth-screen .radasa-auth-login-form {
+    margin-top: 14px;
+  }
+
+  .radasa-auth-screen .radasa-auth-login-form > * + * {
+    margin-top: 11px;
+  }
+
+  .radasa-auth-screen .radasa-auth-register-form {
+    margin-top: 12px;
+    gap: 9px;
+  }
+
+  .radasa-auth-screen .radasa-auth-field > span:first-child {
+    margin-bottom: 4px;
+  }
+
+  .radasa-auth-screen .radasa-auth-field input {
+    height: 41px;
+  }
+
+  .radasa-auth-screen .radasa-auth-forgot-link {
+    margin-top: 5px;
+  }
+
+  .radasa-auth-screen .radasa-auth-submit,
+  .radasa-auth-screen .radasa-auth-google {
+    height: 42px;
+  }
+
+  .radasa-auth-screen .radasa-auth-divider {
+    margin-block: 13px;
+  }
+
+  .radasa-auth-screen .radasa-auth-footer {
+    margin-top: 11px;
+  }
+
+  .radasa-auth-screen .radasa-auth-message {
+    margin-top: 13px;
+  }
+
+  .radasa-auth-screen .radasa-auth-message p {
+    line-height: 1.45;
+  }
+}
+
+/* Notebook menor, janela dividida ou zoom aumentado: a tela continua
+   acessível sem ocultar botões e sem rolagem lateral. */
+@media (max-height: 560px) {
+  .radasa-auth-screen {
+    justify-content: flex-start;
+  }
+}
+
+/* Reserva espaço ao botão de tema quando o cartão quase ocupa a tela. */
+@media (max-width: 639px) {
+  .radasa-auth-screen {
+    padding: 58px 12px 18px;
+  }
+
+  .radasa-auth-screen .radasa-auth-card {
+    padding-inline: 18px;
+  }
+
+  .radasa-auth-screen .radasa-auth-title {
+    font-size: 23px;
+  }
+}
+
+@media (max-width: 360px) {
+  .radasa-auth-screen .radasa-auth-card {
+    padding-inline: 14px;
+  }
+  .radasa-auth-screen .radasa-auth-tabs button {
+    gap: 5px;
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radasa-auth-screen * {
+    scroll-behavior: auto;
+  }
+}
