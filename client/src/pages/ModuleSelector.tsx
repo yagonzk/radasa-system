@@ -116,7 +116,7 @@ export default function ModuleSelector() {
         </div>
 
         <div className={cn("mt-6 grid gap-4 md:grid-cols-2", user?.role === "ADMIN" && "lg:grid-cols-3")}>
-          <ModuleCard module="TRANSPORTES" onEnter={() => navigate("/")} />
+          <ModuleCard module="TRANSPORTES" onEnter={() => navigate("/tms")} />
           <ModuleCard module="AGRO" onEnter={() => navigate("/agro")} />
           {user?.role === "ADMIN" && <AdminModuleCard onEnter={() => navigate("/admin")} />}
         </div>

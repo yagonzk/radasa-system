@@ -125,7 +125,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         {/* Nav */}
         <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 py-4">
           <Link
-            href="/modulos"
+            href="~/modulos"
             onClick={() => setMobileMenuOpen(false)}
             className="mb-3 flex items-center gap-3 rounded-2xl border border-sidebar-border/80 bg-white/50 px-3 py-3 text-[12px] font-semibold text-sidebar-foreground shadow-sm transition hover:bg-sidebar-accent/60 dark:bg-white/5"
           >
@@ -217,9 +217,9 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <button type="button" className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-chart-2 text-xs font-bold text-primary-foreground shadow-sm transition hover:ring-4 hover:ring-primary/15" aria-label="Abrir opções do perfil">{user?.fotoPerfil ? <img src={user.fotoPerfil} alt="Foto de perfil" className="h-full w-full object-cover" /> : initials}</button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-48">
-                <DropdownMenuItem asChild><Link href="/modulos" className="flex cursor-pointer items-center gap-2"><ArrowLeftRight className="h-4 w-4"/>Trocar módulo</Link></DropdownMenuItem>
-                <DropdownMenuItem asChild><Link href="/perfil" className="flex cursor-pointer items-center gap-2"><UserRound className="h-4 w-4"/>Meu perfil</Link></DropdownMenuItem>
-                <DropdownMenuItem asChild><Link href="/alterar-senha" className="flex cursor-pointer items-center gap-2"><KeyRound className="h-4 w-4"/>Alterar senha</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild><Link href="~/modulos" className="flex cursor-pointer items-center gap-2"><ArrowLeftRight className="h-4 w-4"/>Trocar módulo</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild><Link href="~/perfil" className="flex cursor-pointer items-center gap-2"><UserRound className="h-4 w-4"/>Meu perfil</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild><Link href="~/alterar-senha" className="flex cursor-pointer items-center gap-2"><KeyRound className="h-4 w-4"/>Alterar senha</Link></DropdownMenuItem>
                 
               </DropdownMenuContent>
             </DropdownMenu>
