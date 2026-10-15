@@ -68,10 +68,15 @@ export function updateAdaptiveTables(root: ParentNode = document) {
       ? Number(table.dataset.radasaMinWidth || 0)
       : Number.parseFloat(window.getComputedStyle(table).minWidth) || 0;
     if (!isCard) table.dataset.radasaMinWidth = String(Math.ceil(minimum));
-    const minimumReadableWidth = Math.max(minimum, headings.length * (headings.length >= 7 ? 116 : 125));
-    const intrinsicWidth = isCard
-      ? Number(table.dataset.radasaNaturalWidth || 0)
-      : table.scrollWidth > availableWidth + 2 ? table.scrollWidth : 0;
+    const explicitReadableWidth = Number(table.dataset.radasaMinReadableWidth || 0);
+    const minimumReadableWidth = explicitReadableWidth > 0
+      ? explicitReadableWidth
+      : Math.max(minimum, headings.length * (headings.length >= 7 ? 116 : 125));
+    const intrinsicWidth = explicitReadableWidth > 0
+      ? 0
+      : isCard
+        ? Number(table.dataset.radasaNaturalWidth || 0)
+        : table.scrollWidth > availableWidth + 2 ? table.scrollWidth : 0;
     if (!isCard) table.dataset.radasaNaturalWidth = String(Math.ceil(intrinsicWidth));
     const requiredWidth = Math.max(minimumReadableWidth, intrinsicWidth);
     const enableCards = availableWidth + 2 < requiredWidth;

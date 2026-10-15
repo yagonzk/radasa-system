@@ -4460,9 +4460,9 @@ export default function Abastecimentos() {
           </div>
         )}
 
-        <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="w-full min-w-0 overflow-x-auto">
-            <table className="w-full min-w-[1180px] table-fixed text-xs">
+        <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-border bg-card radasa-compact-table-shell">
+          <div className="w-full min-w-0 overflow-x-auto radasa-compact-table-scroll">
+            <table className="w-full min-w-[1180px] table-fixed text-xs radasa-compact-table" data-radasa-min-readable-width="760">
               <colgroup>
                 {/* Seleção + 9 dados + Ações. */}
                 <col style={{ width: "3%" }} />  {/* Seleção */}

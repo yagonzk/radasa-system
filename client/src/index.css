@@ -861,3 +861,77 @@ table.radasa-adaptive-card :is(input, select, textarea, button) {
   min-height: 40px;
   flex-wrap: wrap !important;
 }
+
+
+/* Acerto de Viagem e Abastecimentos: manter a leitura em tabela compacta
+   por mais tempo antes de virar cartões grandes. */
+.radasa-compact-table-shell {
+  container: radasa-compact-table / inline-size;
+}
+
+@container radasa-compact-table (max-width: 980px) {
+  .radasa-compact-table {
+    min-width: 0 !important;
+    table-layout: fixed;
+  }
+
+  .radasa-compact-table :is(th, td) {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  .radasa-compact-table thead th {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+    font-size: 0.68rem !important;
+  }
+
+  .radasa-compact-table tbody td {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+    font-size: 0.76rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .radasa-compact-table tbody td .text-[11px],
+  .radasa-compact-table tbody td .text-xs {
+    font-size: 0.67rem !important;
+    line-height: 1.15 !important;
+  }
+
+  .radasa-compact-table tbody td .h-7,
+  .radasa-compact-table tbody td .w-7 {
+    height: 1.6rem !important;
+    width: 1.6rem !important;
+  }
+
+  .radasa-compact-table tbody td .h-8,
+  .radasa-compact-table tbody td .w-8 {
+    height: 1.8rem !important;
+    width: 1.8rem !important;
+  }
+}
+
+@container radasa-compact-table (max-width: 840px) {
+  .radasa-compact-table-scroll {
+    overflow-x: visible !important;
+  }
+
+  .radasa-compact-table {
+    min-width: 0 !important;
+  }
+
+  .radasa-compact-table thead th {
+    font-size: 0.64rem !important;
+    letter-spacing: 0.01em !important;
+  }
+
+  .radasa-compact-table tbody td {
+    font-size: 0.72rem !important;
+  }
+
+  .radasa-compact-table :is(th, td) {
+    padding-left: 7px !important;
+    padding-right: 7px !important;
+  }
+}
