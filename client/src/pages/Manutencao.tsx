@@ -535,19 +535,19 @@ export default function Manutencao() {
   return <Layout><div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-5 pb-8">
     <header className="relative overflow-hidden rounded-3xl border border-border/70 bg-card px-4 py-5 shadow-sm sm:px-6 sm:py-6">
       <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full bg-primary/[0.07] blur-3xl" />
-      <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <div className="relative flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 items-start gap-3 sm:gap-4">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10 text-primary"><Wrench className="h-6 w-6" /></span>
           <div className="min-w-0 space-y-1">
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">Gestão da frota</p>
             <h1 className="text-2xl font-bold tracking-tight sm:text-[28px]">Manutenção</h1>
-            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">Acompanhe custos e pendências, gerencie ordens e mantenha as revisões em dia.</p>
+            <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">Acompanhe custos e pendências, gerencie ordens e mantenha as revisões em dia.</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button className="min-h-10 shadow-sm" onClick={() => abrir("OS")}><Plus className="h-4 w-4" />Nova manutenção</Button>
-          <Button variant="outline" className="min-h-10" onClick={() => abrir("PLANO")}><CalendarClock className="h-4 w-4" />Programar preventiva</Button>
-          <Button variant="outline" className="min-h-10" onClick={() => abrir("DOC")}><FilePlus2 className="h-4 w-4" />Documento</Button>
+        <div className="flex flex-wrap items-center justify-end gap-2 xl:flex-nowrap">
+          <Button size="sm" className="min-h-10 whitespace-nowrap px-4 shadow-sm" onClick={() => abrir("OS")}><Plus className="h-4 w-4" />Nova manutenção</Button>
+          <Button size="sm" variant="outline" className="min-h-10 whitespace-nowrap px-4" onClick={() => abrir("PLANO")}><CalendarClock className="h-4 w-4" />Programar preventiva</Button>
+          <Button size="sm" variant="outline" className="min-h-10 whitespace-nowrap px-4" onClick={() => abrir("DOC")}><FilePlus2 className="h-4 w-4" />Documento</Button>
         </div>
       </div>
     </header>

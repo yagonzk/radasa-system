@@ -57,9 +57,9 @@ export default function DataTable<T extends { id: string }>({
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card radasa-compact-table-shell">
+        <div className="overflow-x-auto radasa-compact-table-scroll">
+          <table className="w-full text-sm radasa-compact-table" data-radasa-min-readable-width="760">
             <thead>
               <tr className="border-b border-border bg-muted/50">
                 {columns.map((col) => (

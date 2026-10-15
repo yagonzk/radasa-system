@@ -143,7 +143,7 @@ export default function Fechamentos() {
               Salário fixo do motorista somado às comissões das viagens do período, carregadas automaticamente do Acerto de Viagem.
             </p>
           </div>
-          <Button onClick={handleOpenCreate}>
+          <Button className="min-h-10 whitespace-nowrap" onClick={handleOpenCreate}>
             <Plus className="mr-1.5 h-4 w-4" />
             Novo Holerite
           </Button>
@@ -151,8 +151,8 @@ export default function Fechamentos() {
 
         {/* Filters + Export */}
         <div className="mb-6 rounded-xl border border-border bg-card p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+            <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Motorista
@@ -200,19 +200,19 @@ export default function Fechamentos() {
                   variant="outline"
                   size="sm"
                   onClick={handleClearFilters}
-                  className="h-9"
+                  className="h-9 whitespace-nowrap"
                 >
                   Limpar filtros
                 </Button>
               )}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={handleExportCSV}>
+            <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
+              <Button variant="outline" size="sm" className="whitespace-nowrap" onClick={handleExportCSV}>
                 <FileDown className="mr-1.5 h-4 w-4" />
                 Exportar CSV
               </Button>
-              <Button variant="outline" size="sm" onClick={handleExportPDF}>
+              <Button variant="outline" size="sm" className="whitespace-nowrap" onClick={handleExportPDF}>
                 <FileText className="mr-1.5 h-4 w-4" />
                 Exportar PDF
               </Button>

@@ -919,13 +919,13 @@ export default function Viagens() {
               Registre frete, rota e custos em uma única ficha. Use Ler manifesto para preencher automaticamente os dados do DAMDFE/MDF-e.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
             <input ref={manifestoInputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(event) => void handleReadManifesto(event.target.files?.[0])} />
-            <Button variant="outline" disabled={readingManifesto} onClick={() => manifestoInputRef.current?.click()}>
+            <Button variant="outline" className="min-h-10 whitespace-nowrap" disabled={readingManifesto} onClick={() => manifestoInputRef.current?.click()}>
               {readingManifesto ? <LoaderCircle className="mr-1.5 h-4 w-4 animate-spin" /> : <FileText className="mr-1.5 h-4 w-4" />}
               {readingManifesto ? readingManifestoLabel || "Lendo manifesto..." : "Ler manifesto"}
             </Button>
-            <Button type="button" onClick={handleOpenCreate}><Plus className="mr-1.5 h-4 w-4" />Registrar acerto</Button>
+            <Button type="button" className="min-h-10 whitespace-nowrap" onClick={handleOpenCreate}><Plus className="mr-1.5 h-4 w-4" />Registrar acerto</Button>
           </div>
         </div>
 

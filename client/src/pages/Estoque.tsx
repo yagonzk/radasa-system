@@ -632,12 +632,12 @@ export default function Estoque() {
               Produtos do almoxarifado são cadastrados aqui e são independentes dos produtos da aba Cadastros.
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button variant="outline" onClick={openCreateProduct}><PackagePlus className="mr-2 h-4 w-4" />Novo produto</Button>
-            <Button variant="outline" onClick={() => setReportOpen(true)}>
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
+            <Button variant="outline" className="min-h-10 whitespace-nowrap" onClick={openCreateProduct}><PackagePlus className="mr-2 h-4 w-4" />Novo produto</Button>
+            <Button variant="outline" className="min-h-10 whitespace-nowrap" onClick={() => setReportOpen(true)}>
               <FileText className="mr-2 h-4 w-4" />Relatório
             </Button>
-            <Button onClick={openMovement}><Plus className="mr-2 h-4 w-4" />Nova movimentação</Button>
+            <Button className="min-h-10 whitespace-nowrap" onClick={openMovement}><Plus className="mr-2 h-4 w-4" />Nova movimentação</Button>
           </div>
         </div>
 
@@ -1500,8 +1500,8 @@ function ResumoTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border bg-card">
-        <table className="w-full min-w-[980px] text-sm">
+      <div className="overflow-x-auto rounded-xl border bg-card radasa-compact-table-shell">
+        <table className="w-full min-w-[980px] text-sm radasa-compact-table" data-radasa-min-readable-width="760">
           <thead className="bg-muted/30">
             <tr>
               {estoqueResumoColumns.map((column) => {
@@ -1676,8 +1676,8 @@ function MovimentacoesTable({ rows, onView, onEdit, onPdf, onRemove }: { rows: E
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border bg-card">
-        <table className="w-full min-w-[900px] text-sm">
+      <div className="overflow-x-auto rounded-xl border bg-card radasa-compact-table-shell">
+        <table className="w-full min-w-[900px] text-sm radasa-compact-table" data-radasa-min-readable-width="760">
           <thead className="bg-muted/30">
             <tr>
               {movimentacaoColumns.map((column) => {

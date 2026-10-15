@@ -935,3 +935,59 @@ table.radasa-adaptive-card :is(input, select, textarea, button) {
     padding-right: 7px !important;
   }
 }
+
+
+/* Compactação adicional para manter tabelas úteis sem virar cartões gigantes cedo demais */
+@container radasa-compact-table (max-width: 1100px) {
+  .radasa-compact-table {
+    min-width: 0 !important;
+    table-layout: fixed;
+  }
+
+  .radasa-compact-table :is(th, td) {
+    padding-left: 9px !important;
+    padding-right: 9px !important;
+  }
+
+  .radasa-compact-table thead th {
+    font-size: 0.69rem !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+  }
+
+  .radasa-compact-table tbody td {
+    font-size: 0.77rem !important;
+    line-height: 1.18 !important;
+    padding-top: 9px !important;
+    padding-bottom: 9px !important;
+  }
+
+  .radasa-compact-table tbody td .text-xs,
+  .radasa-compact-table tbody td .text-[11px] {
+    font-size: 0.66rem !important;
+    line-height: 1.1 !important;
+  }
+}
+
+@container radasa-compact-table (max-width: 920px) {
+  .radasa-compact-table thead th {
+    font-size: 0.63rem !important;
+  }
+
+  .radasa-compact-table tbody td {
+    font-size: 0.72rem !important;
+  }
+
+  .radasa-compact-table :is(th, td) {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+
+  .radasa-compact-table tbody td .h-8,
+  .radasa-compact-table tbody td .w-8,
+  .radasa-compact-table tbody td .h-7,
+  .radasa-compact-table tbody td .w-7 {
+    height: 1.6rem !important;
+    width: 1.6rem !important;
+  }
+}

@@ -110,20 +110,20 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="mx-auto w-full max-w-7xl space-y-5 sm:space-y-6">
-        <section className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-500 px-5 py-7 text-white shadow-[0_20px_50px_rgba(99,102,241,0.2)] sm:px-8 sm:py-8">
-          <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-24 h-64 w-64 rounded-full border-[40px] border-white/10" />
-          <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <section className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#0a5e95] via-[#1174b5] to-[#0a5e95] px-5 py-7 text-white shadow-[0_20px_50px_rgba(10,94,149,0.24)] sm:px-8 sm:py-8">
+          <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-24 h-64 w-64 rounded-full border-[40px] border-[#f3b72f]/20" />
+          <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-[#f3b72f]/18 blur-3xl" />
           <div className="relative flex flex-wrap items-end justify-between gap-6">
             <div className="space-y-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-[11px] font-semibold tracking-wide backdrop-blur">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#f3b72f]/35 bg-[#f3b72f]/14 px-3 py-1 text-[11px] font-semibold tracking-wide backdrop-blur">
                 <Activity className="h-3.5 w-3.5" /> PAINEL GERENCIAL
               </span>
               <div>
                 <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Visão Geral</h1>
-                <p className="mt-2 max-w-md text-sm text-indigo-50/95">Resumo do que exige atenção agora na operação.</p>
+                <p className="mt-2 max-w-md text-sm text-white/90">Resumo do que exige atenção agora na operação.</p>
               </div>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-2xl border border-white/25 bg-white/15 px-4 py-3 text-xs font-medium text-white backdrop-blur sm:text-sm">
+            <div className="inline-flex items-center gap-2 rounded-2xl border border-[#f3b72f]/35 bg-[#f3b72f]/14 px-4 py-3 text-xs font-medium text-white backdrop-blur sm:text-sm">
               <CalendarDays className="h-4 w-4 shrink-0" />
               <span>Período: {dateBR(data?.periodo?.from)} a {dateBR(data?.periodo?.to)}</span>
             </div>
