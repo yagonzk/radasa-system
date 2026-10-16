@@ -1,8 +1,15 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
+export type MtlsBinding = {
+  fetch(input: string | URL, init?: RequestInit): Promise<Response>;
+};
+
 type HyperdriveBinding = { connectionString: string };
 
 export type WorkerRuntimeBindings = {
+  ANTT_CIOT_MTLS?: MtlsBinding;
+  SEFAZ_MTLS?: MtlsBinding;
+  ANTT_CIOT_MTLS_CNPJ?: string;
   HYPERDRIVE?: HyperdriveBinding;
   RESEND_API_KEY?: string;
   VEICULO_CONSULTA_API_URL?: string;
@@ -13,6 +20,8 @@ export type WorkerRuntimeBindings = {
 };
 
 type RuntimeBindingScope = {
+  anttMtls?: MtlsBinding;
+  anttCnpj?: string;
   databaseUrl?: string;
   resendApiKey?: string;
   vehicleLookupApiUrl?: string;
@@ -29,6 +38,8 @@ export function runWithRuntimeBindings<T>(
   callback: () => T,
 ): T {
   const scope: RuntimeBindingScope = {
+    anttMtls: bindings.ANTT_CIOT_MTLS ?? bindings.SEFAZ_MTLS,
+    anttCnpj: bindings.ANTT_CIOT_MTLS_CNPJ,
     databaseUrl: bindings.HYPERDRIVE?.connectionString,
     resendApiKey: bindings.RESEND_API_KEY,
     vehicleLookupApiUrl: bindings.VEICULO_CONSULTA_API_URL,
@@ -49,18 +60,40 @@ export function getRuntimeResendApiKey() {
 }
 
 export function getRuntimeSenatranConfig() {
-  const scope=runtimeBindings.getStore();
+  const scope = runtimeBindings.getStore();
   return {
-    baseUrl: scope?.senatranRenavamApiUrl || process.env.SENATRAN_RENAVAM_API_URL || "",
+    baseUrl:
+      scope?.senatranRenavamApiUrl ||
+      process.env.SENATRAN_RENAVAM_API_URL ||
+      "",
     token: scope?.senatranApiToken || process.env.SENATRAN_API_TOKEN || "",
-    cpfUsuario: scope?.senatranCpfUsuario || process.env.SENATRAN_CPF_USUARIO || "",
+    cpfUsuario:
+      scope?.senatranCpfUsuario || process.env.SENATRAN_CPF_USUARIO || "",
   };
 }
 
 export function getRuntimeVehicleLookupConfig() {
-  const scope=runtimeBindings.getStore();
+  const scope = runtimeBindings.getStore();
   return {
-    baseUrl: scope?.vehicleLookupApiUrl || process.env.VEICULO_CONSULTA_API_URL || scope?.senatranRenavamApiUrl || process.env.SENATRAN_RENAVAM_API_URL || "",
-    token: scope?.vehicleLookupApiToken || process.env.VEICULO_CONSULTA_API_TOKEN || scope?.senatranApiToken || process.env.SENATRAN_API_TOKEN || "",
+    baseUrl:
+      scope?.vehicleLookupApiUrl ||
+      process.env.VEICULO_CONSULTA_API_URL ||
+      scope?.senatranRenavamApiUrl ||
+      process.env.SENATRAN_RENAVAM_API_URL ||
+      "",
+    token:
+      scope?.vehicleLookupApiToken ||
+      process.env.VEICULO_CONSULTA_API_TOKEN ||
+      scope?.senatranApiToken ||
+      process.env.SENATRAN_API_TOKEN ||
+      "",
+  };
+}
+
+export function getRuntimeAnttMtls() {
+  const scope = runtimeBindings.getStore();
+  return {
+    binding: scope?.anttMtls,
+    cnpj: scope?.anttCnpj || process.env.ANTT_CIOT_MTLS_CNPJ || "",
   };
 }

@@ -1,3 +1,4 @@
+import { protectCiotCompany } from "./ciot-company.service.js";
 import { prisma } from "../lib/prisma.js";
 import { created } from "../utils/serialize.js";
 import { AppError } from "../utils/app-error.js";
@@ -117,6 +118,7 @@ export const empresaService = {
   },
 
   async update(id: string, data: any) {
+    await protectCiotCompany(id, data.cnpj);
     const [current, configured] = await Promise.all([
       prisma.empresa.findUnique({ where: { id }, select: { id: true } }),
       prisma.empresa.findFirst({
@@ -154,6 +156,7 @@ export const empresaService = {
   },
 
   async remove(id: string) {
+    await protectCiotCompany(id, undefined, true);
     const current = await prisma.empresa.findUnique({
       where: { id },
       select: { id: true, empresaPadrao: true },

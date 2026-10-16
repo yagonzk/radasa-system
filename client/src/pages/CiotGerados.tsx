@@ -1,12 +1,8 @@
+import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { escapeHtml } from "@/lib/escapeHtml";
 import { useMemo, useState } from "react";
-import {
-  Download,
-  Eye,
-  FileBadge2,
-  Printer,
-  Search,
-} from "lucide-react";
+import { Download, Eye, FileBadge2, Printer, Search } from "lucide-react";
 import Layout from "@/components/Layout";
 import CiotSubtabs from "@/components/ciot/CiotSubtabs";
 import { Button } from "@/components/ui/button";
@@ -62,7 +58,7 @@ function printCiot(item: Ciot) {
       </head>
       <body>
         <h1>Comprovante CIOT</h1>
-        <p class="muted">Documento interno do Radasa System</p>
+        <p class="muted">Extrato interno do Radasa System — dados do registro ANTT</p><p>${(item.payloadAntt as any)?.antt?.ambiente === "homologacao" ? "HOMOLOGAÇÃO — SEM VALIDADE OPERACIONAL" : ""}</p>
         <div class="grid">
           <div class="field"><span class="label">ID interno</span><span class="value">#${escapeHtml(item.idSequencial)}</span></div>
           <div class="field"><span class="label">Número CIOT ANTT</span><span class="value">${escapeHtml(item.numeroCiot ?? "—")}</span></div>
@@ -74,6 +70,7 @@ function printCiot(item: Ciot) {
           <div class="field"><span class="label">Origem</span><span class="value">${escapeHtml(item.origemCidade)}/${escapeHtml(item.origemUf)}</span></div>
           <div class="field"><span class="label">Destino</span><span class="value">${escapeHtml(item.destinoCidade)}/${escapeHtml(item.destinoUf)}</span></div>
           <div class="field"><span class="label">Valor do frete</span><span class="value">${formatMoney(item.valorFrete)}</span></div>
+          <div class="field"><span class="label">Mensagem / aviso ANTT</span><span class="value">${escapeHtml(item.mensagemRetorno || "—")}</span></div>
           <div class="field"><span class="label">RNTRC</span><span class="value">${escapeHtml(item.rntrc)}</span></div>
         </div>
       </body>
@@ -88,7 +85,8 @@ function downloadCiot(item: Ciot) {
   const text = [
     "COMPROVANTE CIOT",
     `ID interno: #${item.idSequencial}`,
-    `Número CIOT ANTT: ${item.numeroCiot ?? "—"}`,
+    `Número CIOT ANTT: ${item.numeroCiot ?? "—"}${item.codigoVerificador ?? ""}`,
+    `Ambiente: ${(item.payloadAntt as any)?.antt?.ambiente || "não informado"}`,
     `Código verificador: ${item.codigoVerificador ?? "—"}`,
     `Protocolo: ${item.protocolo ?? "—"}`,
     `Status: ${labels[item.status]}`,
@@ -98,6 +96,7 @@ function downloadCiot(item: Ciot) {
     `Destino: ${item.destinoCidade}/${item.destinoUf}`,
     `RNTRC: ${item.rntrc}`,
     `Valor do frete: ${formatMoney(item.valorFrete)}`,
+    `Mensagem / aviso ANTT: ${item.mensagemRetorno || "—"}`,
   ].join("\n");
 
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
@@ -110,7 +109,54 @@ function downloadCiot(item: Ciot) {
 }
 
 export default function CiotGeradosPage() {
-  const { items } = useCiots();
+  const { items, refresh } = useCiots();
+  const [busy, setBusy] = useState<string | null>(null);
+  const action = async (
+    item: Ciot,
+    operation: "consultar" | "cancelar" | "encerrar",
+  ) => {
+    let motivo = "";
+    if (operation === "cancelar") {
+      motivo =
+        window.prompt("Informe o motivo do cancelamento do CIOT:")?.trim() ||
+        "";
+      if (!motivo) return;
+    }
+    if (
+      operation === "encerrar" &&
+      !window.confirm(
+        "Encerrar oficialmente esta operação de transporte na ANTT? Confirme que a viagem foi concluída.",
+      )
+    )
+      return;
+    setBusy(item.id);
+    try {
+      const response = await api.post(
+        `/ciots/${item.id}/antt/${operation}`,
+        { motivo },
+        { timeout: 120000 },
+      );
+      if (response.data.success === false)
+        toast.error(
+          response.data.item?.mensagemRetorno ||
+            "A ANTT não confirmou a operação.",
+        );
+      else
+        toast.success(
+          operation === "consultar"
+            ? "Consulta realizada. Confira o retorno da ANTT."
+            : "Operação confirmada pela ANTT.",
+        );
+      await refresh();
+    } catch (error: any) {
+      toast.error(
+        error?.response?.data?.message ||
+          "Não foi possível confirmar a operação na ANTT.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
   const { items: motoristas } = useMotoristas();
   const { items: veiculos } = useVeiculos();
   const [query, setQuery] = useState("");
@@ -216,15 +262,19 @@ export default function CiotGeradosPage() {
                   </tr>
                 ) : (
                   generated.map((item) => {
-                                  const motorista = motoristaMap.get(item.motoristaId);
+                    const motorista = motoristaMap.get(item.motoristaId);
                     const veiculo = veiculoMap.get(item.veiculoId);
 
                     return (
                       <tr key={item.id} className="border-b last:border-0">
                         <td className="px-4 py-3">
-                          <p className="font-semibold tabular-nums">#{item.idSequencial}</p>
+                          <p className="font-semibold tabular-nums">
+                            #{item.idSequencial}
+                          </p>
                           <p className="text-xs text-muted-foreground">
-                            {item.numeroCiot ? `CIOT ANTT ${item.numeroCiot}` : "CIOT ANTT sem número"}
+                            {item.numeroCiot
+                              ? `CIOT ANTT ${item.numeroCiot}${item.codigoVerificador ?? ""}`
+                              : "CIOT ANTT sem número"}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {item.protocolo
@@ -255,9 +305,48 @@ export default function CiotGeradosPage() {
                         <td className="px-4 py-3 font-medium">
                           {formatMoney(item.valorFrete)}
                         </td>
-                        <td className="px-4 py-3">{labels[item.status]}</td>
                         <td className="px-4 py-3">
-                          <div className="flex justify-end gap-1">
+                          {labels[item.status]}
+                          <p className="text-xs text-muted-foreground">
+                            {(item.payloadAntt as any)?.antt?.ambiente ===
+                            "homologacao"
+                              ? "Homologação · sem validade"
+                              : (item.payloadAntt as any)?.antt?.ambiente ===
+                                  "producao"
+                                ? "Produção"
+                                : "Ambiente não informado"}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={busy !== null}
+                              onClick={() => void action(item, "consultar")}
+                            >
+                              Consultar ANTT
+                            </Button>
+                            {item.status === "AUTORIZADO" && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busy !== null}
+                                  onClick={() => void action(item, "encerrar")}
+                                >
+                                  Encerrar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busy !== null}
+                                  onClick={() => void action(item, "cancelar")}
+                                >
+                                  Cancelar
+                                </Button>
+                              </>
+                            )}
                             <Button
                               size="icon"
                               variant="ghost"
@@ -294,8 +383,8 @@ export default function CiotGeradosPage() {
         </div>
 
         <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-sm text-muted-foreground">
-          Nesta fase os botões usam um comprovante interno. O PDF oficial da
-          ANTT será armazenado após a integração da etapa 3.
+          Os comprovantes são extratos internos dos dados retornados pela ANTT.
+          Registros de homologação não têm validade operacional.
         </div>
       </div>
     </Layout>

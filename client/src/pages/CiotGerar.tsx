@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import Layout from "@/components/Layout";
+import { AnttFields, type AnttFieldsState } from "@/components/ciot/AnttFields";
 import CiotSubtabs from "@/components/ciot/CiotSubtabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,28 +65,7 @@ function Field({ label, children }: FieldProps) {
   );
 }
 
-type AnttComplementaryFields = {
-  idOperacaoTransporte: string;
-  distanciaPercorrida: string;
-  codigoMunicipioOrigem: string;
-  codigoMunicipioDestino: string;
-  cepOrigem: string;
-  cepDestino: string;
-  codigoNaturezaCarga: string;
-  codigoTipoCarga: string;
-  numeroEixos: string;
-  tipoPagamento: string;
-  cpfCnpjCreditado: string;
-  codigoInstituicaoFinanceira: string;
-  numeroAgencia: string;
-  numeroConta: string;
-  chavePix: string;
-  identificadorPix: string;
-  indPagamento: "0" | "1";
-  indAltoDesempenho: boolean;
-  indRetornoVazio: boolean;
-  composicaoVeicular: boolean;
-};
+type AnttComplementaryFields = AnttFieldsState;
 
 type AnttChecklistItem = { key: string; label: string; ok: boolean };
 type PisoMinimoUi = {
@@ -124,9 +104,14 @@ const emptyAnttFields: AnttComplementaryFields = {
   indAltoDesempenho: false,
   indRetornoVazio: false,
   composicaoVeicular: false,
+  cpfCnpjDestinatario: "",
+  parcelas: [],
+  veiculosAdicionais: [],
 };
 
 type FormState = {
+  contratanteRazaoSocial: string;
+  contratanteCnpj: string;
   empresaId: string;
   contratadoRazaoSocial: string;
   contratadoNomeFantasia: string;
@@ -161,6 +146,8 @@ type FormState = {
 };
 
 const emptyForm: FormState = {
+  contratanteRazaoSocial: "",
+  contratanteCnpj: "",
   empresaId: "",
   contratadoRazaoSocial: "",
   contratadoNomeFantasia: "",
@@ -266,6 +253,8 @@ function uniqueCnpjs(value: string) {
 
 function formFromItem(item: Ciot): FormState {
   return {
+    contratanteRazaoSocial: item.contratanteRazaoSocial || "",
+    contratanteCnpj: item.contratanteCnpj || "",
     empresaId: item.empresaId ?? "",
     contratadoRazaoSocial: item.contratadoRazaoSocial ?? "",
     contratadoNomeFantasia: item.contratadoNomeFantasia ?? "",
@@ -300,7 +289,6 @@ function formFromItem(item: Ciot): FormState {
   };
 }
 
-
 function apiValidationMessage(error: any) {
   const data = error?.response?.data;
   const fallback = "Não foi possível salvar o CIOT.";
@@ -319,7 +307,7 @@ function apiValidationMessage(error: any) {
       .map((item: any) => {
         const path = Array.isArray(item?.path)
           ? item.path.join(".")
-          : item?.campo ?? item?.field ?? item?.path ?? "";
+          : (item?.campo ?? item?.field ?? item?.path ?? "");
 
         const message =
           item?.message ??
@@ -357,7 +345,7 @@ function apiValidationMessage(error: any) {
 }
 
 export default function CiotGerarPage() {
-  const { items, create, update, remove } = useCiots();
+  const { items, create, update, remove, refresh } = useCiots();
   const { items: empresas } = useEmpresa();
   const { items: motoristas } = useMotoristas();
   const { items: veiculos } = useVeiculos();
@@ -371,9 +359,23 @@ export default function CiotGerarPage() {
   const [query, setQuery] = useState("");
   const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [preparedPayload, setPreparedPayload] = useState<Record<string, unknown> | null>(null);
-  const [anttFields, setAnttFields] = useState<AnttComplementaryFields>(emptyAnttFields);
+  const [preparedPayload, setPreparedPayload] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [anttFields, setAnttFields] =
+    useState<AnttComplementaryFields>(emptyAnttFields);
   const [anttSending, setAnttSending] = useState(false);
+  const [integration, setIntegration] = useState<{
+    environment: "homologacao" | "producao";
+    networkEnabled: boolean;
+  } | null>(null);
+  const [integrationError, setIntegrationError] = useState("");
+  const [emitenteId, setEmitenteId] = useState("");
+  useEffect(() => {
+    setAnttChecklist([]);
+    setPreparedPayload(null);
+  }, [form, anttFields]);
   const [simulating, setSimulating] = useState(false);
   const [anttChecklist, setAnttChecklist] = useState<AnttChecklistItem[]>([]);
   const [pisoMinimo, setPisoMinimo] = useState<PisoMinimoUi | null>(null);
@@ -417,15 +419,29 @@ export default function CiotGerarPage() {
     });
   }, [activeItems, motoristas, query, veiculos]);
 
-  const empresaContratante = useMemo(() => {
-    const certificadas = empresas.filter(
-      (empresa) => empresa.ativa && Boolean(empresa.certificadoConfigurado || empresa.certificadoArquivo?.trim()),
-    );
-    return (
-      certificadas.find((empresa) => empresa.empresaPadrao) ??
-      certificadas[0] ??
-      null
-    );
+  const empresaEmitente = useMemo(
+    () => empresas.find((empresa) => empresa.id === emitenteId && empresa.ativa) ?? null,
+    [empresas, emitenteId],
+  );
+
+  useEffect(() => {
+    let active = true;
+    api.get("/ciots/antt/configuracao")
+      .then((response) => {
+        if (active) {
+          setEmitenteId(response.data.company.id);
+          setIntegration(response.data.integration);
+          setIntegrationError("");
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setEmitenteId("");
+          setIntegration(null);
+          setIntegrationError(apiValidationMessage(error));
+        }
+      });
+    return () => { active = false; };
   }, [empresas]);
   const selectedMotorista = motoristas.find(
     (item) => item.id === form.motoristaId,
@@ -441,9 +457,7 @@ export default function CiotGerarPage() {
     );
 
     setAnttFields((current) =>
-      current.numeroEixos === numeroEixos
-        ? current
-        : { ...current, numeroEixos },
+      current.numeroEixos ? current : { ...current, numeroEixos },
     );
   }, [
     selectedVeiculo?.id,
@@ -460,12 +474,7 @@ export default function CiotGerarPage() {
           decimal(form.outrosValores) -
           decimal(form.descontos),
       ),
-    [
-      form.descontos,
-      form.outrosValores,
-      form.valorFrete,
-      form.valorPedagio,
-    ],
+    [form.descontos, form.outrosValores, form.valorFrete, form.valorPedagio],
   );
 
   const stepErrors = useMemo(() => {
@@ -477,17 +486,23 @@ export default function CiotGerarPage() {
       5: [],
     };
 
-    if (!empresaContratante) {
-      errors[1].push("Cadastre uma empresa ativa com certificado digital.");
+    if (!empresaEmitente) {
+      errors[1].push("Confira a empresa emitente em Cadastros > Empresa.");
     }
+    if (
+      ![11, 14].includes(digits(form.contratanteCnpj).length) ||
+      !form.contratanteRazaoSocial.trim()
+    )
+      errors[1].push("Informe o nome e CPF/CNPJ do contratante do frete.");
     if (!form.contratadoCnpj || !form.contratadoRazaoSocial) {
-      errors[1].push("Importe um XML de CT-e para identificar o contratado.");
+      errors[1].push("Selecione a empresa transportadora contratada.");
     }
     if (form.ctes.length === 0 && !form.naturezaCarga.trim()) {
       errors[1].push("Importe CT-e ou informe a natureza da carga.");
     }
 
-    if (!(empresaContratante?.rntrc ?? form.rntrc).trim()) errors[2].push("Informe o RNTRC no cadastro da empresa.");
+    if (!(empresaEmitente?.rntrc ?? form.rntrc).trim())
+      errors[2].push("Informe o RNTRC no cadastro da empresa.");
     if (!form.origemCidade.trim() || form.origemUf.length !== 2) {
       errors[2].push("Informe cidade e UF de origem.");
     }
@@ -498,9 +513,7 @@ export default function CiotGerarPage() {
     if (form.tipoOperacao === "FRACIONADA") {
       const cnpjs = uniqueCnpjs(form.cnpjsCargaFracionada);
       if (cnpjs.length < 2) {
-        errors[2].push(
-          "Informe pelo menos dois CNPJs para carga fracionada.",
-        );
+        errors[2].push("Informe pelo menos dois CNPJs para carga fracionada.");
       }
     }
 
@@ -520,15 +533,10 @@ export default function CiotGerarPage() {
     if (!form.motoristaId) errors[4].push("Selecione o motorista.");
     if (!form.veiculoId) errors[4].push("Selecione o veículo.");
 
-    errors[5] = [
-      ...errors[1],
-      ...errors[2],
-      ...errors[3],
-      ...errors[4],
-    ];
+    errors[5] = [...errors[1], ...errors[2], ...errors[3], ...errors[4]];
 
     return errors;
-  }, [empresaContratante, form]);
+  }, [empresaEmitente, form]);
 
   const completedSteps = useMemo(
     () =>
@@ -542,21 +550,45 @@ export default function CiotGerarPage() {
 
   const complementaryFromItem = (item: Ciot): AnttComplementaryFields => {
     const raw = (item.payloadAntt ?? {}) as any;
-    const saved = raw?.antt?.camposComplementares ?? raw?.camposComplementares ?? {};
+    const saved =
+      raw?.antt?.camposComplementares ?? raw?.camposComplementares ?? {};
     return {
       ...emptyAnttFields,
       idOperacaoTransporte: String(saved.idOperacaoTransporte ?? ""),
-      distanciaPercorrida: saved.distanciaPercorrida ? String(saved.distanciaPercorrida) : "",
-      codigoMunicipioOrigem: saved.codigoMunicipioOrigem ? String(saved.codigoMunicipioOrigem) : "",
-      codigoMunicipioDestino: saved.codigoMunicipioDestino ? String(saved.codigoMunicipioDestino) : "",
+      cpfCnpjDestinatario: String(
+        saved.cpfCnpjDestinatario ?? item.ctes?.[0]?.destinatarioCnpj ?? "",
+      ),
+      parcelas: Array.isArray(saved.parcelas) ? saved.parcelas : [],
+      veiculosAdicionais: Array.isArray(saved.veiculosAdicionais)
+        ? saved.veiculosAdicionais
+        : [],
+      distanciaPercorrida: saved.distanciaPercorrida
+        ? String(saved.distanciaPercorrida)
+        : "",
+      codigoMunicipioOrigem: saved.codigoMunicipioOrigem
+        ? String(saved.codigoMunicipioOrigem)
+        : "",
+      codigoMunicipioDestino: saved.codigoMunicipioDestino
+        ? String(saved.codigoMunicipioDestino)
+        : "",
       cepOrigem: String(saved.cepOrigem ?? ""),
       cepDestino: String(saved.cepDestino ?? ""),
-      codigoNaturezaCarga: saved.codigoNaturezaCarga ? String(saved.codigoNaturezaCarga) : "",
-      codigoTipoCarga: saved.codigoTipoCarga ? String(saved.codigoTipoCarga) : "",
+      codigoNaturezaCarga: saved.codigoNaturezaCarga
+        ? String(saved.codigoNaturezaCarga)
+        : "",
+      codigoTipoCarga: saved.codigoTipoCarga
+        ? String(saved.codigoTipoCarga)
+        : "",
       numeroEixos: saved.numeroEixos ? String(saved.numeroEixos) : "",
-      tipoPagamento: String(saved.tipoPagamento ?? (/pix/i.test(item.formaPagamento ?? "") ? 6 : 6)),
-      cpfCnpjCreditado: String(saved.cpfCnpjCreditado ?? item.contratanteCnpj ?? ""),
-      codigoInstituicaoFinanceira: saved.codigoInstituicaoFinanceira ? String(saved.codigoInstituicaoFinanceira) : "",
+      tipoPagamento: String(
+        saved.tipoPagamento ?? (/pix/i.test(item.formaPagamento ?? "") ? 6 : 6),
+      ),
+      cpfCnpjCreditado: String(
+        saved.cpfCnpjCreditado ?? item.contratanteCnpj ?? "",
+      ),
+      codigoInstituicaoFinanceira: saved.codigoInstituicaoFinanceira
+        ? String(saved.codigoInstituicaoFinanceira)
+        : "",
       numeroAgencia: String(saved.numeroAgencia ?? ""),
       numeroConta: String(saved.numeroConta ?? ""),
       chavePix: String(saved.chavePix ?? item.favorecidoPix ?? ""),
@@ -572,12 +604,16 @@ export default function CiotGerarPage() {
     setEditing(null);
     setForm({
       ...emptyForm,
-      empresaId: empresaContratante?.id ?? "",
-      rntrc: empresaContratante?.rntrc ?? "",
+      empresaId: empresaEmitente?.id ?? "",
+      rntrc: empresaEmitente?.rntrc ?? "",
+      contratadoRazaoSocial: empresaEmitente?.razaoSocial ?? "",
+      contratadoCnpj: digits(empresaEmitente?.cnpj ?? ""),
+      dataInicio: new Date().toLocaleDateString("en-CA"),
+      dataFim: new Date().toLocaleDateString("en-CA"),
     });
     setAnttFields({
       ...emptyAnttFields,
-      cpfCnpjCreditado: digits(empresaContratante?.cnpj ?? ""),
+      cpfCnpjCreditado: digits(empresaEmitente?.cnpj ?? ""),
     });
     setAnttChecklist([]);
     setPisoMinimo(null);
@@ -617,16 +653,15 @@ export default function CiotGerarPage() {
     setAnttChecklist(raw?.antt?.checklist ?? []);
     setPisoMinimo(raw?.antt?.pisoMinimo ?? null);
     setStep(1);
-    setWizardOpen(true);
+    if (item.status === "PROCESSANDO") {
+      setPreparedPayload({ pendencias: [], mensagem: item.mensagemRetorno });
+      setDebugOpen(true);
+    } else setWizardOpen(true);
   };
 
   const cnpjsDosCtes = (ctes: CiotCte[]) =>
     Array.from(
-      new Set(
-        ctes
-          .map((cte) => digits(cte.destinatarioCnpj))
-          .filter(Boolean),
-      ),
+      new Set(ctes.map((cte) => digits(cte.destinatarioCnpj)).filter(Boolean)),
     );
 
   const contratadoPrincipalDosCtes = (ctes: CiotCte[]) =>
@@ -645,7 +680,13 @@ export default function CiotGerarPage() {
     }, undefined);
 
   const resumoDosCtes = (ctes: CiotCte[]) => {
-    const cnpjs = cnpjsDosCtes(ctes);
+    const cnpjs = Array.from(
+      new Set(
+        ctes
+          .map((cte) => digits(cte.tomadorCnpj || cte.remetenteCnpj))
+          .filter(Boolean),
+      ),
+    );
     const fracionada = ctes.length > 1 && cnpjs.length > 1;
 
     return {
@@ -713,34 +754,31 @@ export default function CiotGerarPage() {
         )
       : current.numeroEixos;
 
-    const companyDocument = digits(empresaContratante?.cnpj ?? "");
+    const companyDocument = digits(empresaEmitente?.cnpj ?? "");
 
     const completed: AnttComplementaryFields = {
       ...current,
       distanciaPercorrida:
-        response.data.distanciaPercorrida > 0
-          ? String(response.data.distanciaPercorrida)
-          : current.distanciaPercorrida,
+        current.distanciaPercorrida ||
+        (response.data.distanciaPercorrida > 0
+          ? String(Math.ceil(response.data.distanciaPercorrida))
+          : ""),
       codigoMunicipioOrigem:
-        response.data.codigoMunicipioOrigem || current.codigoMunicipioOrigem,
+        current.codigoMunicipioOrigem || response.data.codigoMunicipioOrigem,
       codigoMunicipioDestino:
-        response.data.codigoMunicipioDestino || current.codigoMunicipioDestino,
-      cepOrigem: response.data.cepOrigem || current.cepOrigem,
-      cepDestino: response.data.cepDestino || current.cepDestino,
+        current.codigoMunicipioDestino || response.data.codigoMunicipioDestino,
+      cepOrigem: current.cepOrigem || response.data.cepOrigem,
+      cepDestino: current.cepDestino || response.data.cepDestino,
       codigoNaturezaCarga:
-        response.data.codigoNaturezaCarga || current.codigoNaturezaCarga,
+        current.codigoNaturezaCarga || response.data.codigoNaturezaCarga,
       codigoTipoCarga: String(
-        response.data.codigoTipoCarga || current.codigoTipoCarga || 5,
+        current.codigoTipoCarga || response.data.codigoTipoCarga || 5,
       ),
-      numeroEixos,
+      numeroEixos: current.numeroEixos || numeroEixos,
       tipoPagamento: current.tipoPagamento || "6",
       cpfCnpjCreditado: current.cpfCnpjCreditado || companyDocument,
-      chavePix:
-        current.chavePix || form.favorecidoPix.trim() || companyDocument,
-      identificadorPix:
-        current.identificadorPix ||
-        form.favorecidoPix.trim() ||
-        companyDocument,
+      chavePix: current.chavePix || form.favorecidoPix.trim(),
+      identificadorPix: current.identificadorPix,
     };
 
     setAnttFields(completed);
@@ -752,7 +790,8 @@ export default function CiotGerarPage() {
 
     setImporting(true);
     try {
-      const file = files.item(0);
+      const selectedFiles = Array.from(files);
+      const file = selectedFiles[0];
       if (!file) return;
 
       const lowerName = file.name.toLowerCase();
@@ -763,7 +802,11 @@ export default function CiotGerarPage() {
       }
 
       const data = new FormData();
-      data.append("arquivos", file);
+      for (const selected of selectedFiles) {
+        if (!selected.name.toLowerCase().endsWith(".xml"))
+          throw new Error("Selecione somente XMLs de CT-e.");
+        data.append("arquivos", selected);
+      }
 
       const response = await api.post<{
         ctes: Array<
@@ -783,7 +826,7 @@ export default function CiotGerarPage() {
       });
 
       const novosCtes = response.data.ctes;
-      if (!empresaContratante) {
+      if (!empresaEmitente) {
         throw new Error(
           "Cadastre uma empresa ativa com certificado digital antes de gerar o CIOT.",
         );
@@ -795,52 +838,62 @@ export default function CiotGerarPage() {
       }
 
       setForm((current) => {
-        const ctes = [primeiroCte];
+        const ctes = Array.from(
+          new Map(
+            [...current.ctes, ...novosCtes].map((cte) => [cte.chave, cte]),
+          ).values(),
+        );
         const resumo = resumoDosCtes(ctes);
         const contratadoPrincipal = primeiroCte;
 
         return {
           ...current,
-          empresaId: empresaContratante.id,
-          rntrc: empresaContratante.rntrc ?? "",
-          contratadoRazaoSocial: contratadoPrincipal.destinatarioNome,
-          contratadoNomeFantasia: contratadoPrincipal.destinatarioNomeFantasia ?? "",
-          contratadoCnpj: contratadoPrincipal.destinatarioCnpj,
+          contratanteRazaoSocial:
+            current.contratanteRazaoSocial ||
+            primeiroCte.tomadorNome ||
+            primeiroCte.remetenteNome,
+          contratanteCnpj:
+            current.contratanteCnpj ||
+            primeiroCte.tomadorCnpj ||
+            primeiroCte.remetenteCnpj,
+          empresaId: empresaEmitente.id,
+          rntrc: empresaEmitente.rntrc ?? "",
+          contratadoRazaoSocial: empresaEmitente.razaoSocial,
+          contratadoNomeFantasia: empresaEmitente.nomeFantasia ?? "",
+          contratadoCnpj: digits(empresaEmitente.cnpj),
           contratadoInscricaoEstadual:
             contratadoPrincipal.destinatarioInscricaoEstadual ?? "",
           contratadoEndereco: contratadoPrincipal.destinatarioEndereco ?? "",
-          contratadoCidade: contratadoPrincipal.destinatarioCidade ?? contratadoPrincipal.destinoCidade,
-          contratadoUf: contratadoPrincipal.destinatarioUf ?? contratadoPrincipal.destinoUf,
-          tipoOperacao: "LOTACAO",
+          contratadoCidade:
+            contratadoPrincipal.destinatarioCidade ??
+            contratadoPrincipal.destinoCidade,
+          contratadoUf:
+            contratadoPrincipal.destinatarioUf ?? contratadoPrincipal.destinoUf,
+          tipoOperacao: resumo.tipoOperacao,
           origemCidade: current.origemCidade || primeiroCte.origemCidade,
           origemUf: current.origemUf || primeiroCte.origemUf,
           destinoCidade: current.destinoCidade || primeiroCte.destinoCidade,
           destinoUf: current.destinoUf || primeiroCte.destinoUf,
           dataInicio:
-            current.dataInicio ||
-            (primeiroCte as CiotCte & { dataEmissao?: string }).dataEmissao ||
-            "",
+            current.dataInicio || new Date().toLocaleDateString("en-CA"),
+          dataFim: current.dataFim || new Date().toLocaleDateString("en-CA"),
           naturezaCarga: resumo.naturezaCarga,
           pesoKg: decimalInput(resumo.pesoKg),
           valorMercadoria: decimalInput(resumo.valorMercadoria),
           valorFrete: decimalInput(resumo.valorFrete),
           valorPedagio: decimalInput(resumo.valorPedagio),
-          cnpjsCargaFracionada: "",
+          cnpjsCargaFracionada:
+            resumo.tipoOperacao === "FRACIONADA" ? resumo.cnpjs.join(", ") : "",
           ctes,
         };
       });
 
-      setEditing(null);
-      const autoResult = await completeAnttFieldsAutomatically(
-        primeiroCte,
-        {
-          ...emptyAnttFields,
-          tipoPagamento: "6",
-          cpfCnpjCreditado: digits(empresaContratante.cnpj),
-          chavePix: digits(empresaContratante.cnpj),
-          identificadorPix: digits(empresaContratante.cnpj),
-        },
-      );
+      const autoResult = await completeAnttFieldsAutomatically(primeiroCte, {
+        ...anttFields,
+        tipoPagamento: "6",
+        cpfCnpjCreditado: digits(empresaEmitente.cnpj),
+        cpfCnpjDestinatario: primeiroCte.destinatarioCnpj,
+      });
       setAnttChecklist([]);
       setPisoMinimo(null);
       setStep(1);
@@ -854,10 +907,9 @@ export default function CiotGerarPage() {
             .join(", "),
         );
       } else if (autoResult.warnings.length) {
-        toast.warning(
-          `CT-e importado. ${autoResult.warnings.join(" ")}`,
-          { duration: 10000 },
-        );
+        toast.warning(`CT-e importado. ${autoResult.warnings.join(" ")}`, {
+          duration: 10000,
+        });
       } else {
         toast.success(
           "CT-e importado e campos ANTT preenchidos automaticamente.",
@@ -892,14 +944,20 @@ export default function CiotGerarPage() {
         valorFrete: decimalInput(resumo.valorFrete),
         valorPedagio: decimalInput(resumo.valorPedagio),
         naturezaCarga: resumo.naturezaCarga,
-        contratadoRazaoSocial: contratadoPrincipal?.destinatarioNome ?? "",
-        contratadoNomeFantasia: contratadoPrincipal?.destinatarioNomeFantasia ?? "",
-        contratadoCnpj: contratadoPrincipal?.destinatarioCnpj ?? "",
+        contratadoRazaoSocial: empresaEmitente?.razaoSocial ?? "",
+        contratadoNomeFantasia: empresaEmitente?.nomeFantasia ?? "",
+        contratadoCnpj: digits(empresaEmitente?.cnpj ?? ""),
         contratadoInscricaoEstadual:
           contratadoPrincipal?.destinatarioInscricaoEstadual ?? "",
         contratadoEndereco: contratadoPrincipal?.destinatarioEndereco ?? "",
-        contratadoCidade: contratadoPrincipal?.destinatarioCidade ?? contratadoPrincipal?.destinoCidade ?? "",
-        contratadoUf: contratadoPrincipal?.destinatarioUf ?? contratadoPrincipal?.destinoUf ?? "",
+        contratadoCidade:
+          contratadoPrincipal?.destinatarioCidade ??
+          contratadoPrincipal?.destinoCidade ??
+          "",
+        contratadoUf:
+          contratadoPrincipal?.destinatarioUf ??
+          contratadoPrincipal?.destinoUf ??
+          "",
       };
     });
   };
@@ -918,81 +976,10 @@ export default function CiotGerarPage() {
     if (step > 1) setStep((step - 1) as Step);
   };
 
-  const buildPayload = () => ({
-    versao: "rascunho-radasa-1",
-    operacao: {
-      tipo: form.tipoOperacao,
-      rntrc: (empresaContratante?.rntrc ?? form.rntrc).trim(),
-      dataInicio: form.dataInicio,
-      dataFim: form.dataFim || null,
-      origem: {
-        cidade: form.origemCidade.trim(),
-        uf: form.origemUf.toUpperCase(),
-      },
-      destino: {
-        cidade: form.destinoCidade.trim(),
-        uf: form.destinoUf.toUpperCase(),
-      },
-    },
-    contratante: {
-      id: empresaContratante?.id,
-      razaoSocial: empresaContratante?.razaoSocial,
-      nomeFantasia: empresaContratante?.nomeFantasia,
-      cnpj: empresaContratante?.cnpj,
-      rntrc: empresaContratante?.rntrc,
-    },
-    contratado: {
-      razaoSocial: form.contratadoRazaoSocial,
-      nomeFantasia: form.contratadoNomeFantasia,
-      cnpj: form.contratadoCnpj,
-      inscricaoEstadual: form.contratadoInscricaoEstadual,
-      endereco: form.contratadoEndereco,
-      cidade: form.contratadoCidade,
-      uf: form.contratadoUf,
-    },
-    transportador: {
-      motorista: {
-        id: selectedMotorista?.id,
-        nome: selectedMotorista?.nome,
-        cpf: selectedMotorista?.cpf,
-      },
-      veiculo: {
-        id: selectedVeiculo?.id,
-        placa: selectedVeiculo?.placa,
-        modelo: selectedVeiculo?.modelo,
-      },
-    },
-    carga: {
-      natureza: form.naturezaCarga.trim(),
-      pesoKg: decimal(form.pesoKg),
-      valorMercadoria: decimal(form.valorMercadoria),
-      cnpjsCargaFracionada: uniqueCnpjs(form.cnpjsCargaFracionada),
-      ctes: form.ctes.map((cte) => ({
-        chave: cte.chave,
-        numero: cte.numero,
-        serie: cte.serie,
-        remetenteCnpj: cte.remetenteCnpj,
-        destinatarioCnpj: cte.destinatarioCnpj,
-        produto: cte.produto,
-        pesoKg: cte.pesoKg,
-        valorMercadoria: cte.valorMercadoria,
-        valorFrete: cte.valorFrete,
-      })),
-    },
-    financeiro: {
-      valorFrete: decimal(form.valorFrete),
-      valorPedagio: decimal(form.valorPedagio),
-      outrosValores: decimal(form.outrosValores),
-      descontos: decimal(form.descontos),
-      valorLiquido,
-      formaPagamento: form.formaPagamento.trim(),
-      favorecidoPix: form.favorecidoPix.trim() || null,
-    },
-    observacoes: form.observacoes.trim() || null,
-  });
-
   const anttOverrides = (fields = anttFields) => ({
-    idOperacaoTransporte: digits(fields.idOperacaoTransporte),
+    cpfCnpjDestinatario: digits(fields.cpfCnpjDestinatario),
+    parcelas: fields.parcelas,
+    veiculosAdicionais: fields.veiculosAdicionais,
     distanciaPercorrida: decimal(fields.distanciaPercorrida),
     codigoMunicipioOrigem:
       Number(digits(fields.codigoMunicipioOrigem)) || undefined,
@@ -1002,8 +989,7 @@ export default function CiotGerarPage() {
     cepDestino: digits(fields.cepDestino),
     codigoNaturezaCarga:
       Number(digits(fields.codigoNaturezaCarga)) || undefined,
-    codigoTipoCarga:
-      Number(digits(fields.codigoTipoCarga)) || undefined,
+    codigoTipoCarga: Number(digits(fields.codigoTipoCarga)) || undefined,
     numeroEixos: Number(digits(fields.numeroEixos)) || undefined,
     tipoPagamento: Number(fields.tipoPagamento) || undefined,
     cpfCnpjCreditado: digits(fields.cpfCnpjCreditado),
@@ -1025,28 +1011,18 @@ export default function CiotGerarPage() {
       return;
     }
 
-    const payloadAntt = prepare ? buildPayload() : editing?.payloadAntt ?? undefined;
+    const payloadAntt = { antt: { camposComplementares: anttOverrides() } };
 
     // Não envie `null` em campos opcionais. Alguns validadores do backend
     // aceitam string/objeto ausente, mas rejeitam explicitamente `null`.
     const data: any = {
-      empresaId: empresaContratante?.id ?? form.empresaId,
-      contratanteRazaoSocial:
-        empresaContratante?.razaoSocial ??
-        editing?.contratanteRazaoSocial ??
-        "",
-      contratanteNomeFantasia:
-        empresaContratante?.nomeFantasia ??
-        editing?.contratanteNomeFantasia ??
-        "",
-      contratanteCnpj: digits(
-        empresaContratante?.cnpj ?? editing?.contratanteCnpj ?? "",
-      ),
+      empresaId: empresaEmitente?.id ?? form.empresaId,
+      contratanteRazaoSocial: form.contratanteRazaoSocial.trim(),
+      contratanteCnpj: digits(form.contratanteCnpj),
       contratadoRazaoSocial: form.contratadoRazaoSocial.trim(),
       contratadoNomeFantasia: form.contratadoNomeFantasia.trim(),
       contratadoCnpj: digits(form.contratadoCnpj),
-      contratadoInscricaoEstadual:
-        form.contratadoInscricaoEstadual.trim(),
+      contratadoInscricaoEstadual: form.contratadoInscricaoEstadual.trim(),
       contratadoEndereco: form.contratadoEndereco.trim(),
       contratadoCidade: form.contratadoCidade.trim(),
       contratadoUf: form.contratadoUf.trim().toUpperCase(),
@@ -1054,7 +1030,7 @@ export default function CiotGerarPage() {
       veiculoId: form.veiculoId,
       tipoOperacao: form.tipoOperacao,
       status: prepare ? ("PRONTO_ENVIO" as const) : form.status,
-      rntrc: digits(empresaContratante?.rntrc ?? form.rntrc),
+      rntrc: digits(empresaEmitente?.rntrc ?? form.rntrc),
       origemCidade: form.origemCidade.trim(),
       origemUf: form.origemUf.trim().toUpperCase(),
       destinoCidade: form.destinoCidade.trim(),
@@ -1070,18 +1046,14 @@ export default function CiotGerarPage() {
       valorLiquido,
       formaPagamento: form.formaPagamento.trim(),
       favorecidoPix: form.favorecidoPix.trim(),
-      cnpjsCargaFracionada: uniqueCnpjs(
-        form.cnpjsCargaFracionada,
-      ).join(", "),
+      cnpjsCargaFracionada: uniqueCnpjs(form.cnpjsCargaFracionada).join(", "),
       ctes: form.ctes,
 
       ...(form.dataFim ? { dataFim: form.dataFim } : {}),
       ...(form.observacoes.trim()
         ? { observacoes: form.observacoes.trim() }
         : {}),
-      ...(editing?.numeroCiot
-        ? { numeroCiot: editing.numeroCiot }
-        : {}),
+      ...(editing?.numeroCiot ? { numeroCiot: editing.numeroCiot } : {}),
       ...(editing?.codigoVerificador
         ? { codigoVerificador: editing.codigoVerificador }
         : {}),
@@ -1107,7 +1079,10 @@ export default function CiotGerarPage() {
             toast.warning(automatic.warnings.join(" "), { duration: 10000 });
           }
         } catch (automaticError) {
-          console.warn("Falha no preenchimento automático ANTT", automaticError);
+          console.warn(
+            "Falha no preenchimento automático ANTT",
+            automaticError,
+          );
         }
       }
 
@@ -1123,7 +1098,10 @@ export default function CiotGerarPage() {
           fields: Record<string, unknown>;
           pisoMinimo: PisoMinimoUi;
           checklist: AnttChecklistItem[];
-        }>(`/ciots/${saved.id}/antt/preparar`, anttOverrides(effectiveAnttFields));
+        }>(
+          `/ciots/${saved.id}/antt/preparar`,
+          anttOverrides(effectiveAnttFields),
+        );
 
         setAnttChecklist(official.data.checklist);
         setPisoMinimo(official.data.pisoMinimo);
@@ -1148,13 +1126,6 @@ export default function CiotGerarPage() {
         setWizardOpen(false);
       }
     } catch (error: any) {
-      console.error("Erro ao salvar/preparar CIOT:", {
-        status: error?.response?.status,
-        response: error?.response?.data,
-        requestData: data,
-        error,
-      });
-
       toast.error(apiValidationMessage(error), {
         duration: 12000,
       });
@@ -1213,21 +1184,55 @@ export default function CiotGerarPage() {
     URL.revokeObjectURL(url);
   };
 
-  const emitInHomologation = async () => {
+  const emitOfficialCiot = async () => {
     if (!editing) return;
 
+    if (!integration?.networkEnabled) {
+      toast.error(
+        integrationError || "Ative a integração na Configuração ANTT.",
+      );
+      return;
+    }
+    if (
+      integration.environment === "producao" &&
+      !window.confirm(
+        "Emitir este CIOT em PRODUÇÃO? A operação será registrada oficialmente na ANTT.",
+      )
+    )
+      return;
     setAnttSending(true);
     try {
-      const response = await api.post(`/ciots/${editing.id}/antt/emitir`, anttOverrides(), {
-        timeout: 120_000,
-      });
-      toast.success("Solicitação enviada à ANTT em homologação.");
+      const response = await api.post(
+        `/ciots/${editing.id}/antt/emitir`,
+        anttOverrides(),
+        {
+          timeout: 120_000,
+        },
+      );
+      const result = response.data as any;
+      if (result.success) {
+        toast.success(
+          `CIOT ${result.item.numeroCiot}${result.item.codigoVerificador} autorizado${integration.environment === "homologacao" ? " em homologação (sem validade operacional)" : ""}.`,
+        );
+      } else {
+        toast.error(
+          result.item?.mensagemRetorno || "ANTT não autorizou a operação.",
+          { duration: 15000 },
+        );
+      }
+      setEditing(result.item);
+      await refresh();
       setPreparedPayload({
         ...(preparedPayload ?? {}),
         retornoAntt: response.data,
       });
     } catch (error: any) {
       toast.error(apiValidationMessage(error), { duration: 15000 });
+      const current = await api
+        .get<Ciot>(`/ciots/${editing.id}`)
+        .catch(() => null);
+      if (current) setEditing(current.data);
+      await refresh();
     } finally {
       setAnttSending(false);
     }
@@ -1290,7 +1295,9 @@ export default function CiotGerarPage() {
                   filtered.map((item) => {
                     return (
                       <tr key={item.id} className="border-b last:border-0">
-                        <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums">#{item.idSequencial}</td>
+                        <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums">
+                          #{item.idSequencial}
+                        </td>
                         <td className="px-4 py-3">
                           <p className="font-medium">
                             {item.contratadoRazaoSocial ||
@@ -1348,6 +1355,7 @@ export default function CiotGerarPage() {
       <input
         ref={fileInputRef}
         type="file"
+        multiple
         accept=".xml,text/xml,application/xml"
         className="hidden"
         onChange={(event) => void importFiles(event.target.files)}
@@ -1383,7 +1391,8 @@ export default function CiotGerarPage() {
               )}
               <p className="font-semibold">Importar XML do CT-e</p>
               <p className="mt-2 text-sm text-muted-foreground">
-                Selecione um arquivo XML autorizado do CT-e para preencher automaticamente.
+                Selecione um arquivo XML autorizado do CT-e para preencher
+                automaticamente.
               </p>
             </button>
           </div>
@@ -1432,656 +1441,738 @@ export default function CiotGerarPage() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto pr-2">
-            {step === 1 && (
-              <div className="space-y-8">
-                <div>
-                  <h2 className="text-lg font-semibold">Dados</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Contratante e documentos CT-e vinculados.
-                  </p>
-                </div>
-
-                <div className="grid gap-6 lg:grid-cols-2">
-                  <div className="rounded-xl border bg-muted/20 p-6">
-                    <p className="mb-4 font-semibold">Contratante</p>
-                    {empresaContratante ? (
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Razão social</p>
-                          <p className="font-medium">{empresaContratante.razaoSocial}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">CNPJ</p>
-                          <p className="font-medium">{empresaContratante.cnpj}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">RNTRC</p>
-                          <p className="font-medium">{empresaContratante.rntrc || "Não informado"}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Certificado</p>
-                          <p className="font-medium text-emerald-600">Digital ativo</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-destructive">Nenhuma empresa ativa com certificado digital foi encontrada.</p>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl border bg-muted/20 p-6">
-                    <p className="mb-4 font-semibold">Contratado (destinatário do CT-e)</p>
-                    {form.contratadoCnpj ? (
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Razão social</p>
-                          <p className="font-medium">{form.contratadoRazaoSocial || "—"}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">CNPJ</p>
-                          <p className="font-medium">{form.contratadoCnpj}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Inscrição estadual</p>
-                          <p className="font-medium">{form.contratadoInscricaoEstadual || "—"}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Cidade/UF</p>
-                          <p className="font-medium">{form.contratadoCidade || "—"}/{form.contratadoUf || "—"}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Importe um XML para carregar os dados do contratado.</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border p-6">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="font-semibold">CT-es vinculados</p>
-                      <p className="text-sm text-muted-foreground">
-                        É possível remover um documento antes de preparar o
-                        CIOT.
-                      </p>
+              {step === 1 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-lg font-semibold">Dados</h2>
+                    <div className="mt-3 rounded-lg border bg-muted/30 p-3 text-sm">
+                      <p className="font-medium">Empresa emitente vinculada automaticamente</p>
+                      <p>{empresaEmitente?.razaoSocial || "Verifique Cadastros > Empresa"}</p>
+                      <p className="text-muted-foreground">CNPJ: {empresaEmitente?.cnpj || "Não disponível"}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Somente este CNPJ pode emitir CIOT. Dados e certificado vêm de Cadastros &gt; Empresa.</p>
+                      {integrationError && <p className="mt-2 text-destructive">{integrationError}</p>}
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Importar outro XML
-                    </Button>
-                  </div>
-                  {form.ctes.length === 0 ? (
-                    <p className="rounded-lg bg-muted/40 p-6 text-center text-sm text-muted-foreground">
-                      Nenhum CT-e importado. O preenchimento pode continuar
-                      manualmente.
+                    <p className="text-sm text-muted-foreground">
+                      Contratante e documentos CT-e vinculados.
                     </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {form.ctes.map((cte) => (
-                        <div
-                          key={cte.chave}
-                          className="flex items-center justify-between rounded-lg border p-3"
-                        >
+                  </div>
+
+                  <div className="grid gap-4 rounded-xl border p-5 md:grid-cols-2">
+                    <Field label="Contratante do frete — nome / razão social">
+                      <Input
+                        value={form.contratanteRazaoSocial}
+                        onChange={(e) =>
+                          setForm((current) => ({
+                            ...current,
+                            contratanteRazaoSocial: e.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field label="CPF/CNPJ do contratante do frete">
+                      <Input
+                        value={formatCpfCnpjInput(form.contratanteCnpj)}
+                        onChange={(e) =>
+                          setForm((current) => ({
+                            ...current,
+                            contratanteCnpj: digits(e.target.value),
+                          }))
+                        }
+                      />
+                    </Field>
+                  </div>
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <div className="rounded-xl border bg-muted/20 p-6">
+                      <p className="mb-4 font-semibold">Empresa emissora</p>
+                      {empresaEmitente ? (
+                        <div className="grid gap-4 md:grid-cols-2">
                           <div>
-                            <p className="font-medium">
-                              CT-e {cte.numero || cte.chave}
-                            </p>
                             <p className="text-xs text-muted-foreground">
-                              {cte.origemCidade}/{cte.origemUf} →{" "}
-                              {cte.destinoCidade}/{cte.destinoUf} •{" "}
-                              {money(cte.valorFrete)}
+                              Razão social
+                            </p>
+                            <p className="font-medium">
+                              {empresaEmitente.razaoSocial}
                             </p>
                           </div>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => removeCte(cte.chave)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                          <div>
+                            <p className="text-xs text-muted-foreground">
+                              CNPJ
+                            </p>
+                            <p className="font-medium">
+                              {empresaEmitente.cnpj}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">
+                              RNTRC
+                            </p>
+                            <p className="font-medium">
+                              {empresaEmitente.rntrc || "Não informado"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">
+                              Certificado
+                            </p>
+                            <p className="font-medium text-emerald-600">
+                              Consultar diagnóstico ANTT
+                            </p>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
-                  <Field label="Natureza da carga">
-                    <Input
-                      value={form.naturezaCarga}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          naturezaCarga: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field label="Peso total (kg)">
-                    <Input
-                      value={form.pesoKg}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          pesoKg: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field label="Valor da mercadoria">
-                    <Input
-                      value={form.valorMercadoria}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          valorMercadoria: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                </div>
-              </div>
-            )}
-
-            {step === 2 && (
-              <div className="space-y-8">
-                <div>
-                  <h2 className="text-lg font-semibold">Operação</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Tipo de operação, rota, RNTRC e datas.
-                  </p>
-                </div>
-
-                <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
-                  <Field label="Tipo de operação">
-                    <Select
-                      value={form.tipoOperacao}
-                      onValueChange={(value) =>
-                        setForm((current) => ({
-                          ...current,
-                          tipoOperacao: value as TipoOperacaoCiot,
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="LOTACAO">
-                          Carga lotação
-                        </SelectItem>
-                        <SelectItem value="FRACIONADA">
-                          Carga fracionada
-                        </SelectItem>
-                        <SelectItem value="TAC_AGREGADO">
-                          TAC agregado
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label="RNTRC">
-                    <Input
-                      value={empresaContratante?.rntrc ?? form.rntrc}
-                      readOnly
-                      className="bg-muted/40"
-                    />
-                  </Field>
-                  <Field label="Data de início">
-                    <Input
-                      type="date"
-                      value={form.dataInicio}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          dataInicio: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                </div>
-
-                <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
-                  <Field label="Cidade de origem">
-                    <Input
-                      value={form.origemCidade}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          origemCidade: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field label="UF origem">
-                    <Input
-                      maxLength={2}
-                      value={form.origemUf}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          origemUf: event.target.value
-                            .replace(/[^A-Za-z]/g, "")
-                            .toUpperCase()
-                            .slice(0, 2),
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field label="Cidade de destino">
-                    <Input
-                      value={form.destinoCidade}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          destinoCidade: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field label="UF destino">
-                    <Input
-                      maxLength={2}
-                      value={form.destinoUf}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          destinoUf: event.target.value
-                            .replace(/[^A-Za-z]/g, "")
-                            .toUpperCase()
-                            .slice(0, 2),
-                        }))
-                      }
-                    />
-                  </Field>
-                </div>
-
-                <Field label="Previsão de término">
-                  <Input
-                    type="date"
-                    value={form.dataFim}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        dataFim: event.target.value,
-                      }))
-                    }
-                    className="max-w-sm"
-                  />
-                </Field>
-
-                {form.tipoOperacao === "FRACIONADA" && (
-                  <Field label="CNPJs da carga fracionada">
-                    <Textarea
-                      value={form.cnpjsCargaFracionada}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          cnpjsCargaFracionada: event.target.value,
-                        }))
-                      }
-                      placeholder="12.345.678/0001-90, 98.765.432/0001-10"
-                      rows={4}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Informe os CNPJs separados por vírgula.
-                    </p>
-                  </Field>
-                )}
-              </div>
-            )}
-
-            {step === 3 && (
-              <div className="space-y-8">
-                <div>
-                  <h2 className="text-lg font-semibold">Financeiro</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Valores editáveis e cálculo automático do líquido.
-                  </p>
-                </div>
-
-                <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
-                  <Field label="Valor do frete">
-                    <Input
-                      value={form.valorFrete}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          valorFrete: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field label="Vale-pedágio">
-                    <Input
-                      value={form.valorPedagio}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          valorPedagio: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field label="Outros valores">
-                    <Input
-                      value={form.outrosValores}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          outrosValores: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field label="Descontos">
-                    <Input
-                      value={form.descontos}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          descontos: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                </div>
-
-                <div className="grid gap-6 md:grid-cols-2">
-                  <Field label="Forma de pagamento">
-                    <Select
-                      value={form.formaPagamento}
-                      onValueChange={(value) =>
-                        setForm((current) => ({
-                          ...current,
-                          formaPagamento: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="PIX">PIX</SelectItem>
-                        <SelectItem value="TRANSFERENCIA">
-                          Transferência bancária
-                        </SelectItem>
-                        <SelectItem value="BOLETO">Boleto</SelectItem>
-                        <SelectItem value="DEPOSITO">Depósito</SelectItem>
-                        <SelectItem value="OUTRO">Outro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  <Field label="Favorecido / chave PIX">
-                    <Input
-                      value={form.favorecidoPix}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          favorecidoPix: event.target.value,
-                        }))
-                      }
-                      placeholder="CPF, CNPJ, telefone, e-mail ou chave"
-                    />
-                  </Field>
-                </div>
-
-                <div className="rounded-xl border bg-primary/5 p-6">
-                  <p className="text-sm text-muted-foreground">
-                    Valor líquido da operação
-                  </p>
-                  <p className="mt-1 text-3xl font-bold text-primary">
-                    {money(valorLiquido)}
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Frete + pedágio + outros valores − descontos
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {step === 4 && (
-              <div className="space-y-8">
-                <div>
-                  <h2 className="text-lg font-semibold">
-                    Motorista e veículo
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Selecione os cadastros utilizados na operação.
-                  </p>
-                </div>
-
-                <div className="grid gap-6 md:grid-cols-2">
-                  <Field label="Motorista">
-                    <Select
-                      value={form.motoristaId}
-                      onValueChange={(value) =>
-                        setForm((current) => ({
-                          ...current,
-                          motoristaId: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o motorista" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {motoristas
-                          .filter(
-                            (motorista) => motorista.status === "ATIVO",
-                          )
-                          .map((motorista) => (
-                            <SelectItem
-                              key={motorista.id}
-                              value={motorista.id}
-                            >
-                              {motorista.nome} • {motorista.cpf}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-
-                  <Field label="Veículo">
-                    <Select
-                      value={form.veiculoId}
-                      onValueChange={(value) =>
-                        setForm((current) => ({
-                          ...current,
-                          veiculoId: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o veículo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {veiculos.map((veiculo) => (
-                          <SelectItem
-                            key={veiculo.id}
-                            value={veiculo.id}
-                          >
-                            {veiculo.placa}
-                            {veiculo.modelo
-                              ? ` • ${veiculo.modelo}`
-                              : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </div>
-
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="rounded-xl border p-6">
-                    <p className="mb-3 font-semibold">Motorista selecionado</p>
-                    <p className="text-sm">
-                      {selectedMotorista?.nome || "Nenhum motorista"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      CPF: {selectedMotorista?.cpf || "—"}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border p-6">
-                    <p className="mb-3 font-semibold">Veículo selecionado</p>
-                    <p className="text-sm">
-                      {selectedVeiculo?.placa || "Nenhum veículo"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Modelo: {selectedVeiculo?.modelo || "—"} • Pneus:{" "}
-                      {selectedVeiculo?.quantidadePneus ?? "—"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {step === 5 && (
-              <div className="space-y-8">
-                <div>
-                  <h2 className="text-lg font-semibold">Revisão</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Confira os dados antes de preparar o envio.
-                  </p>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  {([1, 2, 3, 4] as Step[]).map((targetStep) => {
-                    const errors = stepErrors[targetStep];
-                    return (
-                      <button
-                        key={targetStep}
-                        type="button"
-                        onClick={() => setStep(targetStep)}
-                        className={`rounded-xl border p-6 text-left ${
-                          errors.length
-                            ? "border-destructive/30 bg-destructive/5"
-                            : "border-emerald-500/30 bg-emerald-500/5"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 font-semibold">
-                          {errors.length ? (
-                            <AlertTriangle className="h-5 w-5 text-destructive" />
-                          ) : (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                          )}
-                          {stepLabels.find(
-                            (item) => item.id === targetStep,
-                          )?.label}
-                        </div>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          {errors[0] || "Etapa completa"}
+                      ) : (
+                        <p className="text-sm text-destructive">
+                          Nenhuma empresa emitente ativa foi
+                          encontrada.
                         </p>
-                      </button>
-                    );
-                  })}
-                </div>
+                      )}
+                    </div>
 
-                <div className="grid gap-6 rounded-xl border p-6 md:grid-cols-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Contratante</p>
-                    <p className="font-medium">
-                      {empresaContratante?.razaoSocial ||
-                        editing?.contratanteRazaoSocial ||
-                        "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {empresaContratante?.cnpj || editing?.contratanteCnpj || "—"}
-                    </p>
+                    <div className="rounded-xl border bg-muted/20 p-6">
+                      <p className="mb-4 font-semibold">
+                        Transportador contratado — frota própria
+                      </p>
+                      {form.contratadoCnpj ? (
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div>
+                            <p className="text-xs text-muted-foreground">
+                              Razão social
+                            </p>
+                            <p className="font-medium">
+                              {form.contratadoRazaoSocial || "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">
+                              CNPJ
+                            </p>
+                            <p className="font-medium">{form.contratadoCnpj}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">
+                              Inscrição estadual
+                            </p>
+                            <p className="font-medium">
+                              {form.contratadoInscricaoEstadual || "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">
+                              Cidade/UF
+                            </p>
+                            <p className="font-medium">
+                              {form.contratadoCidade || "—"}/
+                              {form.contratadoUf || "—"}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          A empresa transportadora será utilizada como
+                          contratada.
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Contratado</p>
-                    <p className="font-medium">{form.contratadoRazaoSocial || "—"}</p>
-                    <p className="text-xs text-muted-foreground">{form.contratadoCnpj || "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Motorista</p>
-                    <p className="font-medium">
-                      {selectedMotorista?.nome || "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Veículo</p>
-                    <p className="font-medium">
-                      {selectedVeiculo?.placa || "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Rota</p>
-                    <p className="font-medium">
-                      {form.origemCidade}/{form.origemUf} →{" "}
-                      {form.destinoCidade}/{form.destinoUf}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      Peso / mercadoria
-                    </p>
-                    <p className="font-medium">
-                      {decimal(form.pesoKg).toLocaleString("pt-BR")} kg •{" "}
-                      {money(decimal(form.valorMercadoria))}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      Valor líquido
-                    </p>
-                    <p className="font-medium">{money(valorLiquido)}</p>
-                  </div>
-                </div>
 
-                <div className="rounded-xl border p-6">
-                  <p className="font-semibold">
-                    CT-es ({form.ctes.length})
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {form.ctes.length ? (
-                      form.ctes.map((cte) => (
-                        <span
-                          key={cte.chave}
-                          className="rounded-full bg-muted px-3 py-1 text-xs"
-                        >
-                          {cte.numero || cte.chave}
-                        </span>
-                      ))
+                  <div className="rounded-xl border p-6">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-semibold">CT-es vinculados</p>
+                        <p className="text-sm text-muted-foreground">
+                          É possível remover um documento antes de preparar o
+                          CIOT.
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Importar outro XML
+                      </Button>
+                    </div>
+                    {form.ctes.length === 0 ? (
+                      <p className="rounded-lg bg-muted/40 p-6 text-center text-sm text-muted-foreground">
+                        Nenhum CT-e importado. O preenchimento pode continuar
+                        manualmente.
+                      </p>
                     ) : (
-                      <span className="text-sm text-muted-foreground">
-                        Operação preenchida manualmente
-                      </span>
+                      <div className="space-y-2">
+                        {form.ctes.map((cte) => (
+                          <div
+                            key={cte.chave}
+                            className="flex items-center justify-between rounded-lg border p-3"
+                          >
+                            <div>
+                              <p className="font-medium">
+                                CT-e {cte.numero || cte.chave}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {cte.origemCidade}/{cte.origemUf} →{" "}
+                                {cte.destinoCidade}/{cte.destinoUf} •{" "}
+                                {money(cte.valorFrete)}
+                              </p>
+                            </div>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => removeCte(cte.chave)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                </div>
 
-                {stepErrors[5].length > 0 && (
-                  <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
-                    <p className="font-semibold text-destructive">
-                      Pendências obrigatórias
-                    </p>
-                    <ul className="mt-2 space-y-1 text-sm">
-                      {stepErrors[5].map((error) => (
-                        <li key={error}>• {error}</li>
-                      ))}
-                    </ul>
+                  <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+                    <Field label="Natureza da carga">
+                      <Input
+                        value={form.naturezaCarga}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            naturezaCarga: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field label="Peso total (kg)">
+                      <Input
+                        value={form.pesoKg}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            pesoKg: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field label="Valor da mercadoria">
+                      <Input
+                        value={form.valorMercadoria}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            valorMercadoria: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
                   </div>
-                )}
+                </div>
+              )}
 
-                <Field label="Observações">
-                  <Textarea
-                    value={form.observacoes}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        observacoes: event.target.value,
-                      }))
-                    }
-                    rows={3}
+              {step === 2 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-lg font-semibold">Operação</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Tipo de operação, rota, RNTRC e datas.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+                    <Field label="Tipo de operação">
+                      <Select
+                        value={form.tipoOperacao}
+                        onValueChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            tipoOperacao: value as TipoOperacaoCiot,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="LOTACAO">Carga lotação</SelectItem>
+                          <SelectItem value="FRACIONADA">
+                            Carga fracionada
+                          </SelectItem>
+                          <SelectItem value="TAC_AGREGADO">
+                            TAC agregado
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="RNTRC">
+                      <Input
+                        value={empresaEmitente?.rntrc ?? form.rntrc}
+                        readOnly
+                        className="bg-muted/40"
+                      />
+                    </Field>
+                    <Field label="Data de início">
+                      <Input
+                        type="date"
+                        value={form.dataInicio}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            dataInicio: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
+                    <Field label="Cidade de origem">
+                      <Input
+                        value={form.origemCidade}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            origemCidade: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field label="UF origem">
+                      <Input
+                        maxLength={2}
+                        value={form.origemUf}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            origemUf: event.target.value
+                              .replace(/[^A-Za-z]/g, "")
+                              .toUpperCase()
+                              .slice(0, 2),
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field label="Cidade de destino">
+                      <Input
+                        value={form.destinoCidade}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            destinoCidade: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field label="UF destino">
+                      <Input
+                        maxLength={2}
+                        value={form.destinoUf}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            destinoUf: event.target.value
+                              .replace(/[^A-Za-z]/g, "")
+                              .toUpperCase()
+                              .slice(0, 2),
+                          }))
+                        }
+                      />
+                    </Field>
+                  </div>
+
+                  <Field label="Previsão de término">
+                    <Input
+                      type="date"
+                      value={form.dataFim}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          dataFim: event.target.value,
+                        }))
+                      }
+                      className="max-w-sm"
+                    />
+                  </Field>
+
+                  {form.tipoOperacao === "FRACIONADA" && (
+                    <Field label="CNPJs da carga fracionada">
+                      <Textarea
+                        value={form.cnpjsCargaFracionada}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            cnpjsCargaFracionada: event.target.value,
+                          }))
+                        }
+                        placeholder="12.345.678/0001-90, 98.765.432/0001-10"
+                        rows={4}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Informe os CNPJs separados por vírgula.
+                      </p>
+                    </Field>
+                  )}
+                  <AnttFields
+                    section="operation"
+                    value={anttFields}
+                    onChange={setAnttFields}
                   />
-                </Field>
-              </div>
-            )}
+                </div>
+              )}
 
+              {step === 3 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-lg font-semibold">Financeiro</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Valores editáveis e cálculo automático do líquido.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
+                    <Field label="Valor do frete">
+                      <Input
+                        value={form.valorFrete}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            valorFrete: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field label="Vale-pedágio">
+                      <Input
+                        value={form.valorPedagio}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            valorPedagio: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field label="Outros valores">
+                      <Input
+                        value={form.outrosValores}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            outrosValores: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                    <Field label="Descontos">
+                      <Input
+                        value={form.descontos}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            descontos: event.target.value,
+                          }))
+                        }
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <Field label="Forma de pagamento">
+                      <Select
+                        value={form.formaPagamento}
+                        onValueChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            formaPagamento: value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="PIX">PIX</SelectItem>
+                          <SelectItem value="TRANSFERENCIA">
+                            Transferência bancária
+                          </SelectItem>
+                          <SelectItem value="BOLETO">Boleto</SelectItem>
+                          <SelectItem value="DEPOSITO">Depósito</SelectItem>
+                          <SelectItem value="OUTRO">Outro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Favorecido / chave PIX">
+                      <Input
+                        value={form.favorecidoPix}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            favorecidoPix: event.target.value,
+                          }))
+                        }
+                        placeholder="CPF, CNPJ, telefone, e-mail ou chave"
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="rounded-xl border bg-primary/5 p-6">
+                    <p className="text-sm text-muted-foreground">
+                      Valor líquido da operação
+                    </p>
+                    <p className="mt-1 text-3xl font-bold text-primary">
+                      {money(valorLiquido)}
+                    </p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Frete + pedágio + outros valores − descontos
+                    </p>
+                  </div>
+                  <AnttFields
+                    section="finance"
+                    value={anttFields}
+                    onChange={setAnttFields}
+                  />
+                </div>
+              )}
+
+              {step === 4 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-lg font-semibold">
+                      Motorista e veículo
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Selecione os cadastros utilizados na operação.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <Field label="Motorista">
+                      <Select
+                        value={form.motoristaId}
+                        onValueChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            motoristaId: value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o motorista" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {motoristas
+                            .filter((motorista) => motorista.status === "ATIVO")
+                            .map((motorista) => (
+                              <SelectItem
+                                key={motorista.id}
+                                value={motorista.id}
+                              >
+                                {motorista.nome} • {motorista.cpf}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+
+                    <Field label="Veículo">
+                      <Select
+                        value={form.veiculoId}
+                        onValueChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            veiculoId: value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o veículo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {veiculos.map((veiculo) => (
+                            <SelectItem key={veiculo.id} value={veiculo.id}>
+                              {veiculo.placa}
+                              {veiculo.modelo ? ` • ${veiculo.modelo}` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="rounded-xl border p-6">
+                      <p className="mb-3 font-semibold">
+                        Motorista selecionado
+                      </p>
+                      <p className="text-sm">
+                        {selectedMotorista?.nome || "Nenhum motorista"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        CPF: {selectedMotorista?.cpf || "—"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border p-6">
+                      <p className="mb-3 font-semibold">Veículo selecionado</p>
+                      <p className="text-sm">
+                        {selectedVeiculo?.placa || "Nenhum veículo"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Modelo: {selectedVeiculo?.modelo || "—"} • Pneus:{" "}
+                        {selectedVeiculo?.quantidadePneus ?? "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <AnttFields
+                    section="fleet"
+                    value={anttFields}
+                    onChange={setAnttFields}
+                  />
+                </div>
+              )}
+
+              {step === 5 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-lg font-semibold">Revisão</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Confira os dados antes de preparar o envio.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {([1, 2, 3, 4] as Step[]).map((targetStep) => {
+                      const errors = stepErrors[targetStep];
+                      return (
+                        <button
+                          key={targetStep}
+                          type="button"
+                          onClick={() => setStep(targetStep)}
+                          className={`rounded-xl border p-6 text-left ${
+                            errors.length
+                              ? "border-destructive/30 bg-destructive/5"
+                              : "border-emerald-500/30 bg-emerald-500/5"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 font-semibold">
+                            {errors.length ? (
+                              <AlertTriangle className="h-5 w-5 text-destructive" />
+                            ) : (
+                              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                            )}
+                            {
+                              stepLabels.find((item) => item.id === targetStep)
+                                ?.label
+                            }
+                          </div>
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            {errors[0] || "Etapa completa"}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="grid gap-6 rounded-xl border p-6 md:grid-cols-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Contratante
+                      </p>
+                      <p className="font-medium">
+                        {form.contratanteRazaoSocial || "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {form.contratanteCnpj || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Contratado
+                      </p>
+                      <p className="font-medium">
+                        {form.contratadoRazaoSocial || "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {form.contratadoCnpj || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Motorista</p>
+                      <p className="font-medium">
+                        {selectedMotorista?.nome || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Veículo</p>
+                      <p className="font-medium">
+                        {selectedVeiculo?.placa || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Rota</p>
+                      <p className="font-medium">
+                        {form.origemCidade}/{form.origemUf} →{" "}
+                        {form.destinoCidade}/{form.destinoUf}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Peso / mercadoria
+                      </p>
+                      <p className="font-medium">
+                        {decimal(form.pesoKg).toLocaleString("pt-BR")} kg •{" "}
+                        {money(decimal(form.valorMercadoria))}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Valor líquido
+                      </p>
+                      <p className="font-medium">{money(valorLiquido)}</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border p-6">
+                    <p className="font-semibold">CT-es ({form.ctes.length})</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {form.ctes.length ? (
+                        form.ctes.map((cte) => (
+                          <span
+                            key={cte.chave}
+                            className="rounded-full bg-muted px-3 py-1 text-xs"
+                          >
+                            {cte.numero || cte.chave}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          Operação preenchida manualmente
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {stepErrors[5].length > 0 && (
+                    <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
+                      <p className="font-semibold text-destructive">
+                        Pendências obrigatórias
+                      </p>
+                      <ul className="mt-2 space-y-1 text-sm">
+                        {stepErrors[5].map((error) => (
+                          <li key={error}>• {error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <Field label="Observações">
+                    <Textarea
+                      value={form.observacoes}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          observacoes: event.target.value,
+                        }))
+                      }
+                      rows={3}
+                    />
+                  </Field>
+                </div>
+              )}
             </div>
 
             <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 border-t bg-background pt-6">
@@ -2127,173 +2218,148 @@ export default function CiotGerarPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Code2 className="h-5 w-5" />
-              Payload preparado
+              Conferência e emissão na ANTT
             </DialogTitle>
           </DialogHeader>
 
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
             <p className="font-semibold text-emerald-700 dark:text-emerald-400">
-              Estrutura oficial DCS PEF v1.1
+              Integração direta com a ANTT
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              O backend converteu o cadastro para o leiaute da ANTT e listou
-              abaixo tudo que ainda precisa ser preenchido antes da homologação.
+              Confira as pendências e os valores antes de enviar. O número
+              oficial será solicitado automaticamente à ANTT.
             </p>
           </div>
 
-          <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
-            <div>
-              <p className="font-semibold">Campos complementares exigidos pela ANTT</p>
-              <p className="text-sm text-muted-foreground">
-                Os dados são preenchidos automaticamente pelo CT-e, empresa, veículo e rota. Revise somente as pendências. O ID oficial da operação continua dependendo do mecanismo oficial da ANTT.
+          <div className="rounded-xl border p-4 text-sm">
+            <p className="font-semibold">
+              Ambiente:{" "}
+              {integration?.environment === "producao"
+                ? "Produção — emissão com validade operacional"
+                : "Homologação — somente testes, sem validade operacional"}
+            </p>
+            {!integration?.networkEnabled && (
+              <p className="mt-2 text-destructive">
+                {integrationError ||
+                  "O envio está desativado. Consulte a aba Configuração ANTT."}
               </p>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              <Field label="ID oficial da operação (12 dígitos)">
-                <Input value={anttFields.idOperacaoTransporte} maxLength={12} onChange={(e) => setAnttFields((v) => ({ ...v, idOperacaoTransporte: digits(e.target.value) }))} />
-              </Field>
-              <Field label="Distância percorrida (km)">
-                <Input value={anttFields.distanciaPercorrida} onChange={(e) => setAnttFields((v) => ({ ...v, distanciaPercorrida: e.target.value }))} />
-              </Field>
-              <Field label="Número de eixos carregados">
-                <Select
-                  value={anttFields.numeroEixos}
-                  onValueChange={(value) =>
-                    setAnttFields((current) => ({ ...current, numeroEixos: value }))
-                  }
-                >
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {[2, 3, 4, 5, 6, 7, 9].map((eixos) => (
-                      <SelectItem key={eixos} value={String(eixos)}>
-                        {eixos} eixos
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Código IBGE origem">
-                <Input value={anttFields.codigoMunicipioOrigem} maxLength={7} onChange={(e) => setAnttFields((v) => ({ ...v, codigoMunicipioOrigem: digits(e.target.value) }))} />
-              </Field>
-              <Field label="CEP origem">
-                <Input value={anttFields.cepOrigem} maxLength={8} onChange={(e) => setAnttFields((v) => ({ ...v, cepOrigem: digits(e.target.value) }))} />
-              </Field>
-              <Field label="Código IBGE destino">
-                <Input value={anttFields.codigoMunicipioDestino} maxLength={7} onChange={(e) => setAnttFields((v) => ({ ...v, codigoMunicipioDestino: digits(e.target.value) }))} />
-              </Field>
-              <Field label="CEP destino">
-                <Input value={anttFields.cepDestino} maxLength={8} onChange={(e) => setAnttFields((v) => ({ ...v, cepDestino: digits(e.target.value) }))} />
-              </Field>
-              <Field label="Código natureza da carga">
-                <Input value={anttFields.codigoNaturezaCarga} maxLength={4} onChange={(e) => setAnttFields((v) => ({ ...v, codigoNaturezaCarga: digits(e.target.value) }))} />
-              </Field>
-              <Field label="Tipo de carga para piso mínimo">
-                <Select
-                  value={anttFields.codigoTipoCarga}
-                  onValueChange={(value) =>
-                    setAnttFields((current) => ({
-                      ...current,
-                      codigoTipoCarga: value,
-                    }))
-                  }
-                >
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1 - Granel sólido</SelectItem>
-                    <SelectItem value="2">2 - Granel líquido</SelectItem>
-                    <SelectItem value="3">3 - Frigorificada ou aquecida</SelectItem>
-                    <SelectItem value="4">4 - Conteinerizada</SelectItem>
-                    <SelectItem value="5">5 - Carga geral</SelectItem>
-                    <SelectItem value="6">6 - Neogranel</SelectItem>
-                    <SelectItem value="7">7 - Perigosa (granel sólido)</SelectItem>
-                    <SelectItem value="8">8 - Perigosa (granel líquido)</SelectItem>
-                    <SelectItem value="9">9 - Perigosa frigorificada/aquecida</SelectItem>
-                    <SelectItem value="10">10 - Perigosa conteinerizada</SelectItem>
-                    <SelectItem value="11">11 - Perigosa (carga geral)</SelectItem>
-                    <SelectItem value="12">12 - Granel pressurizada</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Tipo de pagamento DCS">
-                <Select value={anttFields.tipoPagamento} onValueChange={(value) => setAnttFields((v) => ({ ...v, tipoPagamento: value }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1 - Conta corrente</SelectItem>
-                    <SelectItem value="2">2 - Conta poupança</SelectItem>
-                    <SelectItem value="3">3 - Conta pagamento</SelectItem>
-                    <SelectItem value="4">4 - Outro identificador bancário</SelectItem>
-                    <SelectItem value="6">6 - PIX</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="CPF/CNPJ creditado">
-                <Input inputMode="numeric" value={formatCpfCnpjInput(anttFields.cpfCnpjCreditado)} maxLength={18} placeholder="CPF ou CNPJ" onChange={(e) => setAnttFields((v) => ({ ...v, cpfCnpjCreditado: digits(e.target.value).slice(0, 14) }))} />
-              </Field>
-              {anttFields.tipoPagamento === "6" ? (
-                <>
-                  <Field label="Chave PIX"><Input value={anttFields.chavePix} onChange={(e) => setAnttFields((v) => ({ ...v, chavePix: e.target.value }))} /></Field>
-                  <Field label="Identificador PIX"><Input value={anttFields.identificadorPix} maxLength={32} onChange={(e) => setAnttFields((v) => ({ ...v, identificadorPix: e.target.value }))} /></Field>
-                </>
-              ) : (
-                <>
-                  <Field label="Código instituição financeira"><Input value={anttFields.codigoInstituicaoFinanceira} onChange={(e) => setAnttFields((v) => ({ ...v, codigoInstituicaoFinanceira: digits(e.target.value) }))} /></Field>
-                  <Field label="Agência"><Input value={anttFields.numeroAgencia} onChange={(e) => setAnttFields((v) => ({ ...v, numeroAgencia: e.target.value }))} /></Field>
-                  <Field label="Conta"><Input value={anttFields.numeroConta} onChange={(e) => setAnttFields((v) => ({ ...v, numeroConta: e.target.value }))} /></Field>
-                </>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-5 text-sm">
-              {([
-                ["indAltoDesempenho", "Alto desempenho"],
-                ["indRetornoVazio", "Retorno vazio"],
-                ["composicaoVeicular", "Composição veicular"],
-              ] as const).map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2">
-                  <input type="checkbox" checked={anttFields[key]} onChange={(e) => setAnttFields((v) => ({ ...v, [key]: e.target.checked }))} />
-                  {label}
-                </label>
-              ))}
-            </div>
-
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={() => void persist(true)} disabled={saving}>
-                Validar novamente
-              </Button>
-            </div>
+            )}
+            <p className="mt-2 text-muted-foreground">
+              Para corrigir dados, feche esta conferência, ajuste a etapa
+              correspondente e valide novamente.
+            </p>
           </div>
 
           {pisoMinimo?.aplicavel && (
-            <div className={`rounded-xl border p-4 ${
-              pisoMinimo.abaixoDoPiso
-                ? "border-red-500/40 bg-red-500/5"
-                : pisoMinimo.valorPiso !== null
-                  ? "border-emerald-500/40 bg-emerald-500/5"
-                  : "border-amber-500/40 bg-amber-500/5"
-            }`}>
-              <p className="font-semibold">Piso mínimo ANTT</p>
+            <div
+              className={`rounded-xl border p-4 ${
+                pisoMinimo.abaixoDoPiso
+                  ? "border-red-500/40 bg-red-500/5"
+                  : pisoMinimo.valorPiso !== null
+                    ? "border-emerald-500/40 bg-emerald-500/5"
+                    : "border-amber-500/40 bg-amber-500/5"
+              }`}
+            >
+              <p className="font-semibold">
+                Estimativa de piso mínimo — tabela local
+              </p>
               <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                <div><span className="text-muted-foreground">Tabela</span><p className="font-medium">{pisoMinimo.tabela ?? "-"}</p></div>
-                <div><span className="text-muted-foreground">Frete informado</span><p className="font-medium">{money(pisoMinimo.valorFrete)}</p></div>
-                <div><span className="text-muted-foreground">Piso calculado</span><p className="font-medium">{pisoMinimo.valorPiso === null ? "Dados incompletos" : money(pisoMinimo.valorPiso)}</p></div>
-                <div><span className="text-muted-foreground">Diferença</span><p className="font-medium">{pisoMinimo.diferenca === null ? "-" : money(pisoMinimo.diferenca)}</p></div>
+                <div>
+                  <span className="text-muted-foreground">Tabela</span>
+                  <p className="font-medium">{pisoMinimo.tabela ?? "-"}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Frete informado</span>
+                  <p className="font-medium">{money(pisoMinimo.valorFrete)}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Piso calculado</span>
+                  <p className="font-medium">
+                    {pisoMinimo.valorPiso === null
+                      ? "Dados incompletos"
+                      : money(pisoMinimo.valorPiso)}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Diferença</span>
+                  <p className="font-medium">
+                    {pisoMinimo.diferenca === null
+                      ? "-"
+                      : money(pisoMinimo.diferenca)}
+                  </p>
+                </div>
               </div>
               {pisoMinimo.abaixoDoPiso && (
                 <p className="mt-3 text-sm font-semibold text-red-600 dark:text-red-400">
-                  Emissão bloqueada: o frete está abaixo do piso mínimo.
+                  Estimativa local abaixo do piso. Revise os valores; a ANTT
+                  aplicará a tabela vigente.
                 </p>
               )}
-              <p className="mt-2 text-xs text-muted-foreground">{pisoMinimo.fundamento}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {pisoMinimo.fundamento}
+              </p>
             </div>
           )}
 
+          {Boolean(preparedPayload?.retornoAntt) && (
+            <div
+              role="status"
+              className={`rounded-xl border p-4 ${(preparedPayload?.retornoAntt as any)?.success ? "border-emerald-500/40 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"}`}
+            >
+              <p className="font-semibold">
+                {(preparedPayload?.retornoAntt as any)?.success
+                  ? `CIOT autorizado: ${(preparedPayload?.retornoAntt as any)?.item?.numeroCiot}${(preparedPayload?.retornoAntt as any)?.item?.codigoVerificador}`
+                  : "Emissão não confirmada"}
+              </p>
+              <p className="mt-2 text-sm">
+                {(preparedPayload?.retornoAntt as any)?.item?.mensagemRetorno}
+              </p>
+            </div>
+          )}
+          {editing?.status === "PROCESSANDO" && (
+            <Button
+              variant="outline"
+              disabled={anttSending}
+              onClick={async () => {
+                setAnttSending(true);
+                try {
+                  const response = await api.post(
+                    `/ciots/${editing.id}/antt/consultar`,
+                  );
+                  await refresh();
+                  toast.info(
+                    response.data.reconciled
+                      ? "Autorização recuperada. Atualize a listagem."
+                      : "Consulte o retorno antes de qualquer novo envio.",
+                  );
+                  if (response.data.reconciled) {
+                    setDebugOpen(false);
+                    setWizardOpen(false);
+                  }
+                  setPreparedPayload((current) => ({
+                    ...current,
+                    consulta: response.data,
+                  }));
+                } catch (error) {
+                  toast.error(apiValidationMessage(error));
+                } finally {
+                  setAnttSending(false);
+                }
+              }}
+            >
+              Consultar resultado na ANTT
+            </Button>
+          )}
           {anttChecklist.length > 0 && (
             <div className="rounded-xl border p-4">
               <p className="font-semibold">Checklist de emissão</p>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
                 {anttChecklist.map((item) => (
-                  <div key={item.key} className="flex items-center gap-2 text-sm">
+                  <div
+                    key={item.key}
+                    className="flex items-center gap-2 text-sm"
+                  >
                     {item.ok ? (
                       <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                     ) : (
@@ -2306,9 +2372,14 @@ export default function CiotGerarPage() {
             </div>
           )}
 
-          <pre className="max-w-full whitespace-pre-wrap break-all rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
-            {JSON.stringify(preparedPayload, null, 2)}
-          </pre>
+          <details>
+            <summary className="cursor-pointer text-sm">
+              Detalhes técnicos e retorno da ANTT
+            </summary>
+            <pre className="mt-3 max-w-full whitespace-pre-wrap break-all rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
+              {JSON.stringify(preparedPayload, null, 2)}
+            </pre>
+          </details>
 
           <div className="flex flex-wrap justify-end gap-2">
             <Button
@@ -2339,17 +2410,23 @@ export default function CiotGerarPage() {
               Executar simulação
             </Button>
             <Button
-              onClick={() => void emitInHomologation()}
+              onClick={() => void emitOfficialCiot()}
               disabled={
                 anttSending ||
                 simulating ||
-                !Boolean((preparedPayload?.simulacao as any)?.readyForHomologation) ||
-                Boolean(pisoMinimo?.abaixoDoPiso) ||
+                !integration?.networkEnabled ||
+                editing?.status === "AUTORIZADO" ||
+                editing?.status === "PROCESSANDO" ||
+                !preparedPayload ||
                 anttChecklist.some((item) => !item.ok)
               }
             >
-              {anttSending && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
-              Enviar para homologação ANTT
+              {anttSending && (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {integration?.environment === "producao"
+                ? "Emitir CIOT na ANTT"
+                : "Emitir em homologação"}
             </Button>
           </div>
         </DialogContent>

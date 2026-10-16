@@ -321,3 +321,4 @@ export const LOCAL_TOLL_PLAZAS: LocalTollPlaza[] = combinedTolls.reduce<LocalTol
 }, []);
 
 export const NATIONAL_TOLL_BASE_META = GENERATED_TOLL_META;
+

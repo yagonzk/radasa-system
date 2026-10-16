@@ -1,3 +1,4 @@
+import { CIOT_COMPANY_BINDING_KEY } from "./ciot-company.service.js";
 import { prisma } from "../lib/prisma.js";
 import { AppError } from "../utils/app-error.js";
 import { hashPassword } from "./password-hash.service.js";
@@ -327,6 +328,8 @@ export const adminService = {
   configuracoes: () => prisma.configuracaoSistema.findMany({ orderBy: { chave: "asc" } }),
 
   async salvarConfiguracao(chave: string, valor: any) {
+    if (chave === CIOT_COMPANY_BINDING_KEY)
+      throw new AppError(409, "O vínculo do único CNPJ emitente de CIOT é gerenciado automaticamente pelo cadastro de empresa.");
     return prisma.configuracaoSistema.upsert({
       where: { chave },
       create: { chave, valor },

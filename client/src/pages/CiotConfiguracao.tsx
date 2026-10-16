@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -14,16 +14,8 @@ import {
 import Layout from "@/components/Layout";
 import CiotSubtabs from "@/components/ciot/CiotSubtabs";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { api } from "@/lib/api";
-import { useEmpresa, useVeiculos } from "@/lib/store";
+import { useVeiculos } from "@/lib/store";
 import { toast } from "sonner";
 
 type ConfigurationResponse = {
@@ -86,6 +78,11 @@ function ResultCard({ result }: { result: TestResult }) {
         <div className="min-w-0 flex-1">
           <p className="font-semibold">{result.title}</p>
           <p className="mt-1 text-sm text-muted-foreground">{result.message}</p>
+          {!result.ok && (result.details as { details?: { diagnosticCode?: string } } | undefined)?.details?.diagnosticCode?.startsWith("ANTT_") && (
+            <p className="mt-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
+              A falha pode estar no transporte mTLS ou na infraestrutura externa. O certificado cadastrado não deve ser substituído apenas por este erro. Consulte a orientação dentro de “Ver retorno técnico”.
+            </p>
+          )}
           {result.details !== undefined && (
             <details className="mt-3">
               <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
@@ -103,15 +100,10 @@ function ResultCard({ result }: { result: TestResult }) {
 }
 
 export default function CiotConfiguracaoPage() {
-  const { items: empresas } = useEmpresa();
   const { items: veiculos } = useVeiculos();
-  const defaultCompany = useMemo(
-    () => empresas.find((item) => item.empresaPadrao) ?? empresas.find((item) => item.ativa),
-    [empresas],
-  );
-  const [empresaId, setEmpresaId] = useState("");
-  const selectedCompanyId = empresaId || defaultCompany?.id || "";
   const [configuration, setConfiguration] = useState<ConfigurationResponse | null>(null);
+  const [configurationError, setConfigurationError] = useState("");
+  const selectedCompanyId = configuration?.company.id || "";
   const [results, setResults] = useState<TestResult[]>([]);
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -121,27 +113,30 @@ export default function CiotConfiguracaoPage() {
 
   const requireCompany = () => {
     if (!selectedCompanyId) {
-      toast.error("Cadastre ou selecione uma empresa antes de testar a integração.");
+      toast.error("Confira a empresa emitente em Cadastros > Empresa e atualize o diagnóstico.");
       return false;
     }
     return true;
   };
 
-  const loadConfiguration = async () => {
-    if (!requireCompany()) return;
+  const loadConfiguration = async (quiet = false) => {
     setLoading("config");
     try {
-      const response = await api.get<ConfigurationResponse>("/ciots/antt/configuracao", {
-        params: { empresaId: selectedCompanyId },
-      });
+      const response = await api.get<ConfigurationResponse>("/ciots/antt/configuracao");
       setConfiguration(response.data);
-      toast.success("Configuração ANTT carregada.");
+      setConfigurationError("");
+      if (!quiet) toast.success("Dados da empresa emitente atualizados.");
     } catch (error: any) {
-      toast.error(error?.response?.data?.message ?? "Não foi possível carregar a configuração ANTT.");
+      setConfiguration(null);
+      const message = error?.response?.data?.message ?? "Não foi possível carregar a configuração ANTT.";
+      setConfigurationError(message);
+      if (!quiet) toast.error(message);
     } finally {
       setLoading(null);
     }
   };
+
+  useEffect(() => { void loadConfiguration(true); }, []);
 
   const testCertificate = async () => {
     if (!requireCompany()) return;
@@ -248,7 +243,7 @@ export default function CiotConfiguracaoPage() {
               Valide o certificado, ambiente, RNTRC e frota antes de emitir CIOTs.
             </p>
           </div>
-          <Button variant="outline" onClick={loadConfiguration} disabled={loading !== null}>
+          <Button variant="outline" onClick={() => loadConfiguration()} disabled={loading !== null}>
             {loading === "config" ? (
               <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
             ) : (
@@ -258,27 +253,12 @@ export default function CiotConfiguracaoPage() {
           </Button>
         </div>
 
-        <div className="rounded-xl border bg-card p-5">
-          <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-            <div className="space-y-2">
-              <Label>Empresa transportadora</Label>
-              <Select value={selectedCompanyId} onValueChange={(value) => { setEmpresaId(value); setConfiguration(null); setResults([]); }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a empresa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {empresas.map((empresa) => (
-                    <SelectItem key={empresa.id} value={empresa.id}>
-                      {empresa.nomeFantasia || empresa.razaoSocial} — {empresa.cnpj}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={loadConfiguration} disabled={!selectedCompanyId || loading !== null}>
-              Carregar
-            </Button>
-          </div>
+        <div className="rounded-xl border bg-card p-5 text-sm">
+          <p className="font-semibold">Empresa emitente vinculada automaticamente</p>
+          <p className="mt-2">{config?.company.razaoSocial || "Verifique Cadastros > Empresa"}</p>
+          <p className="text-muted-foreground">CNPJ: {config?.company.cnpj || "Não disponível"} · RNTRC: {config?.company.rntrc || "Não informado"}</p>
+          <p className="mt-2 text-muted-foreground">O CIOT usa os dados e o certificado de Cadastros &gt; Empresa e permite somente o CNPJ vinculado. A tela serve para conferir a conexão.</p>
+          {configurationError && <p className="mt-2 text-destructive">{configurationError}</p>}
         </div>
 
         {config && (

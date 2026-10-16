@@ -4998,3 +4998,4 @@ export const GENERATED_TOLL_META = {
   "unpriced": 277,
   "anttResource": "https://dados.antt.gov.br/dataset/praca-de-pedagio"
 };
+

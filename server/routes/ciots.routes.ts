@@ -1,6 +1,8 @@
 import { Router } from "express";
+import { getCiotCompany } from "../services/ciot-company.service.js";
 import { prisma } from "../lib/prisma.js";
 import { ciotBody } from "../validators/schemas.js";
+import { ciotAnttOverrides } from "../validators/ciot-antt.js";
 import { anttCiotService } from "../services/antt-ciot.service.js";
 
 function decimal(value: unknown) {
@@ -17,6 +19,7 @@ function serializeCiot(ciot: any) {
     outrosValores: decimal(ciot.outrosValores),
     descontos: decimal(ciot.descontos),
     valorLiquido: decimal(ciot.valorLiquido),
+    valorMercadoria: decimal(ciot.valorMercadoria),
     ctes: Array.isArray(ciot.ctes)
       ? ciot.ctes.map((cte: any) => ({
           ...cte,
@@ -24,9 +27,10 @@ function serializeCiot(ciot: any) {
           valorMercadoria: decimal(cte.valorMercadoria),
           valorFrete: decimal(cte.valorFrete),
           valorPedagio: decimal(cte.valorPedagio),
-          dataEmissao: cte.dataEmissao instanceof Date
-            ? cte.dataEmissao.toISOString().slice(0, 10)
-            : cte.dataEmissao,
+          dataEmissao:
+            cte.dataEmissao instanceof Date
+              ? cte.dataEmissao.toISOString().slice(0, 10)
+              : cte.dataEmissao,
         }))
       : ciot.ctes,
     dataInicio:
@@ -57,16 +61,14 @@ function toCreateData(input: ReturnType<typeof ciotBody.parse>) {
     motoristaId: input.motoristaId,
     veiculoId: input.veiculoId,
     tipoOperacao: input.tipoOperacao,
-    status: input.status,
+    status: "RASCUNHO" as const,
     rntrc: input.rntrc,
     origemCidade: input.origemCidade,
     origemUf: input.origemUf,
     destinoCidade: input.destinoCidade,
     destinoUf: input.destinoUf,
     dataInicio: new Date(`${input.dataInicio}T00:00:00.000Z`),
-    dataFim: input.dataFim
-      ? new Date(`${input.dataFim}T00:00:00.000Z`)
-      : null,
+    dataFim: input.dataFim ? new Date(`${input.dataFim}T00:00:00.000Z`) : null,
     naturezaCarga: input.naturezaCarga,
     pesoKg: input.pesoKg,
     valorFrete: input.valorFrete,
@@ -76,12 +78,18 @@ function toCreateData(input: ReturnType<typeof ciotBody.parse>) {
     valorLiquido: input.valorLiquido,
     formaPagamento: input.formaPagamento,
     favorecidoPix: input.favorecidoPix,
-    payloadAntt: input.payloadAntt ?? undefined,
+    payloadAntt: {
+      antt: {
+        camposComplementares: ciotAnttOverrides.parse(
+          (input.payloadAntt as any)?.antt?.camposComplementares ?? {},
+        ),
+      },
+    },
     preparadoEm: input.preparadoEm ? new Date(input.preparadoEm) : null,
     observacoes: input.observacoes || null,
-    numeroCiot: input.numeroCiot || null,
-    codigoVerificador: input.codigoVerificador || null,
-    protocolo: input.protocolo || null,
+    numeroCiot: null,
+    codigoVerificador: null,
+    protocolo: null,
     mensagemRetorno: input.mensagemRetorno || null,
     valorMercadoria: input.valorMercadoria,
     cnpjsCargaFracionada: input.cnpjsCargaFracionada,
@@ -116,7 +124,9 @@ function toCreateData(input: ReturnType<typeof ciotBody.parse>) {
             valorPedagio: cte.valorPedagio,
             xmlUrl: cte.xmlUrl || null,
             arquivoNome: cte.arquivoNome || "",
-            dataEmissao: cte.dataEmissao ? new Date(`${cte.dataEmissao}T00:00:00.000Z`) : null,
+            dataEmissao: cte.dataEmissao
+              ? new Date(`${cte.dataEmissao}T00:00:00.000Z`)
+              : null,
           })),
         }
       : undefined,
@@ -160,7 +170,10 @@ ciotsRoutes.get("/antt/diagnostico", async (req, res, next) => {
 
 ciotsRoutes.post("/:id/antt/preparar", async (req, res, next) => {
   try {
-    const result = await anttCiotService.prepare(req.params.id, req.body ?? {});
+    const result = await anttCiotService.prepare(
+      req.params.id,
+      ciotAnttOverrides.parse(req.body ?? {}),
+    );
     res.json(result);
   } catch (error) {
     next(error);
@@ -171,7 +184,7 @@ ciotsRoutes.post("/:id/antt/simular", async (req, res, next) => {
   try {
     const result = await anttCiotService.simulate(
       req.params.id,
-      req.body ?? {},
+      ciotAnttOverrides.parse(req.body ?? {}),
     );
     res.json(result);
   } catch (error) {
@@ -181,8 +194,11 @@ ciotsRoutes.post("/:id/antt/simular", async (req, res, next) => {
 
 ciotsRoutes.post("/:id/antt/emitir", async (req, res, next) => {
   try {
-    const result = await anttCiotService.emit(req.params.id, req.body ?? {});
-    res.json(result);
+    const result = await anttCiotService.emit(
+      req.params.id,
+      ciotAnttOverrides.parse(req.body ?? {}),
+    );
+    res.json({ ...result, item: serializeCiot(result.item) });
   } catch (error) {
     next(error);
   }
@@ -221,7 +237,12 @@ ciotsRoutes.post("/:id/antt/consultar", async (req, res, next) => {
 
 ciotsRoutes.post("/:id/antt/cancelar", async (req, res, next) => {
   try {
-    res.json(await anttCiotService.cancel(req.params.id, String(req.body?.motivo ?? "")));
+    res.json(
+      await anttCiotService.cancel(
+        req.params.id,
+        String(req.body?.motivo ?? ""),
+      ),
+    );
   } catch (error) {
     next(error);
   }
@@ -229,7 +250,12 @@ ciotsRoutes.post("/:id/antt/cancelar", async (req, res, next) => {
 
 ciotsRoutes.post("/:id/antt/retificar", async (req, res, next) => {
   try {
-    res.json(await anttCiotService.rectify(req.params.id, req.body ?? {}));
+    res.json(
+      await anttCiotService.rectify(
+        req.params.id,
+        ciotAnttOverrides.parse(req.body ?? {}),
+      ),
+    );
   } catch (error) {
     next(error);
   }
@@ -237,7 +263,12 @@ ciotsRoutes.post("/:id/antt/retificar", async (req, res, next) => {
 
 ciotsRoutes.post("/:id/antt/encerrar", async (req, res, next) => {
   try {
-    res.json(await anttCiotService.close(req.params.id, req.body ?? {}));
+    res.json(
+      await anttCiotService.close(
+        req.params.id,
+        ciotAnttOverrides.parse(req.body ?? {}),
+      ),
+    );
   } catch (error) {
     next(error);
   }
@@ -276,9 +307,15 @@ ciotsRoutes.get("/:id", async (req, res, next) => {
 ciotsRoutes.post("/", async (req, res, next) => {
   try {
     const parsed = ciotBody.parse(req.body);
+    const company = await getCiotCompany(parsed.empresaId);
     const item = await prisma.ciot.create({
       data: {
         ...toCreateData(parsed),
+        empresaId: company.id,
+        rntrc: company.rntrc || "",
+        contratadoRazaoSocial: company.razaoSocial,
+        contratadoNomeFantasia: company.nomeFantasia || "",
+        contratadoCnpj: company.cnpj.replace(/\D/g, ""),
         id: parsed.id,
         createdAt: parsed.createdAt ? new Date(parsed.createdAt) : undefined,
       },
@@ -302,7 +339,9 @@ ciotsRoutes.put("/:id", async (req, res, next) => {
     }
 
     if (
-      ["AUTORIZADO", "CANCELADO", "ENCERRADO"].includes(current.status)
+      ["AUTORIZADO", "CANCELADO", "ENCERRADO", "PROCESSANDO"].includes(
+        current.status,
+      )
     ) {
       res.status(409).json({
         message:
@@ -312,7 +351,34 @@ ciotsRoutes.put("/:id", async (req, res, next) => {
     }
 
     const parsed = ciotBody.partial().parse(req.body);
-    const data: Record<string, unknown> = { ...parsed };
+    const company = await getCiotCompany(parsed.empresaId || current.empresaId);
+    const data: Record<string, unknown> = {
+      ...parsed, empresaId: company.id, rntrc: company.rntrc || "",
+      contratadoRazaoSocial: company.razaoSocial,
+      contratadoNomeFantasia: company.nomeFantasia || "",
+      contratadoCnpj: company.cnpj.replace(/\D/g, ""),
+    };
+    for (const field of [
+      "status",
+      "numeroCiot",
+      "codigoVerificador",
+      "protocolo",
+      "mensagemRetorno",
+      "preparadoEm",
+    ])
+      delete data[field];
+    if (parsed.payloadAntt !== undefined) {
+      const previous = (current.payloadAntt as any) ?? {};
+      data.payloadAntt = {
+        ...previous,
+        antt: {
+          ...previous.antt,
+          camposComplementares: ciotAnttOverrides.parse(
+            (parsed.payloadAntt as any)?.antt?.camposComplementares ?? {},
+          ),
+        },
+      };
+    }
 
     if (parsed.ctes !== undefined) {
       data.ctes = {
@@ -346,7 +412,9 @@ ciotsRoutes.put("/:id", async (req, res, next) => {
           valorPedagio: cte.valorPedagio,
           xmlUrl: cte.xmlUrl || null,
           arquivoNome: cte.arquivoNome || "",
-          dataEmissao: cte.dataEmissao ? new Date(`${cte.dataEmissao}T00:00:00.000Z`) : null,
+          dataEmissao: cte.dataEmissao
+            ? new Date(`${cte.dataEmissao}T00:00:00.000Z`)
+            : null,
         })),
       };
     }
@@ -357,11 +425,6 @@ ciotsRoutes.put("/:id", async (req, res, next) => {
     if (parsed.dataFim !== undefined) {
       data.dataFim = parsed.dataFim
         ? new Date(`${parsed.dataFim}T00:00:00.000Z`)
-        : null;
-    }
-    if (parsed.preparadoEm !== undefined) {
-      data.preparadoEm = parsed.preparadoEm
-        ? new Date(parsed.preparadoEm)
         : null;
     }
 
@@ -380,7 +443,10 @@ ciotsRoutes.put("/:id", async (req, res, next) => {
     }
 
     const item = await prisma.ciot.update({
-      where: { id: req.params.id },
+      where: {
+        id: req.params.id,
+        status: { in: ["RASCUNHO", "PRONTO_ENVIO", "REJEITADO"] },
+      },
       data,
       include: { ctes: true },
     });

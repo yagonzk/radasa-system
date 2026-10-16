@@ -6,11 +6,15 @@ const booleanFromString = z
   .transform((value) => value === "true");
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
   PORT: z.coerce.number().int().positive().default(3001),
   DATABASE_URL: z.string().min(1, "DATABASE_URL é obrigatória"),
   CLIENT_ORIGIN: z.string().default("http://localhost:3000"),
-  JWT_SECRET: z.string().min(32, "JWT_SECRET deve ter pelo menos 32 caracteres"),
+  JWT_SECRET: z
+    .string()
+    .min(32, "JWT_SECRET deve ter pelo menos 32 caracteres"),
   JWT_EXPIRES_IN: z.string().default("8h"),
   AUTH_REQUIRED: booleanFromString,
   RESEND_API_KEY: z.string().min(1).optional(),
@@ -18,13 +22,24 @@ const envSchema = z.object({
   EMAIL_FROM_NAME: z.string().min(1).default("Radasa System"),
   EMAIL_FROM_ADDRESS: z.string().email().default("sistema@radasa.com.br"),
   PASSWORD_RESET_BASE_URL: z.string().url().default("http://localhost:3000"),
-  PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(120).default(30),
+  PASSWORD_RESET_TTL_MINUTES: z.coerce
+    .number()
+    .int()
+    .min(5)
+    .max(120)
+    .default(30),
   LOG_LEVEL: z.string().default("info"),
-  ANTT_CIOT_ENVIRONMENT: z.enum(["homologacao", "producao"]).default("homologacao"),
-  ANTT_CIOT_BASE_URL: z.string().url().default("https://appservices-hml.antt.gov.br/pefServices"),
+  ANTT_CIOT_ENVIRONMENT: z
+    .enum(["homologacao", "producao"])
+    .default("homologacao"),
+  ANTT_CIOT_BASE_URL: z.string().url().optional(),
+  ANTT_CIOT_MTLS_CNPJ: z.string().default(""),
+  ANTT_CIOT_GENERATOR_KEY: z.string().default(""),
   ANTT_CIOT_ENABLE_NETWORK: booleanFromString,
   ANTT_CIOT_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
-  ANTT_CIOT_PATH_TRANSPORTER: z.string().default("ConsultarSituacaoTransportador"),
+  ANTT_CIOT_PATH_TRANSPORTER: z
+    .string()
+    .default("ConsultarSituacaoTransportador"),
   ANTT_CIOT_PATH_FLEET: z.string().default("ConsultarFrotaTransportador"),
   ANTT_CIOT_PATH_DECLARE: z.string().default("DeclaracaoOperacaoTransporte"),
   ANTT_CIOT_PATH_CANCEL: z.string().default("CancelamentoOperacaoTransporte"),
@@ -45,4 +60,11 @@ if (!parsed.success) {
   throw new Error("Configuração de ambiente inválida");
 }
 
-export const env = parsed.data;
+export const env = {
+  ...parsed.data,
+  ANTT_CIOT_BASE_URL:
+    parsed.data.ANTT_CIOT_BASE_URL ||
+    (parsed.data.ANTT_CIOT_ENVIRONMENT === "producao"
+      ? "https://appservices.antt.gov.br/pefServices"
+      : "https://appservices-hml.antt.gov.br/pefServices"),
+};

@@ -102,17 +102,23 @@ export function interpretarCteXml(xml: string): CteInterpretado {
   const emit = infCte.emit ?? {};
   const rem = infCte.rem ?? {};
   const dest = infCte.dest ?? {};
-  const toma = infCte.toma4 ?? infCte.toma3 ?? {};
+  const toma4 = ide.toma4 ?? infCte.toma4;
+  const toma3 = ide.toma3 ?? infCte.toma3;
+  const toma = toma4 ?? toma3 ?? {};
   const infCarga = infCte.infCTeNorm?.infCarga ?? {};
   const vPrest = infCte.vPrest ?? {};
 
   const infQ = asArray(infCarga.infQ);
   const peso =
     infQ.find((item: any) =>
-      String(item?.cUnid ?? "").toUpperCase().includes("KG"),
+      String(item?.cUnid ?? "")
+        .toUpperCase()
+        .includes("KG"),
     ) ??
     infQ.find((item: any) =>
-      String(item?.tpMed ?? "").toLowerCase().includes("peso"),
+      String(item?.tpMed ?? "")
+        .toLowerCase()
+        .includes("peso"),
     );
 
   const produtoPredominante = firstText(
@@ -137,12 +143,13 @@ export function interpretarCteXml(xml: string): CteInterpretado {
     "vale-pedágio",
   ]);
 
-  const tomaCode = String(infCte.toma3?.toma ?? "");
+  const tomaCode = String(toma3?.toma ?? "");
   let tomador = toma;
-  if (!infCte.toma4) {
+  if (!toma4) {
     if (tomaCode === "0") tomador = rem;
     else if (tomaCode === "3") tomador = dest;
-    else if (tomaCode === "4") tomador = infCte.receb ?? {};
+    else if (tomaCode === "1") tomador = infCte.exped ?? {};
+    else if (tomaCode === "2") tomador = infCte.receb ?? {};
   }
 
   return {
@@ -159,7 +166,9 @@ export function interpretarCteXml(xml: string): CteInterpretado {
       firstText(emit.enderEmit?.xCpl),
       firstText(emit.enderEmit?.xBairro),
       firstText(emit.enderEmit?.CEP),
-    ].filter(Boolean).join(", "),
+    ]
+      .filter(Boolean)
+      .join(", "),
     emitenteCidade: firstText(emit.enderEmit?.xMun),
     emitenteUf: firstText(emit.enderEmit?.UF).toUpperCase(),
     remetenteCnpj: digits(rem.CNPJ ?? rem.CPF),
@@ -174,7 +183,9 @@ export function interpretarCteXml(xml: string): CteInterpretado {
       firstText(dest.enderDest?.xCpl),
       firstText(dest.enderDest?.xBairro),
       firstText(dest.enderDest?.CEP),
-    ].filter(Boolean).join(", "),
+    ]
+      .filter(Boolean)
+      .join(", "),
     destinatarioCidade: firstText(dest.enderDest?.xMun),
     destinatarioUf: firstText(dest.enderDest?.UF).toUpperCase(),
     tomadorCnpj: digits(tomador.CNPJ ?? tomador.CPF),
@@ -182,9 +193,10 @@ export function interpretarCteXml(xml: string): CteInterpretado {
     origemCidade: firstText(ide.xMunIni, rem.enderReme?.xMun),
     origemUf: firstText(ide.UFIni, rem.enderReme?.UF).toUpperCase(),
     origemCodigoIbge: digits(firstText(ide.cMunIni, rem.enderReme?.cMun)),
-    origemCep: digits(
-      firstText(rem.enderReme?.CEP, emit.enderEmit?.CEP),
-    ).slice(0, 8),
+    origemCep: digits(firstText(rem.enderReme?.CEP, emit.enderEmit?.CEP)).slice(
+      0,
+      8,
+    ),
     destinoCidade: firstText(ide.xMunFim, dest.enderDest?.xMun),
     destinoUf: firstText(ide.UFFim, dest.enderDest?.UF).toUpperCase(),
     destinoCodigoIbge: digits(firstText(ide.cMunFim, dest.enderDest?.cMun)),
