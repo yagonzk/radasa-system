@@ -12,7 +12,7 @@ const labels: Record<string, string> = {
 const auditHiddenKeys = new Set([
   "password", "newPassword", "currentPassword", "certificadoSenha", "certificadoArquivo",
   "pdfUrl", "xmlUrl", "notaFiscalUrl", "crlvPdfUrl", "cnhPdfUrl", "toxicologicoPdfUrl",
-  "base64", "dataUrl", "conteudoArquivo",
+  "base64", "dataUrl", "conteudoArquivo", "pfxBase64", "pfxPassword",
 ]);
 const auditContentKeys = new Set(["conteudo", "arquivo", "imagem", "foto", "fotos"]);
 const MAX_AUDIT_STRING = 4_000;

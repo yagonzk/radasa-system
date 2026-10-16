@@ -5,6 +5,7 @@ import {
   BarChart3,
   Boxes,
   ClipboardList,
+  ReceiptText,
   KeyRound,
   LayoutDashboard,
   Leaf,
@@ -44,6 +45,7 @@ const agroNav: AgroNavItem[] = [
   { label: "Lavouras", href: "/agro/lavouras", icon: <Sprout className="h-[18px] w-[18px]" /> },
   { label: "Cadastros", href: "/agro/cadastros", icon: <NotebookTabs className="h-[18px] w-[18px]" /> },
   { label: "Relatórios", href: "/agro/relatorios", icon: <BarChart3 className="h-[18px] w-[18px]" /> },
+  { label: "Fiscal · NF-e", href: "/agro/fiscal/nfe", icon: <ReceiptText className="h-[18px] w-[18px]" /> },
 ];
 
 export default function AgroLayout({ children }: { children: ReactNode }) {

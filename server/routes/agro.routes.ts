@@ -1,8 +1,11 @@
 import { Router } from "express";
+import { agroNfeRoutes } from "./agro-nfe.routes.js";
 import { agroController } from "../controllers/agro.controller.js";
 import { asyncHandler } from "../utils/async-handler.js";
 
 export const agroRoutes = Router();
+
+agroRoutes.use("/nfe", agroNfeRoutes);
 
 agroRoutes.get("/status", asyncHandler(agroController.status));
 agroRoutes.get("/dashboard", asyncHandler(agroController.dashboard));

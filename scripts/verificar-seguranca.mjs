@@ -19,6 +19,23 @@ for (const name of secrets) {
     }
   }
 }
+// Auditar TODOS os arquivos rastreados, inclusive os adicionados manualmente com git add -f.
+// .gitignore protege arquivos NOVOS, mas nao protege arquivos ja versionados.
+if (hasGitRepository) {
+  const tracked = spawnSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" });
+  if (tracked.status !== 0) {
+    problems.push("nao foi possivel auditar os arquivos rastreados pelo Git");
+  } else {
+    const forbidden = /(?:^|\/)(?:node_modules|\.pnpm-store|\.wrangler|\.dnit-agent-(?:cdp-)?profile|\.senatran-agent-(?:cdp-)?profile)(?:\/|$)|(?:^|\/)(?:\.env(?:\.[^/]*)?|config-protegida\.bin|agro-nfe-emissores\.enc)$|\.(?:pfx|p12|pem|key|jks|keystore)$/i;
+    const allowedEnvExamples = /(?:^|\/)\.env\.(?:example|sample)$/i;
+    for (const filename of tracked.stdout.split("\0").filter(Boolean)) {
+      const portable = filename.replaceAll("\\", "/");
+      if (!allowedEnvExamples.test(portable) && forbidden.test(portable)) {
+        problems.push(`arquivo sensivel ou gerado rastreado: ${portable}`);
+      }
+    }
+  }
+}
 for (const file of ["client/src/pages/Pedagios.tsx", "client/src/components/pneus/PneuGestao.tsx"]) {
   if (!fs.existsSync(path.join(root, file))) problems.push(`${file} não encontrado`);
 }

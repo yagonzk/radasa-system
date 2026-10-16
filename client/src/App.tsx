@@ -39,6 +39,7 @@ const CiotGerados = lazy(() => import("./pages/CiotGerados"));
 const CiotConfiguracao = lazy(() => import("./pages/CiotConfiguracao"));
 const ModuleSelector = lazy(() => import("./pages/ModuleSelector"));
 const AgroHome = lazy(() => import("./pages/AgroHome"));
+const AgroFiscalNfe = lazy(() => import("./pages/AgroFiscalNfe"));
 const AgroEstoque = lazy(() => import("./pages/AgroEstoque"));
 const AgroMovimentacoes = lazy(() => import("./pages/AgroMovimentacoes"));
 const AgroLavouras = lazy(() => import("./pages/AgroLavouras"));
@@ -96,6 +97,7 @@ function CoreRoutes() {
       <Switch>
         <Route path="/modulos" component={ModuleSelector} />
         <Route path="/agro/estoque" component={AgroEstoque} />
+        <Route path="/agro/fiscal/nfe" component={AgroFiscalNfe} />
         <Route path="/agro/movimentacoes" component={AgroMovimentacoes} />
         <Route path="/agro/lavouras" component={AgroLavouras} />
         <Route path="/agro/cadastros" component={AgroCadastros} />

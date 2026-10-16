@@ -37,7 +37,9 @@
     "security:scan": "node scripts/verificar-seguranca.mjs",
     "test:ciot": "node --import tsx --test tests/antt-ciot.protocol.test.ts && vitest run --config vitest.ciot.config.ts",
     "ciot:configurar": "node scripts/configurar-ciot-cloudflare.mjs",
-    "ciot:diagnosticar-local": "node scripts/diagnosticar-antt-mtls.mjs"
+    "ciot:diagnosticar-local": "node scripts/diagnosticar-antt-mtls.mjs",
+    "test:agro-nfe": "node --test tests/agro-nfe-emissores.test.mjs",
+    "test:ciot-conector": "node --test tests/ciot-conector-local.test.mjs tests/test-ciot-conector-startup.mjs tests/test-ciot-permissoes.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

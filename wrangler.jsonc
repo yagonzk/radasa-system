@@ -44,9 +44,9 @@
     "RESEND_API_URL": "https://api.resend.com",
     "PASSWORD_RESET_BASE_URL": "https://radasa.com.br",
     "PASSWORD_RESET_TTL_MINUTES": "30",
-    "ANTT_CIOT_ENVIRONMENT": "homologacao",
+    "ANTT_CIOT_ENVIRONMENT": "producao",
     "ANTT_CIOT_ENABLE_NETWORK": "true",
-    "ANTT_CIOT_BASE_URL": "https://appservices-hml.antt.gov.br/pefServices"
+    "ANTT_CIOT_BASE_URL": "https://appservices.antt.gov.br/pefServices"
   },
   "mtls_certificates": [
     {

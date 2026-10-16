@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
-import { ArrowRight, BarChart3, Boxes, ClipboardList, Leaf, PackageCheck, Sprout, Tractor, TriangleAlert, Warehouse } from "lucide-react";
+import { ArrowRight, BarChart3, Boxes, ClipboardList, Leaf, PackageCheck, Sprout, Tractor, TriangleAlert, Warehouse, ReceiptText } from "lucide-react";
 import AgroLayout from "@/components/agro/AgroLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { AnimatedNumber } from "@/components/ui/animated-number";
@@ -15,6 +15,7 @@ const quickLinks = [
   { title: "Barracões e inventário", description: "Locais, transferências e contagem física.", href: "/agro/inventario", icon: Boxes },
   { title: "Lavouras", description: "Fazendas, talhões, safras e operações agrícolas.", href: "/agro/lavouras", icon: Sprout },
   { title: "Relatórios", description: "Consumo, custos e indicadores por hectare.", href: "/agro/relatorios", icon: BarChart3 },
+  { title: "Fiscal · NF-e", description: "Cadastro de emitentes e homologação por CNPJ.", href: "/agro/fiscal/nfe", icon: ReceiptText },
 ];
 
 type DashboardData = { produtosAtivos: number; produtosComSaldo: number; estoqueBaixo: number; valorEstoque: number; entradasMes: number; saidasMes: number; consumoMes: number; lotesVencendo: number; lavourasEmAndamento: number; operacoesMes: number; locaisAtivos: number; inventariosAbertos: number; recent: AgroMovement[]; };

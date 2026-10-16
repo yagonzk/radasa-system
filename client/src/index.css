@@ -893,7 +893,7 @@ table.radasa-adaptive-card :is(input, select, textarea, button) {
     line-height: 1.2 !important;
   }
 
-  .radasa-compact-table tbody td .text-[11px],
+  .radasa-compact-table tbody td [class~="text-[11px]"],
   .radasa-compact-table tbody td .text-xs {
     font-size: 0.67rem !important;
     line-height: 1.15 !important;
@@ -963,7 +963,7 @@ table.radasa-adaptive-card :is(input, select, textarea, button) {
   }
 
   .radasa-compact-table tbody td .text-xs,
-  .radasa-compact-table tbody td .text-[11px] {
+  .radasa-compact-table tbody td [class~="text-[11px]"] {
     font-size: 0.66rem !important;
     line-height: 1.1 !important;
   }

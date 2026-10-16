@@ -10,6 +10,8 @@ export type WorkerRuntimeBindings = {
   ANTT_CIOT_MTLS?: MtlsBinding;
   SEFAZ_MTLS?: MtlsBinding;
   ANTT_CIOT_MTLS_CNPJ?: string;
+  ANTT_CIOT_CONNECTOR_URL?: string;
+  ANTT_CIOT_CONNECTOR_TOKEN?: string;
   HYPERDRIVE?: HyperdriveBinding;
   RESEND_API_KEY?: string;
   VEICULO_CONSULTA_API_URL?: string;
@@ -22,6 +24,8 @@ export type WorkerRuntimeBindings = {
 type RuntimeBindingScope = {
   anttMtls?: MtlsBinding;
   anttCnpj?: string;
+  anttConnectorUrl?: string;
+  anttConnectorToken?: string;
   databaseUrl?: string;
   resendApiKey?: string;
   vehicleLookupApiUrl?: string;
@@ -40,6 +44,8 @@ export function runWithRuntimeBindings<T>(
   const scope: RuntimeBindingScope = {
     anttMtls: bindings.ANTT_CIOT_MTLS ?? bindings.SEFAZ_MTLS,
     anttCnpj: bindings.ANTT_CIOT_MTLS_CNPJ,
+    anttConnectorUrl: bindings.ANTT_CIOT_CONNECTOR_URL,
+    anttConnectorToken: bindings.ANTT_CIOT_CONNECTOR_TOKEN,
     databaseUrl: bindings.HYPERDRIVE?.connectionString,
     resendApiKey: bindings.RESEND_API_KEY,
     vehicleLookupApiUrl: bindings.VEICULO_CONSULTA_API_URL,
@@ -95,5 +101,13 @@ export function getRuntimeAnttMtls() {
   return {
     binding: scope?.anttMtls,
     cnpj: scope?.anttCnpj || process.env.ANTT_CIOT_MTLS_CNPJ || "",
+  };
+}
+
+export function getRuntimeAnttConnector() {
+  const scope = runtimeBindings.getStore();
+  return {
+    url: scope?.anttConnectorUrl || process.env.ANTT_CIOT_CONNECTOR_URL || "",
+    token: scope?.anttConnectorToken || process.env.ANTT_CIOT_CONNECTOR_TOKEN || "",
   };
 }

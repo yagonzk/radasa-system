@@ -1,0 +1,52 @@
+RADASA — CONECTOR CIOT LOCAL (WINDOWS, SEM HOSPEDAGEM PAGA)
+
+Fluxo: Worker Cloudflare -> https://ciot.radasa.com.br/v1/antt -> Cloudflare Tunnel -> http://127.0.0.1:8789/v1/antt -> ANTT com PFX local.
+
+1. Atualize o projeto com o ZIP e publique o Worker ANTES de enviar os segredos:
+   pnpm run check
+   pnpm run build
+   pnpm run build:cloudflare
+   pnpm run deploy:cloudflare
+
+2. No painel Cloudflare, vá a Zero Trust > Networks > Tunnels; crie um Tunnel do tipo Cloudflared com nome radasa-ciot.
+   Configure um PUBLIC HOSTNAME: ciot.radasa.com.br -> HTTP -> http://127.0.0.1:8789
+   Instale cloudflared no Windows e use o comando de service install mostrado no painel para habilitar o serviço.
+   ATENÇÃO: O token do Tunnel é segredo; não cole no chat e não comite no GitHub.
+   O serviço de túnel deve ficar no Windows sempre ativo.
+
+3. Abra PowerShell COMO ADMINISTRADOR na pasta do Radasa e execute:
+   powershell -ExecutionPolicy Bypass -File .\Instalar-Conector-CIOT.ps1
+   Informe o caminho do certificado PFX, CNPJ titular e senha do PFX (digitação oculta).
+   O serviço e uma cópia do PFX são instalados em C:\Program Files\Radasa\CIOT com permissões SYSTEM/Administradores.
+   A configuração fica cifrada pela DPAPI do Windows; nenhum código em Downloads é executado como SYSTEM.
+   O conector inicia como tarefa SYSTEM quando o Windows ligar, mesmo sem usuário logado.
+   Mover o projeto depois de instalar não afeta o serviço, mas para atualizar o conector é necessário executar a instalação novamente.
+
+4. Confira a saúde LOCAL (não envolve a ANTT):
+   Invoke-RestMethod http://127.0.0.1:8789/health
+   Esperado: ok = True, service = ciot-local
+
+5. Após o Worker novo estar publicado e o Tunnel configurado, execute do PowerShell como Administrador:
+   powershell -ExecutionPolicy Bypass -File .\Configurar-Conector-CIOT-Cloudflare.ps1
+   O script copia dois segredos para o Worker sem exibir o token do conector.
+
+6. No Radasa, em TMS > CIOT, use apenas "Testar conexão ANTT / RNTRC" inicialmente.
+   O diagnóstico deve retornar transport = pc-node-mtls-tunnel, status 200 e código 111, desde que o PC e o Tunnel estejam ligados.
+   NÃO teste emissão real antes da revisão dos dados e do ambiente ANTT.
+
+Condições importantes:
+- O computador precisa permanecer ligado e conectado. Ajuste Energia/Suspensão do Windows para não dormir.
+- Não configure portas de entrada no roteador e não abra a porta 8789 no firewall; o servidor escuta somente 127.0.0.1.
+- Não instale outros sites/serviços no hostname ciot.radasa.com.br.
+- O certificado PFX e sua senha NUNCA são enviados ao Worker ou Tunnel.
+- O Worker não faz fallback para outro transporte se o conector estiver offline.
+- Quando desligar/reiniciar o PC, o CIOT fica indisponível até o conector e o Tunnel voltarem.
+- Remova usando Remover-Conector-CIOT.ps1, e retire os segredos e o Tunnel no painel Cloudflare.
+
+REPARO DE INSTALACAO EXISTENTE (SEM APAGAR CERTIFICADO/TOKEN):
+- Abra o PowerShell com "Executar como administrador".
+- Extraia a atualizacao do sistema para a pasta do projeto.
+- Execute: powershell -ExecutionPolicy Bypass -File .\Reparar-Conector-CIOT.ps1
+- Execute: powershell -ExecutionPolicy Bypass -File .\Diagnosticar-Conector-CIOT.ps1
+- Confira: Invoke-RestMethod http://127.0.0.1:8789/health
+- Nao execute Instalar-Conector-CIOT.ps1 novamente em uma instalacao existente.

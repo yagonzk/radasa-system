@@ -1,0 +1,28 @@
+Radasa System - Agro Fiscal - Configuracao de emitentes NF-e modelo 55
+
+Esta entrega registra varios emitentes CNPJ, valida o certificado A1 e testa o
+StatusServico da SEFAZ em ambiente HOMOLOGACAO, inicialmente MT e RO.
+NAO HABILITA EMISSAO REAL nem gera DANFE ou XML assinado. O retorno cStat=107
+prova apenas que o servico respondeu; nao confirma IE ou credenciamento fiscal.
+
+Passos para quem ja instalou o conector CIOT:
+1. Extraia este pacote sobre o projeto Radasa atualizado.
+2. Abra PowerShell COMO ADMINISTRADOR na pasta do projeto e execute:
+   powershell -ExecutionPolicy Bypass -File .\Reparar-Conector-CIOT.ps1
+   powershell -ExecutionPolicy Bypass -File .\Diagnosticar-Conector-CIOT.ps1
+3. Confira a rota ciot.radasa.com.br no Cloudflare Tunnel e execute,
+   caso ainda nao tenha configurado a autenticacao do Worker:
+   powershell -ExecutionPolicy Bypass -File .\Configurar-Conector-CIOT-Cloudflare.ps1
+4. Teste: node --test tests/agro-nfe-emissores.test.mjs
+5. pnpm run check; pnpm run build; pnpm run build:cloudflare
+6. Publique: pnpm run deploy:cloudflare
+7. Abra Agro > Fiscal / NF-e > Adicionar CNPJ.
+   Informe CNPJ, UF, Inscricao Estadual, A1 .pfx/.p12 e senha do A1.
+   O arquivo e a senha sao enviados por HTTPS autenticado ao PC, em seguida
+   armazenados em cofre cifrado C:\Program Files\Radasa\CIOT\agro-nfe-emissores.enc
+   sem grava-los no banco ou GitHub. So ADMIN pode configurar emitentes.
+
+ATENCAO: nao copie cofre, PFX, senhas ou tokens para o projeto/GitHub.
+Backup/reinstalacao ou troca da chave do conector: sera preciso recadastrar
+os emitentes no novo PC. O cofre depende da chave protegida no Windows atual.
+Manter o computador ligado e conectado para as validacoes.

@@ -253,6 +253,12 @@ export default function CiotConfiguracaoPage() {
           </Button>
         </div>
 
+        {config?.integration.environment === "producao" && (
+          <div role="alert" className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-4 text-sm">
+            <p className="font-semibold text-amber-700 dark:text-amber-300">Ambiente de PRODUÇÃO — operações oficiais</p>
+            <p className="mt-1 text-muted-foreground">A emissão, retificação, o cancelamento e o encerramento podem alterar registros reais na ANTT. Confirme a conexão com o conector local e a situação da frota antes de emitir. Nenhum CIOT de homologação é convertido automaticamente em produção.</p>
+          </div>
+        )}
         <div className="rounded-xl border bg-card p-5 text-sm">
           <p className="font-semibold">Empresa emitente vinculada automaticamente</p>
           <p className="mt-2">{config?.company.razaoSocial || "Verifique Cadastros > Empresa"}</p>

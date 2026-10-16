@@ -6,13 +6,14 @@ function arg(name) {
 }
 const requestedCertificateId = arg("--certificate-id");
 const environment = arg("--environment") || "homologacao";
+const productionConfirmed = args.includes("--confirmar-producao");
 if (
   (requestedCertificateId &&
     !/^[a-f\d-]{32,36}$/i.test(requestedCertificateId)) ||
-  !["homologacao", "producao"].includes(environment)
+  !["homologacao", "producao"].includes(environment) || (environment === "producao" && !productionConfirmed)
 ) {
   console.error(
-    "Uso: pnpm run ciot:configurar --environment homologacao [--certificate-id ID_DO_CERTIFICADO]",
+    "Uso: pnpm run ciot:configurar --environment homologacao (ou producao --confirmar-producao) [--certificate-id ID_DO_CERTIFICADO]",
   );
   process.exit(1);
 }

@@ -5,7 +5,8 @@ import tls from "node:tls";
 import axios, { type AxiosInstance } from "axios";
 import { prisma } from "../lib/prisma.js";
 import { env } from "../config/env.js";
-import { getRuntimeAnttMtls } from "../lib/runtime-bindings.js";
+import { getRuntimeAnttMtls, getRuntimeAnttConnector } from "../lib/runtime-bindings.js";
+import { safeConnectorRejection } from "./ciot-connector-diagnostics.js";
 import {
   serviceEndpoint,
   upstreamResponseSummary,
@@ -69,6 +70,104 @@ function serviceUrl(path: string, generator = false) {
 function cloudflareRuntime() {
   return Boolean((globalThis as any).__RADASA_CLOUDFLARE);
 }
+
+function validatedConnectorUrl(value: string) {
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.hostname !== "ciot.radasa.com.br" ||
+      url.port || url.username || url.password || url.search || url.hash ||
+      (url.pathname !== "/" && url.pathname !== ""))
+    throw new AppError(503, "Endereço do conector CIOT inválido. Use https://ciot.radasa.com.br.");
+  return `${url.origin}/v1/antt`;
+}
+
+async function requestViaLocalConnector(
+  company: { cnpj: string }, path: string, method: "GET" | "POST",
+  payload: unknown, generator: boolean, headers: Record<string, string>,
+): Promise<Response> {
+  const connector = getRuntimeAnttConnector();
+  // A configuração do conector é explícita: nunca fazer fallback para outro
+  // transporte em caso de timeout ou pane, sobretudo ao emitir/cancelar CIOT.
+  if (!connector.url || !connector.token || connector.token.length < 48)
+    throw new AppError(503, "Conector CIOT incompleto no Cloudflare. Configure URL e chave antes de consultar a ANTT.", {
+      diagnosticCode: "ANTT_CONNECTOR_NOT_CONFIGURED",
+    });
+  const connectorEndpoint = validatedConnectorUrl(connector.url);
+  let response: Response;
+  try {
+    response = await fetch(connectorEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${connector.token}` },
+      body: JSON.stringify({
+        companyCnpj: digits(company.cnpj), path, method, payload, generator, headers,
+        environment: env.ANTT_CIOT_ENVIRONMENT,
+      }),
+      signal: AbortSignal.timeout(env.ANTT_CIOT_TIMEOUT_MS + 5_000),
+      redirect: "manual",
+    });
+  } catch {
+    throw new AppError(503, "Conector CIOT indisponível. Verifique se o PC e o túnel Cloudflare estão ligados. Não reenvie a operação sem consultar o estado.", {
+      diagnosticCode: "ANTT_CONNECTOR_OFFLINE",
+      transport: "pc-node-mtls-tunnel",
+    });
+  }
+  if (!response.ok) {
+    // O conector devolve um código curto e seguro (ex.: ENVIRONMENT_MISMATCH).
+    // Nunca encaminhar seu corpo bruto: gateways podem devolver HTML, IDs, tokens ou caminhos internos.
+    let rejectionBody = "";
+    const declaredLength = Number(response.headers.get("content-length") || 0);
+    if (!declaredLength || declaredLength <= 4096) {
+      try {
+        const reader = response.body?.getReader();
+        if (reader) {
+          const chunks: Uint8Array[] = [];
+          let length = 0;
+          while (length <= 4096) {
+            const part = await reader.read();
+            if (part.done) break;
+            length += part.value.byteLength;
+            if (length > 4096) { await reader.cancel(); break; }
+            chunks.push(part.value);
+          }
+          if (length <= 4096) {
+            const bytes = new Uint8Array(length);
+            let offset = 0;
+            for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+            rejectionBody = new TextDecoder().decode(bytes);
+          }
+        }
+      } catch { /* Resposta do gateway pode não permitir leitura. */ }
+    }
+    const rejection = safeConnectorRejection(response.status, rejectionBody);
+    throw new AppError(503,
+      rejection.connectorCode === "ENVIRONMENT_MISMATCH"
+        ? "CIOT bloqueado: o ambiente da ANTT no Radasa é diferente do ambiente do conector no PC. Confira /health antes de emitir."
+        : rejection.connectorCode === "COMPANY_MISMATCH"
+          ? "CIOT bloqueado: o CNPJ emitente do Radasa não corresponde ao CNPJ configurado no conector."
+          : "Conector CIOT rejeitou a requisição. Consulte o retorno técnico e não reenvie a operação sem consultar seu estado.", {
+      diagnosticCode: "ANTT_CONNECTOR_HTTP_ERROR",
+      httpStatus: response.status,
+      transport: "pc-node-mtls-tunnel",
+      ...(rejection.connectorCode ? { connectorCode: rejection.connectorCode } : {}),
+      recommendedNextStep: rejection.recommendedNextStep,
+    });
+  }
+  let result: any;
+  try { result = await response.json(); } catch { /* resposta inválida do conector */ }
+  if (!result || !Number.isInteger(result.httpStatus) || result.httpStatus < 200 || result.httpStatus > 599 ||
+      typeof result.body !== "string" || result.body.length > 2 * 1024 * 1024) {
+    throw new AppError(503, "Conector CIOT retornou um envelope inválido. Consulte o estado antes de reenviar.", {
+      diagnosticCode: "ANTT_CONNECTOR_BAD_RESPONSE",
+    });
+  }
+  return new Response([204, 205, 304].includes(result.httpStatus) ? null : result.body, {
+    status: result.httpStatus,
+    headers: {
+      "content-type": String(result.contentType || "").slice(0, 100),
+      "x-antt-upstream-server": String(result.server || "").slice(0, 100),
+      "x-antt-upstream-ray": String(result.cfRay || "").slice(0, 80),
+    },
+  });
+}
 function assertMtlsCompany(company: { cnpj: string }) {
   const runtime = getRuntimeAnttMtls();
   if (!runtime.binding)
@@ -93,11 +192,19 @@ type Company = Awaited<ReturnType<typeof getCompany>>;
 function validateCertificateLocally(company: Company) {
   try {
     if (cloudflareRuntime()) {
-      assertMtlsCompany(company);
+      if (getRuntimeAnttConnector().url || getRuntimeAnttConnector().token) {
+        const connector = getRuntimeAnttConnector();
+        if (!connector.url || !connector.token || connector.token.length < 48)
+          throw new AppError(503, "Conector CIOT com URL ou chave incompleta no Cloudflare.");
+        validatedConnectorUrl(connector.url);
+      } else {
+        assertMtlsCompany(company);
+      }
       return {
         ok: true as const,
-        message:
-          "Vínculo mTLS disponível. A ANTT valida a identidade do certificado na conexão; execute o diagnóstico.",
+        message: getRuntimeAnttConnector().url
+          ? "Conector CIOT configurado. O certificado A1 será validado na comunicação pelo PC; execute o diagnóstico ANTT."
+          : "Vínculo mTLS disponível. A ANTT valida a identidade do certificado na conexão; execute o diagnóstico.",
       };
     }
     if (!company.certificadoArquivo?.trim() || !company.certificadoSenha?.trim())
@@ -152,11 +259,21 @@ async function requestService(
   let status: number;
   let data: any;
   if (cloudflareRuntime()) {
-    // O binding mTLS do Cloudflare é o transporte real deste Worker.
-    // Falhas de conexão precisam ser diferenciadas de respostas HTTP da ANTT.
+    // Conector local (quando habilitado) ou binding mTLS legado, nunca ambos por tentativa.
+    const connectorConfig = getRuntimeAnttConnector();
+    const connectorEnabled = Boolean(connectorConfig.url || connectorConfig.token);
+    // Em produção, esta instalação utiliza exclusivamente o conector Node.js validado.
+    // Nunca desviar silenciosamente para mTLS do Worker se o túnel/chave estiver ausente.
+    if (env.ANTT_CIOT_ENVIRONMENT === "producao" && !connectorEnabled) {
+      throw new AppError(503, "Emissão oficial bloqueada: configure o conector CIOT do PC antes de usar produção.", {
+        diagnosticCode: "ANTT_PRODUCTION_CONNECTOR_REQUIRED",
+      });
+    }
     let response: Response;
     try {
-      response = await assertMtlsCompany(company).fetch(endpoint, {
+      response = connectorEnabled
+        ? await requestViaLocalConnector(company, path, method, payload, generator, headers)
+        : await assertMtlsCompany(company).fetch(endpoint, {
         method,
         headers: {
           Accept: "application/json",
@@ -168,6 +285,7 @@ async function requestService(
         redirect: "manual",
       });
     } catch (error) {
+      if (error instanceof AppError) throw error;
       const failureType = error instanceof Error &&
         ["AbortError", "TimeoutError", "TypeError"].includes(error.name)
           ? error.name
@@ -210,12 +328,12 @@ async function requestService(
           endpoint: `${endpoint.origin}${endpoint.pathname}`,
           httpStatus: status,
           contentType: response.headers.get("content-type") || "",
-          server: response.headers.get("server") || "",
-          cfRay: (response.headers.get("cf-ray") || "").slice(0, 80),
+          server: response.headers.get("x-antt-upstream-server") || response.headers.get("server") || "",
+          cfRay: (response.headers.get("x-antt-upstream-ray") || response.headers.get("cf-ray") || "").slice(0, 80),
           requestId: (response.headers.get("x-request-id") || "").slice(0, 80),
           environment: env.ANTT_CIOT_ENVIRONMENT,
           companyCnpj: digits(company.cnpj),
-          transport: "cloudflare-mtls-binding",
+          transport: connectorEnabled ? "pc-node-mtls-tunnel" : "cloudflare-mtls-binding",
           diagnosticCode: status >= 500 && !raw.trim()
             ? "ANTT_UPSTREAM_EMPTY_HTTP_5XX"
             : "ANTT_UPSTREAM_NON_JSON",
@@ -995,7 +1113,7 @@ export const anttCiotService = {
         cnpj: digits(company.cnpj),
         rntrc: normalizeRntrc(company.rntrc),
         certificateConfigured: cloudflareRuntime()
-          ? Boolean(getRuntimeAnttMtls().binding)
+          ? Boolean(getRuntimeAnttConnector().url || getRuntimeAnttMtls().binding)
           : Boolean(company.certificadoArquivo?.trim()),
         passwordConfigured: Boolean(company.certificadoSenha?.trim()),
         certificateValidity: company.certificadoValidade?.toISOString() ?? null,
@@ -1006,7 +1124,10 @@ export const anttCiotService = {
         environment: env.ANTT_CIOT_ENVIRONMENT,
         baseUrl: env.ANTT_CIOT_BASE_URL,
         networkEnabled: env.ANTT_CIOT_ENABLE_NETWORK,
-        transport: cloudflareRuntime() ? "Cloudflare mTLS" : "Node.js A1",
+        transport: cloudflareRuntime()
+          ? (getRuntimeAnttConnector().url || getRuntimeAnttConnector().token
+            ? "PC local (Node.js + Cloudflare Tunnel)" : "Cloudflare mTLS")
+          : "Node.js A1",
         generatorKeyConfigured: Boolean(env.ANTT_CIOT_GENERATOR_KEY),
         timeoutMs: env.ANTT_CIOT_TIMEOUT_MS,
       },
@@ -1034,13 +1155,16 @@ export const anttCiotService = {
       cnpj: digits(company.cnpj),
       rntrc: normalizeRntrc(company.rntrc),
       certificateConfigured: cloudflareRuntime()
-        ? Boolean(getRuntimeAnttMtls().binding)
+        ? Boolean(getRuntimeAnttConnector().url || getRuntimeAnttMtls().binding)
         : Boolean(company.certificadoArquivo?.trim()),
       passwordConfigured: Boolean(company.certificadoSenha?.trim()),
       environment: env.ANTT_CIOT_ENVIRONMENT,
       baseUrl: env.ANTT_CIOT_BASE_URL,
       networkEnabled: env.ANTT_CIOT_ENABLE_NETWORK,
-      transport: cloudflareRuntime() ? "Cloudflare mTLS" : "Node.js A1",
+      transport: cloudflareRuntime()
+        ? (getRuntimeAnttConnector().url || getRuntimeAnttConnector().token
+          ? "PC local (Node.js + Cloudflare Tunnel)" : "Cloudflare mTLS")
+        : "Node.js A1",
       generatorKeyConfigured: Boolean(env.ANTT_CIOT_GENERATOR_KEY),
       certificateValidation,
     };

@@ -3,38 +3,38 @@
   "name": "radasa-system",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-12",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": true,
   "preview_urls": true,
-  "placement": { "mode": "smart" },
-
-
+  "placement": {
+    "mode": "smart"
+  },
   "assets": {
     "directory": "./dist/public",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
-  },
-
-  "durable_objects": {
-    "bindings": [
-      { "name": "REALTIME_HUB", "class_name": "RadasaRealtimeHub" }
+    "run_worker_first": [
+      "/api/*"
     ]
   },
-
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "REALTIME_HUB",
+        "class_name": "RadasaRealtimeHub"
+      }
+    ]
+  },
   "migrations": [
-    { "tag": "v1-realtime", "new_sqlite_classes": ["RadasaRealtimeHub"] }
+    {
+      "tag": "v1-realtime",
+      "new_sqlite_classes": [
+        "RadasaRealtimeHub"
+      ]
+    }
   ],
-
-  // HYPERDRIVE (opcional, recomendado): depois de criar a configuração,
-  // adicione abaixo antes de "vars":
-  // "hyperdrive": [
-  //   {
-  //     "binding": "HYPERDRIVE",
-  //     "id": "SEU_HYPERDRIVE_ID"
-  //   }
-  // ],
-
   "vars": {
     "NODE_ENV": "production",
     "AUTH_REQUIRED": "true",
@@ -43,6 +43,15 @@
     "EMAIL_FROM_ADDRESS": "sistema@radasa.com.br",
     "RESEND_API_URL": "https://api.resend.com",
     "PASSWORD_RESET_BASE_URL": "https://radasa.com.br",
-    "PASSWORD_RESET_TTL_MINUTES": "30"
-  }
+    "PASSWORD_RESET_TTL_MINUTES": "30",
+    "ANTT_CIOT_ENVIRONMENT": "producao",
+    "ANTT_CIOT_ENABLE_NETWORK": "true",
+    "ANTT_CIOT_BASE_URL": "https://appservices.antt.gov.br/pefServices"
+  },
+  "mtls_certificates": [
+    {
+      "binding": "ANTT_CIOT_MTLS",
+      "certificate_id": "691b796f-5d40-4b8a-ace3-547b56fae535"
+    }
+  ]
 }

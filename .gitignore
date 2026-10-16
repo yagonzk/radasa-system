@@ -1,28 +1,71 @@
-# Dependências e artefatos
+# Radasa System - nao versionar dependencias, builds e dados do computador
 node_modules/
+**/node_modules/
+.pnpm-store/
+**/.pnpm-store/
 dist/
 dist-*/
-build/
+**/dist/
+**/.vite/
+**/.cache/
+.wrangler/
+**/.wrangler/
 coverage/
 *.tsbuildinfo
-.wrangler/
 *.log
 
-# Credenciais e variáveis locais
+# Certificados digitais, segredos e chaves privadas: nunca enviar ao GitHub
 .env
 .env.*
 !.env.example
-agente-config.json
-ssagro-agent/agente-config.json
-.sefaz-*-profile/
-.senatran-*-profile/
-.dnit-*-profile/
-*.pem
-*.p12
+!.env.sample
 *.pfx
+*.p12
+*.pem
+*.key
+*.keytab
+*.jks
+*.keystore
+*.sqlite
+*.sqlite-*
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+**/config-protegida.bin
+**/agro-nfe-emissores.enc
+**/agente-config.json
+**/*token-local*.json
 
-# SO / editores
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
+# Perfis de browsers automatizados, credenciais de sessao e dados temporarios
+.dnit-agent-profile/
+.dnit-agent-cdp-profile/
+.senatran-agent-profile/
+.senatran-agent-cdp-profile/
+**/.dnit-agent-profile/
+**/.dnit-agent-cdp-profile/
+**/.senatran-agent-profile/
+**/.senatran-agent-cdp-profile/
+**/user-data-dir/
+**/brave-user-data/
+
+# Saidas locais e temporarios do projeto
+*.tmp
+*.bak
+*.swp
+.tmp/
+
+# Backup local criado ao alternar ambiente CIOT
+wrangler.jsonc.antes-ciot
+
+.senatran-agent-profile/
+.senatran-agent-cdp-profile/
+.dnit-agent-profile/
+.dnit-agent-cdp-profile/
+
+.pnpm-store/
+node_modules/
+.env.example.ciot
+.env.sefaz-agent.example
+.env.sefaz-local.example
+.env.vercel.example
